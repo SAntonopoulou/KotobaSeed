@@ -19,6 +19,7 @@ import Profile from './pages/Profile';
 import Settings from './pages/Settings';
 import Landing from './pages/Landing';
 import AdminDashboard from './pages/admin/AdminDashboard';
+import AdminAuditLog from './pages/admin/AdminAuditLog';
 import ProjectManagement from './pages/admin/ProjectManagement';
 import Inbox from './pages/Inbox';
 import Footer from './components/Footer';
