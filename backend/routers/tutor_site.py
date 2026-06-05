@@ -13,7 +13,7 @@ folds both together so the frontend sees one coherent shape.
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 import stripe
@@ -31,6 +31,7 @@ from ..models import (
     SubscriptionTier,
     Tutor,
     TutorAccountStatus,
+    TutorAvailability,
     TutorPlan,
     User,
 )
@@ -496,6 +497,232 @@ def deactivate_lesson_pack(
     pack.updated_at = datetime.now(UTC)
     session.add(pack)
     session.commit()
+
+
+# --- Availability + slot computation -------------------------------------
+
+
+class AvailabilityWindow(BaseModel):
+    """One contiguous availability block on a weekly recurrence."""
+
+    weekday: int = Field(ge=0, le=6, description="0=Monday, 6=Sunday")
+    start_minute: int = Field(ge=0, le=1440, description="Minutes from midnight in tutor TZ")
+    end_minute: int = Field(ge=0, le=1440)
+
+
+class AvailabilityReplace(BaseModel):
+    windows: list[AvailabilityWindow]
+
+
+class AvailableSlot(BaseModel):
+    """A bookable timeslot, projected from the tutor's recurring weekly
+    availability and pruned against existing bookings."""
+
+    scheduled_at: datetime  # UTC, ISO 8601
+    duration_minutes: int
+
+
+@router.get("/availability", response_model=list[AvailabilityWindow])
+def list_availability(
+    tutor: CurrentTutor,
+    session: Annotated[Session, Depends(get_session)],
+) -> list[AvailabilityWindow]:
+    """Public — the tutor's weekly recurring availability blocks."""
+    rows = session.exec(
+        select(TutorAvailability)
+        .where(TutorAvailability.tutor_id == tutor.id)
+        .order_by(TutorAvailability.weekday.asc(), TutorAvailability.start_minute.asc())
+    ).all()
+    return [
+        AvailabilityWindow(
+            weekday=r.weekday,
+            start_minute=r.start_minute,
+            end_minute=r.end_minute,
+        )
+        for r in rows
+    ]
+
+
+@router.put("/availability", response_model=list[AvailabilityWindow])
+def replace_availability(
+    payload: AvailabilityReplace,
+    current: CurrentUser,
+    tutor: CurrentTutor,
+    session: Annotated[Session, Depends(get_session)],
+) -> list[AvailabilityWindow]:
+    """Owner-only — bulk replace the tutor's weekly availability.
+
+    Idempotent: send the full list you want; we delete-and-recreate. This
+    matches how the click-grid editor works (compute new set in the
+    browser, send the result).
+    """
+    _require_owner(tutor, current)
+    # Validate first — every window must have end_minute > start_minute and
+    # span at least 15 minutes, so the slot computation can't produce empty
+    # ranges later.
+    for w in payload.windows:
+        if w.end_minute <= w.start_minute:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Each window must end after it starts.",
+            )
+        if w.end_minute - w.start_minute < 15:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Each window must be at least 15 minutes long.",
+            )
+
+    # Delete existing, add new — all in one commit.
+    for r in session.exec(
+        select(TutorAvailability).where(TutorAvailability.tutor_id == tutor.id)
+    ).all():
+        session.delete(r)
+    for w in payload.windows:
+        session.add(
+            TutorAvailability(
+                tutor_id=tutor.id,
+                weekday=w.weekday,
+                start_minute=w.start_minute,
+                end_minute=w.end_minute,
+            )
+        )
+    session.commit()
+    return list_availability(tutor=tutor, session=session)
+
+
+def _utc_minute(d: datetime) -> int:
+    """Local-tz minute-from-midnight for a UTC-aware datetime."""
+    return d.hour * 60 + d.minute
+
+
+def _slot_conflicts(
+    slot_start: datetime, duration_minutes: int, bookings: list[Booking]
+) -> bool:
+    """True if the slot overlaps with any non-cancelled, non-refunded booking."""
+    slot_end_ts = slot_start.timestamp() + duration_minutes * 60
+    slot_start_ts = slot_start.timestamp()
+    for b in bookings:
+        if b.status in (BookingStatus.CANCELLED, BookingStatus.REFUNDED):
+            continue
+        b_start = b.scheduled_at
+        if b_start.tzinfo is None:
+            b_start = b_start.replace(tzinfo=UTC)
+        b_start_ts = b_start.timestamp()
+        b_end_ts = b_start_ts + b.duration_minutes * 60
+        if slot_start_ts < b_end_ts and b_start_ts < slot_end_ts:
+            return True
+    return False
+
+
+@router.get("/availability/slots", response_model=list[AvailableSlot])
+def list_available_slots(
+    tutor: CurrentTutor,
+    session: Annotated[Session, Depends(get_session)],
+    pack_id: int,
+    days: int = 14,
+    slot_step_minutes: int = 30,
+) -> list[AvailableSlot]:
+    """Public — bookable slots for the next `days` days for a specific pack.
+
+    Computed by:
+      1. Pulling the tutor's recurring weekly availability windows.
+      2. For each day in [today, today+days), projecting each window into
+         absolute datetimes using the tutor's timezone (User.timezone).
+      3. Walking each window in `slot_step_minutes` increments, generating
+         candidate slot starts of length `pack.duration_minutes`. Skipping
+         any slot that:
+          - starts in the past
+          - extends past the end of its window
+          - overlaps an existing non-cancelled booking
+      4. Returning the surviving slots in UTC, soonest first.
+
+    Defaults to 14 days ahead and 30-minute granularity — same as the
+    click-grid editor on the dashboard.
+    """
+    pack = session.get(LessonPack, pack_id)
+    if not pack or pack.tutor_id != tutor.id or not pack.is_active:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pack not found.")
+    if days < 1 or days > 60:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="`days` must be between 1 and 60.",
+        )
+    if slot_step_minutes < 15 or slot_step_minutes > 120:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="`slot_step_minutes` must be between 15 and 120.",
+        )
+
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+    tz_name = (tutor.user.timezone if tutor.user else "UTC") or "UTC"
+    try:
+        tz = ZoneInfo(tz_name)
+    except ZoneInfoNotFoundError:
+        tz = ZoneInfo("UTC")
+
+    # Pre-load availability + bookings into memory; both are small per tutor.
+    windows = list(
+        session.exec(
+            select(TutorAvailability).where(TutorAvailability.tutor_id == tutor.id)
+        ).all()
+    )
+    if not windows:
+        return []
+
+    now_utc = datetime.now(UTC)
+    horizon_utc = now_utc + timedelta(days=days)
+    bookings = list(
+        session.exec(
+            select(Booking)
+            .where(Booking.tutor_id == tutor.id)
+            .where(Booking.scheduled_at >= now_utc - timedelta(hours=1))
+            .where(Booking.scheduled_at <= horizon_utc + timedelta(hours=1))
+        ).all()
+    )
+
+    windows_by_weekday: dict[int, list[TutorAvailability]] = {}
+    for w in windows:
+        windows_by_weekday.setdefault(w.weekday, []).append(w)
+
+    # Iterate day by day in the tutor's local timezone — that way DST rolls
+    # over naturally without us reasoning about UTC offsets.
+    today_local = now_utc.astimezone(tz).date()
+    slots: list[AvailableSlot] = []
+
+    for day_offset in range(days):
+        local_date = today_local + timedelta(days=day_offset)
+        weekday = local_date.weekday()  # Monday = 0
+        for window in windows_by_weekday.get(weekday, []):
+            candidate_minute = window.start_minute
+            while candidate_minute + pack.duration_minutes <= window.end_minute:
+                local_start = datetime(
+                    local_date.year,
+                    local_date.month,
+                    local_date.day,
+                    hour=candidate_minute // 60,
+                    minute=candidate_minute % 60,
+                    tzinfo=tz,
+                )
+                slot_utc = local_start.astimezone(UTC)
+                # Skip past slots; also avoid the very-imminent ones —
+                # students need a minute to actually book.
+                if slot_utc < now_utc + timedelta(minutes=15):
+                    candidate_minute += slot_step_minutes
+                    continue
+                if slot_utc > horizon_utc:
+                    break
+                if not _slot_conflicts(slot_utc, pack.duration_minutes, bookings):
+                    slots.append(
+                        AvailableSlot(
+                            scheduled_at=slot_utc,
+                            duration_minutes=pack.duration_minutes,
+                        )
+                    )
+                candidate_minute += slot_step_minutes
+
+    slots.sort(key=lambda s: s.scheduled_at)
+    return slots
 
 
 # --- Booking management (tutor side) -------------------------------------

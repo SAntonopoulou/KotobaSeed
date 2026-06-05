@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { apexUrl } from '../hooks/useTenant';
 import LessonPackManager from '../components/LessonPackManager';
 import BookingsManager from '../components/BookingsManager';
+import AvailabilityEditor from '../components/AvailabilityEditor';
 
 // Pull the token out of the URL fragment (#token=...) if present, store it,
 // then scrub the URL so the token doesn't sit in the address bar.
@@ -316,6 +317,8 @@ const TutorDashboard = () => {
         </section>
 
         <BookingsManager />
+
+        <AvailabilityEditor />
 
         <LessonPackManager />
 

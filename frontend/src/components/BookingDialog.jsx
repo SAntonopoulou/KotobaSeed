@@ -3,21 +3,25 @@ import { useNavigate } from 'react-router-dom';
 import client from '../api/client';
 import { useAuth } from '../context/AuthContext';
 
-const minDatetimeLocal = () => {
-  // 1 hour from now, formatted for <input type="datetime-local">
-  const d = new Date(Date.now() + 60 * 60 * 1000);
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-};
+const DAY_LABEL = new Intl.DateTimeFormat(undefined, {
+  weekday: 'short',
+  day: 'numeric',
+  month: 'short',
+});
+const TIME_LABEL = new Intl.DateTimeFormat(undefined, {
+  hour: '2-digit',
+  minute: '2-digit',
+});
 
 const BookingDialog = ({ pack, tutorDisplayName, onClose }) => {
   const navigate = useNavigate();
   const { token } = useAuth();
-  const [when, setWhen] = useState(() => minDatetimeLocal());
+  const [slots, setSlots] = useState([]);
+  const [loadingSlots, setLoadingSlots] = useState(true);
+  const [pickedSlot, setPickedSlot] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  // Lock the scroll under the modal while it's open.
   useEffect(() => {
     const original = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -26,31 +30,53 @@ const BookingDialog = ({ pack, tutorDisplayName, onClose }) => {
     };
   }, []);
 
-  const handleConfirm = async (e) => {
-    e.preventDefault();
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingSlots(true);
     setError('');
+    (async () => {
+      try {
+        const res = await client.get(`/tutor/availability/slots?pack_id=${pack.id}&days=21`);
+        if (!cancelled) setSlots(res.data || []);
+      } catch (err) {
+        if (!cancelled) {
+          setError(err?.response?.data?.detail || 'Could not load times.');
+        }
+      } finally {
+        if (!cancelled) setLoadingSlots(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [pack.id]);
+
+  const groupedByDay = useMemo(() => {
+    const groups = new Map();
+    for (const slot of slots) {
+      const d = new Date(slot.scheduled_at);
+      const key = d.toDateString();
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(slot);
+    }
+    return [...groups.entries()];
+  }, [slots]);
+
+  const handleConfirm = async () => {
+    if (!pickedSlot) {
+      setError('Pick a time to continue.');
+      return;
+    }
     if (!token) {
-      // Send them to register/login then back to the tutor's site.
       const next = encodeURIComponent(window.location.pathname);
       navigate(`/login?next=${next}`);
       return;
     }
-
-    // Convert the datetime-local (local time) to an ISO string with timezone.
-    const localDate = new Date(when);
-    if (Number.isNaN(localDate.getTime())) {
-      setError('Pick a valid date and time.');
-      return;
-    }
-    if (localDate.getTime() <= Date.now()) {
-      setError('Pick a time in the future.');
-      return;
-    }
-
     setSubmitting(true);
+    setError('');
     try {
       const res = await client.post(`/tutor/lesson-packs/${pack.id}/book`, {
-        scheduled_at: localDate.toISOString(),
+        scheduled_at: pickedSlot.scheduled_at,
       });
       if (res.data?.checkout_url) {
         window.location.href = res.data.checkout_url;
@@ -83,7 +109,7 @@ const BookingDialog = ({ pack, tutorDisplayName, onClose }) => {
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6"
+        className="bg-white rounded-2xl shadow-xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto"
       >
         <div className="flex items-start justify-between mb-4">
           <div>
@@ -108,49 +134,71 @@ const BookingDialog = ({ pack, tutorDisplayName, onClose }) => {
           </div>
         )}
 
-        <form onSubmit={handleConfirm} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-kotoba-text mb-1" htmlFor="when">
-              When?
-            </label>
-            <input
-              id="when"
-              type="datetime-local"
-              required
-              min={minDatetimeLocal()}
-              value={when}
-              onChange={(e) => setWhen(e.target.value)}
-              className="w-full px-3 py-2 border border-kotoba-text/20 rounded focus:outline-none focus:ring-2 focus:ring-kotoba-primary"
-            />
-            <p className="mt-1 text-xs text-kotoba-text/60">
-              {pack.num_lessons > 1
-                ? 'Pick the time for your first lesson. You\'ll schedule the rest later.'
-                : 'Pick a time at least an hour from now.'}
-            </p>
-          </div>
-
-          <div className="bg-kotoba-background/50 rounded-lg p-4 flex items-center justify-between">
-            <span className="text-sm text-kotoba-text">Total</span>
-            <span className="text-2xl font-extrabold text-kotoba-primary">{total}</span>
-          </div>
-
-          {!token && (
-            <p className="text-xs text-kotoba-text/60">
-              You'll be asked to sign in or create an account before paying.
-            </p>
-          )}
-
-          <button
-            type="submit"
-            disabled={submitting}
-            className="w-full py-2.5 rounded-lg bg-kotoba-secondary text-kotoba-text font-semibold hover:bg-kotoba-secondary-dark disabled:opacity-60"
-          >
-            {submitting ? 'Loading…' : 'Continue to checkout'}
-          </button>
-          <p className="text-xs text-center text-kotoba-text/60">
-            Card details handled by Stripe. You can cancel any time before the lesson.
+        <div>
+          <p className="text-sm font-medium text-kotoba-text mb-2">
+            Pick a time {pack.num_lessons > 1 ? 'for your first lesson' : ''}
           </p>
-        </form>
+          {loadingSlots ? (
+            <p className="text-sm text-kotoba-text/70">Finding open times…</p>
+          ) : groupedByDay.length === 0 ? (
+            <div className="text-sm text-kotoba-text/70 bg-kotoba-background/50 rounded-md p-4">
+              No open times in the next three weeks. The tutor may need to add availability — try again later or
+              message them.
+            </div>
+          ) : (
+            <div className="space-y-4 max-h-72 overflow-y-auto pr-1">
+              {groupedByDay.map(([dayKey, daySlots]) => (
+                <div key={dayKey}>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-kotoba-text/60 mb-1">
+                    {DAY_LABEL.format(new Date(dayKey))}
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {daySlots.map((slot) => {
+                      const isPicked = pickedSlot?.scheduled_at === slot.scheduled_at;
+                      return (
+                        <button
+                          type="button"
+                          key={slot.scheduled_at}
+                          onClick={() => setPickedSlot(slot)}
+                          className={`px-3 py-1.5 rounded-md text-sm transition-colors ${
+                            isPicked
+                              ? 'bg-kotoba-primary text-white'
+                              : 'border border-kotoba-text/15 text-kotoba-text hover:border-kotoba-primary'
+                          }`}
+                        >
+                          {TIME_LABEL.format(new Date(slot.scheduled_at))}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="mt-5 bg-kotoba-background/50 rounded-lg p-4 flex items-center justify-between">
+          <span className="text-sm text-kotoba-text">Total</span>
+          <span className="text-2xl font-extrabold text-kotoba-primary">{total}</span>
+        </div>
+
+        {!token && (
+          <p className="mt-3 text-xs text-kotoba-text/60">
+            You'll be asked to sign in or create an account before paying.
+          </p>
+        )}
+
+        <button
+          type="button"
+          onClick={handleConfirm}
+          disabled={submitting || !pickedSlot}
+          className="mt-4 w-full py-2.5 rounded-lg bg-kotoba-secondary text-kotoba-text font-semibold hover:bg-kotoba-secondary-dark disabled:opacity-60"
+        >
+          {submitting ? 'Loading…' : 'Continue to checkout'}
+        </button>
+        <p className="mt-2 text-xs text-center text-kotoba-text/60">
+          Card details handled by Stripe. You can cancel any time before the lesson.
+        </p>
       </div>
     </div>
   );

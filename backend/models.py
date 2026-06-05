@@ -609,6 +609,28 @@ class Booking(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
+class TutorAvailability(SQLModel, table=True):
+    """A recurring weekly window when the tutor is available for bookings.
+
+    Times live in the tutor's own timezone (which is `tutor.user.timezone`).
+    Each row is one contiguous availability block — multiple per day are
+    fine (e.g. 09:00-12:00 then 14:00-17:00 with a break in the middle).
+    `start_minute` and `end_minute` are minutes from local-midnight, so
+    09:30 = 570, 17:00 = 1020, etc.
+    """
+
+    __tablename__ = "tutor_availability"
+
+    id: int | None = Field(default=None, primary_key=True)
+    tutor_id: int = Field(foreign_key="tutor.id", index=True)
+    # 0 = Monday … 6 = Sunday (ISO weekday minus one).
+    weekday: int = Field(ge=0, le=6, index=True)
+    start_minute: int = Field(ge=0, le=1440)
+    end_minute: int = Field(ge=0, le=1440)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
 class LessonPack(SQLModel, table=True):
     """A lesson package a tutor sells to students.
 
