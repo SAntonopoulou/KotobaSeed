@@ -771,6 +771,12 @@ class HomeworkTemplate(SQLModel, table=True):
     `auto_assign_on_lesson_complete` flips this template into "send
     automatically after every completed lesson with this tutor" mode.
     The tutor can keep manually-assigned templates separate.
+
+    Premium homework: tutors mark a template `is_premium=True` and set
+    `price_cents`. Students who haven't purchased it can browse the
+    title/description on the tutor's site but the questions stay
+    locked behind a Stripe Connect checkout until paid (`HomeworkPurchase`
+    grants permanent access).
     """
 
     __tablename__ = "homework_template"
@@ -782,8 +788,111 @@ class HomeworkTemplate(SQLModel, table=True):
     questions_json: str = Field(default="[]", max_length=200_000)
     auto_assign_on_lesson_complete: bool = Field(default=False, index=True)
     is_active: bool = Field(default=True, index=True)
+    # Premium fields. is_premium=False keeps the template in the
+    # tutor's manual-assign list as before; True opens a paid path:
+    # students browse the storefront, pay via Stripe Connect, then it
+    # acts like a normal assignment (HomeworkAssignment row created).
+    is_premium: bool = Field(default=False, index=True)
+    price_cents: int = Field(default=0, ge=0)
+    currency: str = Field(default="eur", max_length=3)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class HomeworkPurchase(SQLModel, table=True):
+    """A student's permanent unlock of a premium HomeworkTemplate.
+
+    Once a row exists for (template_id, student_user_id), the student
+    can spawn assignments from that template forever (and the platform
+    keeps a copy for audit). Stripe payment_intent is stamped so we can
+    refund or look up the original charge later.
+    """
+
+    __tablename__ = "homework_purchase"
+    __table_args__ = (
+        UniqueConstraint(
+            "template_id", "student_user_id", name="uq_homework_purchase_pair"
+        ),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    template_id: int = Field(foreign_key="homework_template.id", index=True)
+    tutor_id: int = Field(foreign_key="tutor.id", index=True)
+    student_user_id: int = Field(foreign_key="user.id", index=True)
+    amount_cents: int = Field(default=0, ge=0)
+    platform_fee_cents: int = Field(default=0, ge=0)
+    currency: str = Field(default="eur", max_length=3)
+    stripe_checkout_session_id: str | None = Field(default=None, max_length=128, index=True)
+    stripe_payment_intent_id: str | None = Field(default=None, max_length=128, index=True)
+    paid_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    refunded_at: datetime | None = Field(default=None)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class LessonModule(SQLModel, table=True):
+    """A self-paced lesson module — a tutor's curriculum unit.
+
+    Combines existing Article rows + HomeworkTemplate rows into an
+    ordered "do this, then this" sequence sold as one bundle. Module
+    pricing is one-time permanent access (Stripe Connect checkout
+    grants a `ModulePurchase` on success). For embedded video / audio
+    the tutor links externally inside their articles' markdown — we
+    don't host files in v1.
+
+    items_json is a JSON list of `{"kind": "article"|"homework",
+    "ref_id": int}` records in display order. Storing as JSON avoids a
+    second table for what is essentially a small ordered list.
+    """
+
+    __tablename__ = "lesson_module"
+    __table_args__ = (
+        UniqueConstraint("tutor_id", "slug", name="uq_lesson_module_tutor_slug"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    tutor_id: int = Field(foreign_key="tutor.id", index=True)
+    slug: str = Field(max_length=120, index=True)
+    title: str = Field(max_length=200)
+    summary: str | None = Field(default=None, max_length=500)
+    description: str | None = Field(default=None, max_length=4000)
+    featured_image_url: str | None = Field(default=None, max_length=2048)
+    items_json: str = Field(default="[]", max_length=20_000)
+    price_cents: int = Field(default=0, ge=0)
+    currency: str = Field(default="eur", max_length=3)
+    is_published: bool = Field(default=False, index=True)
+    published_at: datetime | None = Field(default=None)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class ModulePurchase(SQLModel, table=True):
+    """A student's permanent unlock of a LessonModule.
+
+    Composite uniqueness on (module_id, student_user_id) so a duplicate
+    Stripe webhook can't double-insert. Audit-only — we never delete
+    these rows even after refunds; we stamp `refunded_at` instead so
+    historical revenue stays auditable.
+    """
+
+    __tablename__ = "module_purchase"
+    __table_args__ = (
+        UniqueConstraint(
+            "module_id", "student_user_id", name="uq_module_purchase_pair"
+        ),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    module_id: int = Field(foreign_key="lesson_module.id", index=True)
+    tutor_id: int = Field(foreign_key="tutor.id", index=True)
+    student_user_id: int = Field(foreign_key="user.id", index=True)
+    amount_cents: int = Field(default=0, ge=0)
+    platform_fee_cents: int = Field(default=0, ge=0)
+    currency: str = Field(default="eur", max_length=3)
+    stripe_checkout_session_id: str | None = Field(default=None, max_length=128, index=True)
+    stripe_payment_intent_id: str | None = Field(default=None, max_length=128, index=True)
+    paid_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    refunded_at: datetime | None = Field(default=None)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class HomeworkAssignmentStatus(str, Enum):

@@ -48,6 +48,8 @@ import NewsletterUnsubscribe from './pages/NewsletterUnsubscribe';
 import MyAssignments from './pages/MyAssignments';
 import TakeAssignment from './pages/TakeAssignment';
 import PlacementTest from './pages/PlacementTest';
+import ModulesStorefront from './pages/ModulesStorefront';
+import ModuleDetail from './pages/ModuleDetail';
 import { useTenant } from './hooks/useTenant';
 
 const TutorShell = () => (
@@ -61,6 +63,8 @@ const TutorShell = () => (
     <Route path="/articles" element={<ArticlesIndex />} />
     <Route path="/articles/:slug" element={<ArticleReader />} />
     <Route path="/placement-test" element={<PlacementTest />} />
+    <Route path="/modules" element={<ModulesStorefront />} />
+    <Route path="/modules/:slug" element={<ModuleDetail />} />
     <Route path="/newsletters/unsubscribe" element={<NewsletterUnsubscribe />} />
     <Route path="/login" element={<Login />} />
     <Route path="/booking/success" element={<BookingSuccess />} />

@@ -231,9 +231,121 @@ def _handle_booking_checkout(session: Session, data_object: dict) -> bool:
     return True
 
 
+def _handle_module_checkout(session: Session, data_object: dict) -> bool:
+    """Grant a LessonModule purchase on successful checkout. Idempotent —
+    a duplicate webhook for the same (module_id, student_user_id) returns
+    True without inserting a second row."""
+    metadata = data_object.get("metadata", {})
+    if metadata.get("type") != "module":
+        return False
+    try:
+        module_id = int(metadata.get("module_id"))
+        tutor_id = int(metadata.get("tutor_id"))
+        student_user_id = int(metadata.get("student_user_id"))
+        fee = int(metadata.get("platform_fee_cents") or 0)
+    except (TypeError, ValueError):
+        logger.warning("Module checkout missing/invalid metadata: %s", metadata)
+        return True
+    from ..models import LessonModule, ModulePurchase
+
+    module = session.get(LessonModule, module_id)
+    if module is None:
+        logger.warning("Module %s referenced by checkout not found", module_id)
+        return True
+    existing = session.exec(
+        select(ModulePurchase).where(
+            ModulePurchase.module_id == module_id,
+            ModulePurchase.student_user_id == student_user_id,
+        )
+    ).first()
+    if existing is not None:
+        return True
+    row = ModulePurchase(
+        module_id=module_id,
+        tutor_id=tutor_id,
+        student_user_id=student_user_id,
+        amount_cents=int(data_object.get("amount_total") or module.price_cents),
+        platform_fee_cents=fee,
+        currency=module.currency,
+        stripe_checkout_session_id=data_object.get("id"),
+        stripe_payment_intent_id=data_object.get("payment_intent"),
+    )
+    session.add(row)
+    session.commit()
+    return True
+
+
+def _handle_premium_homework_checkout(
+    session: Session, data_object: dict
+) -> bool:
+    """Grant a premium HomeworkPurchase + create an Assignment for the
+    student so it lands in their /student/assignments queue immediately."""
+    metadata = data_object.get("metadata", {})
+    if metadata.get("type") != "homework":
+        return False
+    try:
+        template_id = int(metadata.get("template_id"))
+        tutor_id = int(metadata.get("tutor_id"))
+        student_user_id = int(metadata.get("student_user_id"))
+        fee = int(metadata.get("platform_fee_cents") or 0)
+    except (TypeError, ValueError):
+        logger.warning("Homework checkout missing/invalid metadata: %s", metadata)
+        return True
+    from ..models import (
+        HomeworkAssignment,
+        HomeworkAssignmentStatus,
+        HomeworkPurchase,
+        HomeworkTemplate,
+    )
+    from ..services import homework_grading
+
+    template = session.get(HomeworkTemplate, template_id)
+    if template is None:
+        logger.warning("Homework template %s missing for checkout", template_id)
+        return True
+    existing = session.exec(
+        select(HomeworkPurchase).where(
+            HomeworkPurchase.template_id == template_id,
+            HomeworkPurchase.student_user_id == student_user_id,
+        )
+    ).first()
+    if existing is not None:
+        return True
+    purchase = HomeworkPurchase(
+        template_id=template_id,
+        tutor_id=tutor_id,
+        student_user_id=student_user_id,
+        amount_cents=int(data_object.get("amount_total") or template.price_cents),
+        platform_fee_cents=fee,
+        currency=template.currency,
+        stripe_checkout_session_id=data_object.get("id"),
+        stripe_payment_intent_id=data_object.get("payment_intent"),
+    )
+    session.add(purchase)
+    # Spawn a fresh assignment so the student can start immediately.
+    questions = homework_grading.parse_questions(template.questions_json)
+    assignment = HomeworkAssignment(
+        tutor_id=tutor_id,
+        student_user_id=student_user_id,
+        template_id=template_id,
+        title=template.title,
+        description=template.description,
+        questions_snapshot_json=template.questions_json,
+        max_score=homework_grading.compute_max_score(questions),
+        status=HomeworkAssignmentStatus.OPEN,
+    )
+    session.add(assignment)
+    session.commit()
+    return True
+
+
 def handle_checkout_session_completed(session: Session, data_object: dict):
     metadata = data_object.get("metadata", {})
     if _handle_booking_checkout(session, data_object):
+        return
+    if _handle_module_checkout(session, data_object):
+        return
+    if _handle_premium_homework_checkout(session, data_object):
         return
     if metadata.get("type") == "tip":
         try:

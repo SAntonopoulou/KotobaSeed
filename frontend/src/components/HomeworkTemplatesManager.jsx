@@ -36,6 +36,9 @@ const HomeworkTemplatesManager = () => {
       description: '',
       questions: [makeQuestion('mc_single')],
       auto_assign_on_lesson_complete: false,
+      is_premium: false,
+      price_cents: 0,
+      currency: 'eur',
     });
 
   const startEdit = (t) => setEditing({ ...t });
@@ -84,6 +87,9 @@ const HomeworkTemplatesManager = () => {
         description: editing.description?.trim() || null,
         questions: editing.questions,
         auto_assign_on_lesson_complete: editing.auto_assign_on_lesson_complete,
+        is_premium: editing.is_premium,
+        price_cents: editing.is_premium ? editing.price_cents : 0,
+        currency: editing.currency || 'eur',
       };
       if (editing.id) {
         await client.patch(`/tutor/homework/templates/${editing.id}`, payload);
@@ -187,6 +193,43 @@ const HomeworkTemplatesManager = () => {
             />
             Auto-assign this after every completed lesson
           </label>
+
+          <div className="border-t border-kotoba-text/10 pt-3">
+            <label className="inline-flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={editing.is_premium || false}
+                onChange={(e) =>
+                  setEditing({ ...editing, is_premium: e.target.checked })
+                }
+                disabled={busy}
+                className="h-4 w-4 text-kotoba-primary border-kotoba-text/30 rounded"
+              />
+              <span>Sell this as premium homework</span>
+            </label>
+            {editing.is_premium && (
+              <div className="mt-2 flex items-center gap-2 max-w-xs">
+                <span className="text-sm text-kotoba-text/70">Price €</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={(editing.price_cents || 0) / 100}
+                  onChange={(e) =>
+                    setEditing({
+                      ...editing,
+                      price_cents: Math.max(0, Math.round(parseFloat(e.target.value || '0') * 100)),
+                    })
+                  }
+                  disabled={busy}
+                  className="w-32 px-3 py-1.5 border border-kotoba-text/20 rounded text-sm focus:outline-none focus:ring-2 focus:ring-kotoba-primary"
+                />
+                <span className="text-xs text-kotoba-text/60">
+                  Platform fee 10/7/5/0% by tier
+                </span>
+              </div>
+            )}
+          </div>
 
           <div className="flex items-center justify-end gap-2 pt-2 border-t border-kotoba-text/10">
             <button

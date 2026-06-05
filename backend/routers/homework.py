@@ -101,6 +101,9 @@ class HomeworkTemplateRead(BaseModel):
     questions: list[dict[str, Any]]
     auto_assign_on_lesson_complete: bool
     is_active: bool
+    is_premium: bool
+    price_cents: int
+    currency: str
     max_score: int
     created_at: datetime
     updated_at: datetime
@@ -112,6 +115,9 @@ class HomeworkTemplateCreate(BaseModel):
     questions: list[dict[str, Any]] = Field(default_factory=list)
     auto_assign_on_lesson_complete: bool = False
     is_active: bool = True
+    is_premium: bool = False
+    price_cents: int = Field(default=0, ge=0, le=10_000_00)
+    currency: str = Field(default="eur", min_length=3, max_length=3)
 
 
 class HomeworkTemplateUpdate(BaseModel):
@@ -120,6 +126,9 @@ class HomeworkTemplateUpdate(BaseModel):
     questions: list[dict[str, Any]] | None = None
     auto_assign_on_lesson_complete: bool | None = None
     is_active: bool | None = None
+    is_premium: bool | None = None
+    price_cents: int | None = Field(default=None, ge=0, le=10_000_00)
+    currency: str | None = Field(default=None, min_length=3, max_length=3)
 
 
 def _template_to_read(t: HomeworkTemplate) -> HomeworkTemplateRead:
@@ -131,6 +140,9 @@ def _template_to_read(t: HomeworkTemplate) -> HomeworkTemplateRead:
         questions=questions,
         auto_assign_on_lesson_complete=t.auto_assign_on_lesson_complete,
         is_active=t.is_active,
+        is_premium=t.is_premium,
+        price_cents=t.price_cents,
+        currency=t.currency,
         max_score=homework_grading.compute_max_score(questions),
         created_at=t.created_at,
         updated_at=t.updated_at,
@@ -172,6 +184,9 @@ def create_template(
         questions_json=json.dumps(payload.questions),
         auto_assign_on_lesson_complete=payload.auto_assign_on_lesson_complete,
         is_active=payload.is_active,
+        is_premium=payload.is_premium,
+        price_cents=payload.price_cents,
+        currency=payload.currency,
     )
     session.add(row)
     session.commit()
@@ -197,7 +212,15 @@ def update_template(
     if "questions" in changes:
         _validate_questions(changes["questions"])
         row.questions_json = json.dumps(changes["questions"])
-    for field in ("title", "description", "auto_assign_on_lesson_complete", "is_active"):
+    for field in (
+        "title",
+        "description",
+        "auto_assign_on_lesson_complete",
+        "is_active",
+        "is_premium",
+        "price_cents",
+        "currency",
+    ):
         if field in changes:
             setattr(row, field, changes[field])
     row.updated_at = datetime.now(UTC)

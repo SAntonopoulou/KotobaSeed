@@ -258,7 +258,11 @@ def test_reschedule_happy_path(
         db_session, active_tutor, student_user, pack,
         datetime.now(UTC) + timedelta(days=7),
     )
-    new_at = datetime.now(UTC) + timedelta(days=14)
+    # Anchor at noon UTC so a 60-minute slot never crosses midnight (which
+    # would fall outside the 0..1440 minute-of-day window).
+    new_at = (datetime.now(UTC) + timedelta(days=14)).replace(
+        hour=12, minute=0, second=0, microsecond=0
+    )
     _seed_window_for(db_session, active_tutor, new_at)
     r = client.post(
         f"/users/me/bookings/{booking.id}/reschedule",
@@ -283,7 +287,11 @@ def test_reschedule_rejects_unavailable_slot(
         db_session, active_tutor, student_user, pack,
         datetime.now(UTC) + timedelta(days=7),
     )
-    new_at = datetime.now(UTC) + timedelta(days=14)
+    # Anchor at noon UTC so a 60-minute slot never crosses midnight (which
+    # would fall outside the 0..1440 minute-of-day window).
+    new_at = (datetime.now(UTC) + timedelta(days=14)).replace(
+        hour=12, minute=0, second=0, microsecond=0
+    )
     # NO _seed_window_for — tutor has no availability that day.
     r = client.post(
         f"/users/me/bookings/{booking.id}/reschedule",
@@ -302,7 +310,11 @@ def test_reschedule_rejects_double_book(
         db_session, active_tutor, student_user, pack,
         datetime.now(UTC) + timedelta(days=7),
     )
-    new_at = datetime.now(UTC) + timedelta(days=14)
+    # Anchor at noon UTC so a 60-minute slot never crosses midnight (which
+    # would fall outside the 0..1440 minute-of-day window).
+    new_at = (datetime.now(UTC) + timedelta(days=14)).replace(
+        hour=12, minute=0, second=0, microsecond=0
+    )
     _seed_window_for(db_session, active_tutor, new_at)
     # Seed an existing booking at the exact slot we're trying to move into.
     _seed_booking(
@@ -324,7 +336,11 @@ def test_reschedule_404_for_other_users_booking(
         db_session, active_tutor, student_user, pack,
         datetime.now(UTC) + timedelta(days=7),
     )
-    new_at = datetime.now(UTC) + timedelta(days=14)
+    # Anchor at noon UTC so a 60-minute slot never crosses midnight (which
+    # would fall outside the 0..1440 minute-of-day window).
+    new_at = (datetime.now(UTC) + timedelta(days=14)).replace(
+        hour=12, minute=0, second=0, microsecond=0
+    )
     _seed_window_for(db_session, active_tutor, new_at)
     # Tutor isn't this booking's student — should 404 (not 403, no leak).
     r = client.post(

@@ -26,6 +26,7 @@ from .routers import (
     groups,
     homework,
     marketplace,
+    modules,
     newsletters,
     notifications,
     onboarding,
@@ -178,6 +179,7 @@ for router in (
     newsletters.router,
     homework.router,
     placement.router,
+    modules.router,
 ):
     app.include_router(router)
 
