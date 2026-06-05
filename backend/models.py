@@ -690,6 +690,41 @@ class LessonPack(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
+class Testimonial(SQLModel, table=True):
+    """A student testimonial shown on the tutor's public site.
+
+    Tutor types these in themselves on the dashboard (no student-side
+    submission flow in v1 — keeps it simple, prevents the abuse vectors
+    that come with public submission). Display order is explicit so the
+    tutor can pin the best ones to the top; ties break on created_at.
+
+    Star rating is 1–5 (whole stars only). The body is plain text, not
+    markdown — testimonials don't need formatting and keeping them text-
+    only avoids worrying about XSS via paste.
+    """
+
+    __tablename__ = "testimonial"
+
+    id: int | None = Field(default=None, primary_key=True)
+    tutor_id: int = Field(foreign_key="tutor.id", index=True)
+    # Public attribution. We keep the name as displayed (e.g. "Sara M.")
+    # rather than linking to a User row — many testimonials come from
+    # students who haven't joined Kotobaseed, and pseudonyms are normal.
+    student_name: str = Field(max_length=120)
+    # Country/city for context — optional. Renders as a subtitle.
+    location: str | None = Field(default=None, max_length=120)
+    body: str = Field(max_length=2000)
+    # 1-5 stars. Kept as int rather than half-stars; matches every site
+    # students have seen and avoids fiddly UI.
+    rating: int = Field(default=5, ge=1, le=5)
+    # Lower numbers render first. Defaults to 100 so newly added rows go
+    # to the back — explicit ordering wins over recency.
+    display_order: int = Field(default=100, index=True)
+    is_published: bool = Field(default=True, index=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
 class Article(SQLModel, table=True):
     """A per-tutor markdown article — blog posts, free resources, lesson notes.
 

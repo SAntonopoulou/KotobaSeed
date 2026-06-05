@@ -33,6 +33,7 @@ const TutorHome = () => {
   const [tutor, setTutor] = useState(null);
   const [packs, setPacks] = useState([]);
   const [trial, setTrial] = useState(null);
+  const [testimonials, setTestimonials] = useState([]);
   const [bookingPack, setBookingPack] = useState(null);
   const [bookingTrial, setBookingTrial] = useState(false);
   const [error, setError] = useState('');
@@ -41,15 +42,17 @@ const TutorHome = () => {
     let cancelled = false;
     (async () => {
       try {
-        const [tutorRes, packsRes, trialRes] = await Promise.all([
+        const [tutorRes, packsRes, trialRes, testimonialsRes] = await Promise.all([
           client.get('/tutor/me'),
           client.get('/tutor/lesson-packs').catch(() => ({ data: [] })),
           client.get('/tutor/trial').catch(() => ({ data: null })),
+          client.get('/testimonials').catch(() => ({ data: [] })),
         ]);
         if (!cancelled) {
           setTutor(tutorRes.data);
           setPacks(packsRes.data || []);
           setTrial(trialRes.data || null);
+          setTestimonials(testimonialsRes.data || []);
         }
       } catch (err) {
         if (!cancelled) {
@@ -200,6 +203,37 @@ const TutorHome = () => {
           {tutor.bio || 'Bio coming soon.'}
         </p>
       </section>
+
+      {testimonials.length > 0 && (
+        <section
+          id="testimonials"
+          className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12 bg-white rounded-2xl shadow-sm mx-4 sm:mx-auto mb-8"
+        >
+          <h2 className="text-2xl font-bold text-kotoba-primary mb-6">What students say</h2>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {testimonials.map((t) => (
+              <figure
+                key={t.id}
+                className="border border-kotoba-text/10 rounded-xl p-5 flex flex-col bg-kotoba-background/30"
+              >
+                <div className="text-kotoba-secondary-dark text-lg leading-none">
+                  {'★'.repeat(t.rating)}
+                  <span className="text-kotoba-text/20">{'★'.repeat(5 - t.rating)}</span>
+                </div>
+                <blockquote className="mt-3 text-kotoba-text leading-relaxed whitespace-pre-line">
+                  "{t.body}"
+                </blockquote>
+                <figcaption className="mt-4 text-sm">
+                  <span className="font-semibold text-kotoba-primary">{t.student_name}</span>
+                  {t.location && (
+                    <span className="text-kotoba-text/60"> · {t.location}</span>
+                  )}
+                </figcaption>
+              </figure>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section id="book" className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12 bg-white rounded-2xl shadow-sm mx-4 sm:mx-auto mb-16 space-y-10">
         <div>

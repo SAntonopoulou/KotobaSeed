@@ -31,6 +31,7 @@ from .routers import (
     ratings,
     requests,
     subscriptions,
+    testimonials,
     tutor_site,
     users,
     verifications,
@@ -168,6 +169,7 @@ for router in (
     onboarding.router,
     marketplace.router,
     articles.router,
+    testimonials.router,
 ):
     app.include_router(router)
 

@@ -12,6 +12,7 @@ import CustomDomainSettings from '../components/CustomDomainSettings';
 import MarketplaceListingToggle from '../components/MarketplaceListingToggle';
 import CancellationPolicy from '../components/CancellationPolicy';
 import ArticlesManager from '../components/ArticlesManager';
+import TestimonialsManager from '../components/TestimonialsManager';
 
 // Pull the token out of the URL fragment (#token=...) if present, store it,
 // then scrub the URL so the token doesn't sit in the address bar.
@@ -325,6 +326,8 @@ const TutorDashboard = () => {
         <BookingsManager />
 
         <ArticlesManager />
+
+        <TestimonialsManager />
 
         <AvailabilityEditor />
 
