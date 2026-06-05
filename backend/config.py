@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     stripe_webhook_secret: str = Field(..., description="Stripe webhook signing secret. Required.")
     stripe_plus_price_id: str | None = None
     stripe_premium_price_id: str | None = None
+    # Kotobaseed Pro plan — €35/mo flat, the only platform-level subscription.
+    # Starter (€0/mo + 5% rev share) needs no Stripe product; the 5% comes
+    # from Application Fees on tutor-to-student transactions.
+    stripe_pro_price_id: str | None = None
     platform_fee_percent: float = 0.15
 
     # ----- Frontend -------------------------------------------------------
