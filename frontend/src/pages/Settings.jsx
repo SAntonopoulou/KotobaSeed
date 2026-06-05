@@ -18,7 +18,7 @@ const Settings = () => {
   const fetchPageData = useCallback(async () => {
     if (!currentUser) return;
     try {
-      if (currentUser.role === 'teacher') {
+      if (currentUser.role === 'creator') {
         const verificationsRes = await client.get('/verifications/');
         setVerifications(verificationsRes.data);
       }
@@ -110,7 +110,7 @@ const Settings = () => {
   if (!currentUser) return <div>Please log in to view your settings.</div>;
 
   const isProTeacher =
-    currentUser.role === 'teacher' &&
+    currentUser.role === 'creator' &&
     (currentUser.subscription_tier === 'pro' || currentUser.subscription_tier === 'business');
   const tier = currentUser.subscription_tier || 'free';
   const tierLabel = tier === 'free' || tier === 'none' ? 'Free' : tier.charAt(0).toUpperCase() + tier.slice(1);
@@ -175,7 +175,7 @@ const Settings = () => {
         </div>
       </div>
 
-      {currentUser.role === 'teacher' && (
+      {currentUser.role === 'creator' && (
         <>
           <div className="bg-white shadow overflow-hidden sm:rounded-lg mb-8">
             <div className="px-4 py-5 sm:p-6">

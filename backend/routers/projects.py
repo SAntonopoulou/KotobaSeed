@@ -290,7 +290,7 @@ def create_project(
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
-    if current_user.role != UserRole.TEACHER and current_user.role != UserRole.ADMIN:
+    if current_user.role != UserRole.CREATOR and current_user.role != UserRole.ADMIN:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Only teachers can create projects"
         )
@@ -433,7 +433,7 @@ def list_projects(
 def list_my_projects(
     current_user: User = Depends(get_current_user), session: Session = Depends(get_session)
 ):
-    if current_user.role != UserRole.TEACHER and current_user.role != UserRole.ADMIN:
+    if current_user.role != UserRole.CREATOR and current_user.role != UserRole.ADMIN:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Only teachers can list their projects"
         )

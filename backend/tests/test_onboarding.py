@@ -159,7 +159,7 @@ def test_signup_creates_user_tutor_and_connect_account(client, db_session: Sessi
 
     user = db_session.exec(select(User).where(User.email == "vasso@example.com")).first()
     assert user is not None
-    assert user.role == UserRole.TEACHER
+    assert user.role == UserRole.CREATOR
     assert user.gdpr_consent_at is not None
 
     tutor = db_session.exec(select(Tutor).where(Tutor.tutor_slug == "vasso")).first()

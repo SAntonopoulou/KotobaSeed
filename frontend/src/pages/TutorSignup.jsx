@@ -23,7 +23,8 @@ const slugify = (raw) =>
 
 const TutorSignup = () => {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, currentUser, token } = useAuth();
+  const isLoggedIn = Boolean(token && currentUser);
   const [form, setForm] = useState(initialForm);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -39,7 +40,9 @@ const TutorSignup = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    if (!form.gdpr_consent) {
+    // GDPR is only relevant on the brand-new-account branch; logged-in users
+    // already accepted it when they registered.
+    if (!isLoggedIn && !form.gdpr_consent) {
       setError('Please tick the consent box to continue.');
       return;
     }
@@ -50,7 +53,17 @@ const TutorSignup = () => {
 
     setSubmitting(true);
     try {
-      const payload = { ...form, tutor_slug: slug };
+      // For a logged-in user we only send tutor-specific fields. The backend
+      // detects the JWT and uses the existing User row.
+      const payload = isLoggedIn
+        ? {
+            tutor_slug: slug,
+            display_name: form.display_name,
+            languages_taught: form.languages_taught,
+            timezone: form.timezone,
+          }
+        : { ...form, tutor_slug: slug };
+
       const res = await client.post('/onboarding/tutor', payload);
       const { access_token, onboarding_url } = res.data;
       if (access_token) {
@@ -74,7 +87,9 @@ const TutorSignup = () => {
         <div className="text-center">
           <h1 className="text-4xl font-extrabold text-kotoba-primary">Set up your tutor site</h1>
           <p className="mt-3 text-kotoba-text">
-            About five minutes. You'll be on Stripe Connect for the last step (identity check).
+            {isLoggedIn
+              ? `Logged in as ${currentUser?.full_name || currentUser?.email}. Pick a slug and display name and you're a couple of clicks from Stripe Connect.`
+              : "About five minutes. You'll be on Stripe Connect for the last step (identity check)."}
           </p>
         </div>
 
@@ -85,23 +100,25 @@ const TutorSignup = () => {
             </div>
           )}
 
-          <div>
-            <label className="block text-sm font-medium text-kotoba-text mb-1" htmlFor="full_name">
-              Your full name
-            </label>
-            <input
-              id="full_name"
-              name="full_name"
-              type="text"
-              required
-              value={form.full_name}
-              onChange={handleChange}
-              className="w-full px-3 py-2 border border-kotoba-text/20 rounded-md focus:outline-none focus:ring-2 focus:ring-kotoba-primary focus:border-transparent"
-              placeholder="Vasso Antonopoulou"
-              autoComplete="name"
-            />
-            <p className="mt-1 text-xs text-kotoba-text/60">For tax and Stripe verification — students see your display name instead.</p>
-          </div>
+          {!isLoggedIn && (
+            <div>
+              <label className="block text-sm font-medium text-kotoba-text mb-1" htmlFor="full_name">
+                Your full name
+              </label>
+              <input
+                id="full_name"
+                name="full_name"
+                type="text"
+                required
+                value={form.full_name}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-kotoba-text/20 rounded-md focus:outline-none focus:ring-2 focus:ring-kotoba-primary focus:border-transparent"
+                placeholder="Vasso Antonopoulou"
+                autoComplete="name"
+              />
+              <p className="mt-1 text-xs text-kotoba-text/60">For tax and Stripe verification — students see your display name instead.</p>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-kotoba-text mb-1" htmlFor="display_name">
@@ -161,40 +178,42 @@ const TutorSignup = () => {
             />
           </div>
 
-          <div className="grid sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-kotoba-text mb-1" htmlFor="email">
-                Email
-              </label>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                required
-                value={form.email}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-kotoba-text/20 rounded-md focus:outline-none focus:ring-2 focus:ring-kotoba-primary focus:border-transparent"
-                autoComplete="email"
-              />
+          {!isLoggedIn && (
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-kotoba-text mb-1" htmlFor="email">
+                  Email
+                </label>
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  required
+                  value={form.email}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 border border-kotoba-text/20 rounded-md focus:outline-none focus:ring-2 focus:ring-kotoba-primary focus:border-transparent"
+                  autoComplete="email"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-kotoba-text mb-1" htmlFor="password">
+                  Password
+                </label>
+                <input
+                  id="password"
+                  name="password"
+                  type="password"
+                  required
+                  minLength={8}
+                  value={form.password}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 border border-kotoba-text/20 rounded-md focus:outline-none focus:ring-2 focus:ring-kotoba-primary focus:border-transparent"
+                  autoComplete="new-password"
+                />
+                <p className="mt-1 text-xs text-kotoba-text/60">At least 8 characters.</p>
+              </div>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-kotoba-text mb-1" htmlFor="password">
-                Password
-              </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                required
-                minLength={8}
-                value={form.password}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-kotoba-text/20 rounded-md focus:outline-none focus:ring-2 focus:ring-kotoba-primary focus:border-transparent"
-                autoComplete="new-password"
-              />
-              <p className="mt-1 text-xs text-kotoba-text/60">At least 8 characters.</p>
-            </div>
-          </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-kotoba-text mb-1" htmlFor="timezone">
@@ -212,18 +231,20 @@ const TutorSignup = () => {
             <p className="mt-1 text-xs text-kotoba-text/60">Used so emails arrive at sensible times.</p>
           </div>
 
-          <label className="flex items-start gap-3 text-sm text-kotoba-text">
-            <input
-              type="checkbox"
-              name="gdpr_consent"
-              checked={form.gdpr_consent}
-              onChange={handleChange}
-              className="mt-1 h-4 w-4 text-kotoba-primary border-kotoba-text/30 rounded focus:ring-kotoba-primary"
-            />
-            <span>
-              I agree to Kotobaseed processing my data to provide the platform, per the Privacy Policy. I understand I can delete my account at any time.
-            </span>
-          </label>
+          {!isLoggedIn && (
+            <label className="flex items-start gap-3 text-sm text-kotoba-text">
+              <input
+                type="checkbox"
+                name="gdpr_consent"
+                checked={form.gdpr_consent}
+                onChange={handleChange}
+                className="mt-1 h-4 w-4 text-kotoba-primary border-kotoba-text/30 rounded focus:ring-kotoba-primary"
+              />
+              <span>
+                I agree to Kotobaseed processing my data to provide the platform, per the Privacy Policy. I understand I can delete my account at any time.
+              </span>
+            </label>
+          )}
 
           <button
             type="submit"

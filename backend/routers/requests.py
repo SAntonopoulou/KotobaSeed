@@ -131,7 +131,7 @@ def list_requests(
         Request.user_id == current_user.id,
         and_(Request.is_private == False, Request.status.in_(visible_statuses)),
     ]
-    if current_user.role == UserRole.TEACHER:
+    if current_user.role == UserRole.CREATOR:
         conditions.append(
             and_(Request.target_teacher_id == current_user.id, Request.status.in_(visible_statuses))
         )
@@ -139,7 +139,7 @@ def list_requests(
     query = query.where(or_(*conditions))
 
     # For teachers, exclude requests they have blacklisted (rejected)
-    if current_user.role == UserRole.TEACHER:
+    if current_user.role == UserRole.CREATOR:
         blacklist_sub = select(RequestBlacklist.request_id).where(
             RequestBlacklist.teacher_id == current_user.id
         )
@@ -328,7 +328,7 @@ async def cancel_request(
 #     """
 #     Convert a request into a fundable project (Accept Budget). Only teachers can do this.
 #     """
-#     if current_user.role != UserRole.TEACHER and current_user.role != UserRole.ADMIN:
+#     if current_user.role != UserRole.CREATOR and current_user.role != UserRole.ADMIN:
 #         raise HTTPException(
 #             status_code=status.HTTP_403_FORBIDDEN,
 #             detail="Only teachers or admins can convert requests to projects",
@@ -380,7 +380,7 @@ async def cancel_request(
 #     """
 #     Teacher proposes a new price.
 #     """
-#     if current_user.role != UserRole.TEACHER:
+#     if current_user.role != UserRole.CREATOR:
 #         raise HTTPException(status_code=403, detail="Only teachers can make counter offers")
 
 #     request = session.get(Request, request_id)

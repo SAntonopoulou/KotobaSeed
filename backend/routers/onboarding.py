@@ -31,7 +31,7 @@ from sqlmodel import Session, select
 
 from ..config import settings
 from ..database import get_session
-from ..deps import CurrentUser
+from ..deps import CurrentUser, get_current_user_optional
 from ..models import Tutor, TutorAccountStatus, TutorPlan, User, UserRole
 from ..routers.auth import EMAIL_CODE_TTL_MINUTES, _issue_email_code
 from ..security import client_ip, create_access_token, hash_password
@@ -70,14 +70,23 @@ def _validate_slug(slug: str) -> str:
 
 
 class TutorSignupRequest(BaseModel):
-    email: EmailStr
-    password: str = Field(min_length=8, max_length=128)
-    full_name: str = Field(min_length=1, max_length=120)
+    """Signup payload.
+
+    `email`, `password`, `full_name`, and `gdpr_consent` are only used when
+    the caller is NOT authenticated (a brand-new visitor signing up directly
+    as a tutor). When the caller IS authenticated (e.g. a creator clicking
+    "Get my tutor site" from their dashboard) those fields are ignored —
+    we use the existing User row.
+    """
+
+    email: EmailStr | None = None
+    password: str | None = Field(default=None, min_length=8, max_length=128)
+    full_name: str | None = Field(default=None, min_length=1, max_length=120)
     tutor_slug: str = Field(min_length=3, max_length=60)
     display_name: str = Field(min_length=1, max_length=120)
     timezone: str = Field(default="UTC", max_length=64)
     languages_taught: str | None = None
-    gdpr_consent: bool
+    gdpr_consent: bool | None = None
     country: str | None = Field(default=None, max_length=2)
 
 
@@ -116,27 +125,55 @@ def signup_tutor(
     payload: TutorSignupRequest,
     request: Request,
     session: Annotated[Session, Depends(get_session)],
+    existing_user: Annotated[User | None, Depends(get_current_user_optional)] = None,
 ) -> TutorSignupResponse:
-    if not payload.gdpr_consent:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="GDPR consent is required to create an account.",
-        )
+    """Atomic tutor signup with three branches:
 
+    1. Authenticated caller (e.g. a Creator clicking "Get my tutor site")
+       — use the existing User row, just add a Tutor + Connect account.
+    2. Unauthenticated caller with email/password — create User + Tutor +
+       Connect (this is the original flow).
+    3. Invalid (missing email when unauthenticated) — 400.
+
+    Slug uniqueness, GDPR consent (only on new-user branch), and Stripe-
+    first ordering apply identically to both.
+    """
     slug = _validate_slug(payload.tutor_slug)
-    email = payload.email.lower().strip()
 
-    # Dedup checks before any Stripe call to avoid orphaned Connect accounts.
-    if session.exec(select(User).where(User.email == email)).first():
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="An account with this email already exists.",
-        )
+    # Slug uniqueness check applies in both branches.
     if session.exec(select(Tutor).where(Tutor.tutor_slug == slug)).first():
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"`{slug}` is taken.",
         )
+
+    if existing_user is not None:
+        # --- Branch 1: logged-in creator upgrading to a tutor site ----------
+        if session.exec(select(Tutor).where(Tutor.user_id == existing_user.id)).first():
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="You already have a tutor site.",
+            )
+        email = existing_user.email
+    else:
+        # --- Branch 2: brand-new account ------------------------------------
+        if not payload.gdpr_consent:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="GDPR consent is required to create an account.",
+            )
+        if not (payload.email and payload.password and payload.full_name):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email, password, and full name are required.",
+            )
+        email = payload.email.lower().strip()
+        # Dedup before Stripe so a re-submit doesn't leak Connect accounts.
+        if session.exec(select(User).where(User.email == email)).first():
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="An account with this email already exists.",
+            )
 
     now = datetime.now(UTC)
 
@@ -163,29 +200,42 @@ def signup_tutor(
             detail="Could not start Stripe onboarding. Try again in a moment.",
         ) from None
 
-    # Stripe succeeded — now create both rows atomically. If User commit fails,
-    # the Connect account leaks (rare; cleaned up by a sweeper later); if Tutor
-    # commit fails the same applies. The transaction below rolls both back
-    # together on any DB error.
-    user = User(
-        email=email,
-        hashed_password=hash_password(payload.password),
-        full_name=payload.full_name.strip(),
-        role=UserRole.TEACHER,
-        is_active=True,
-        timezone=payload.timezone or "UTC",
-        gdpr_consent_at=now,
-        gdpr_consent_ip=client_ip(request),
-    )
-    code = _issue_email_code(user)
-    session.add(user)
-    session.flush()  # populate user.id without committing
+    # Stripe succeeded — now create the Tutor row (and the User row too if
+    # we're on the brand-new-account branch). Identity fields (languages)
+    # land on User per the Step 9a consolidation; Tutor only carries
+    # tenant-specific fields.
+    if existing_user is not None:
+        user = existing_user
+        # Promote a non-creator role to CREATOR — tutors are creators with a site.
+        if user.role == UserRole.STUDENT:
+            user.role = UserRole.CREATOR
+        if payload.languages_taught:
+            user.languages = payload.languages_taught
+        user.updated_at = now
+        session.add(user)
+        # The existing-user branch doesn't need email verification re-sent;
+        # the user already verified (or is in the middle of doing so).
+        code = None
+    else:
+        user = User(
+            email=email,
+            hashed_password=hash_password(payload.password),
+            full_name=payload.full_name.strip(),
+            role=UserRole.CREATOR,
+            is_active=True,
+            timezone=payload.timezone or "UTC",
+            languages=payload.languages_taught,
+            gdpr_consent_at=now,
+            gdpr_consent_ip=client_ip(request),
+        )
+        code = _issue_email_code(user)
+        session.add(user)
+        session.flush()  # populate user.id without committing
 
     tutor = Tutor(
         user_id=user.id,
         tutor_slug=slug,
         display_name=payload.display_name.strip(),
-        languages_taught=payload.languages_taught,
         plan=TutorPlan.STARTER,
         account_status=TutorAccountStatus.PAUSED_KYC,
         classroom_minutes_quota=300,
@@ -196,16 +246,19 @@ def signup_tutor(
     session.refresh(user)
     session.refresh(tutor)
 
-    # Verification email — non-blocking; log only on failure.
-    try:
-        send_verification_code(
-            to_email=user.email,
-            full_name=user.full_name,
-            code=code,
-            expires_minutes=EMAIL_CODE_TTL_MINUTES,
-        )
-    except Exception:
-        log.exception("Could not send verification code at tutor signup for %s", user.email)
+    # Verification email only on the new-user branch.
+    if code is not None:
+        try:
+            send_verification_code(
+                to_email=user.email,
+                full_name=user.full_name,
+                code=code,
+                expires_minutes=EMAIL_CODE_TTL_MINUTES,
+            )
+        except Exception:
+            log.exception(
+                "Could not send verification code at tutor signup for %s", user.email
+            )
 
     token = create_access_token(
         subject=user.id,

@@ -7,8 +7,20 @@ from sqlmodel import Field, Relationship, SQLModel
 
 # Enums
 class UserRole(str, Enum):
+    """The user's primary persona.
+
+    - student: browses, learns, pledges, books lessons
+    - creator: makes comprehensible-input content on the marketplace
+      (previously called "teacher" — same role, clearer name)
+    - moderator, admin: platform staff
+
+    A Creator who also runs one-to-one tutoring is a Creator with a Tutor
+    row attached. "Tutor" is not a separate User.role — it's a Creator
+    who's added the tutor-site half on top.
+    """
+
     STUDENT = "student"
-    TEACHER = "teacher"
+    CREATOR = "creator"
     MODERATOR = "moderator"
     ADMIN = "admin"
 
@@ -257,7 +269,7 @@ class User(SQLModel, table=True):
 
     @property
     def is_pro_subscriber(self) -> bool:
-        return self.role == UserRole.TEACHER and self.subscription_tier in (
+        return self.role == UserRole.CREATOR and self.subscription_tier in (
             SubscriptionTier.PRO,
             SubscriptionTier.BUSINESS,
         )

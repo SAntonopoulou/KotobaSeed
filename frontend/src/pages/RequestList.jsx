@@ -71,7 +71,7 @@ const RequestList = () => {
     const community = requests.filter(req => 
       req.user_id !== currentUser.id && 
       (req.status === 'open' || req.status === 'negotiating') &&
-      (req.is_private === false || (currentUser.role === 'teacher' && req.target_teacher_id === currentUser.id))
+      (req.is_private === false || (currentUser.role === 'creator' && req.target_teacher_id === currentUser.id))
     );
 
     setMyOpenRequests(myOpen);
@@ -213,7 +213,7 @@ const RequestList = () => {
           </div>
           <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
             <span className="text-xs text-gray-400">Requested by {req.user_name}</span>
-            {currentUser && currentUser.role === 'teacher' && req.user_id !== currentUser.id && (req.status === 'open' || req.status === 'negotiating') && (
+            {currentUser && currentUser.role === 'creator' && req.user_id !== currentUser.id && (req.status === 'open' || req.status === 'negotiating') && (
               <button onClick={() => handleDiscussWithStudent(req.id)} className="inline-flex items-center px-2 py-1 border border-transparent text-xs font-medium rounded text-white bg-indigo-600 hover:bg-indigo-700">Discuss with Student</button>
             )}
             {currentUser && currentUser.id === req.user_id && (req.status === 'open' || req.status === 'negotiating') && (

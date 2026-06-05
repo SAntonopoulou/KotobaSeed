@@ -31,7 +31,7 @@ const TeacherRoute = () => {
 
   if (loading) return <div className="p-10 text-center">Loading...</div>;
 
-  if (!user || user.role !== 'teacher') {
+  if (!user || user.role !== 'creator') {
     return <Navigate to="/" replace />;
   }
 

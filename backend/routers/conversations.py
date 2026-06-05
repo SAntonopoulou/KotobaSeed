@@ -255,7 +255,7 @@ def create_conversation(
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
-    if current_user.role != UserRole.TEACHER:
+    if current_user.role != UserRole.CREATOR:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only teachers can initiate conversations.",
