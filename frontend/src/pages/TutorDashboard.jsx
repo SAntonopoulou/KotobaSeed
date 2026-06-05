@@ -4,6 +4,7 @@ import client from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { apexUrl } from '../hooks/useTenant';
 import LessonPackManager from '../components/LessonPackManager';
+import BookingsManager from '../components/BookingsManager';
 
 // Pull the token out of the URL fragment (#token=...) if present, store it,
 // then scrub the URL so the token doesn't sit in the address bar.
@@ -314,14 +315,16 @@ const TutorDashboard = () => {
           </form>
         </section>
 
+        <BookingsManager />
+
         <LessonPackManager />
 
         {/* Placeholder for future modules */}
         <section className="bg-white/60 rounded-2xl p-6 text-sm text-kotoba-text">
           <h3 className="font-semibold text-kotoba-primary mb-2">Coming soon</h3>
           <ul className="space-y-1 list-disc list-inside">
-            <li>Booking flow (students buy packs + pick times)</li>
-            <li>Classroom video</li>
+            <li>Classroom video (Daily.co rooms per lesson)</li>
+            <li>Reschedule and refund-window automations</li>
             <li>Landing-page builder + theme</li>
           </ul>
         </section>

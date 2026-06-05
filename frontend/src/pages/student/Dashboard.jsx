@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import client from '../../api/client';
 import { useToast } from '../../context/ToastContext';
+import MyBookings from '../../components/MyBookings';
 
 const StudentDashboard = () => {
   const [pledges, setPledges] = useState([]);
@@ -66,7 +67,14 @@ const StudentDashboard = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <h1 className="text-3xl font-bold text-gray-900 mb-8">My Pledges</h1>
+      <h1 className="text-3xl font-bold text-gray-900 mb-6">My dashboard</h1>
+
+      <section className="bg-white shadow rounded-lg p-6 mb-8">
+        <h2 className="text-xl font-bold text-gray-900 mb-4">My lessons</h2>
+        <MyBookings />
+      </section>
+
+      <h2 className="text-xl font-bold text-gray-900 mb-4">My pledges</h2>
       
       {pledges.length === 0 ? (
         <div className="bg-white shadow rounded-lg p-6 text-center">
