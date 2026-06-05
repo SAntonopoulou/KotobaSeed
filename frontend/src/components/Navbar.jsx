@@ -74,7 +74,7 @@ const Navbar = () => {
           <div className="flex">
             <div className="flex-shrink-0 flex items-center">
               <Link to="/">
-                <img className="h-8 w-auto" src={logo} alt="CompInput Logo" />
+                <img className="h-8 w-auto" src={logo} alt="Kotobaseed" />
               </Link>
             </div>
             <div className="hidden sm:ml-6 sm:flex sm:space-x-8">

@@ -29,7 +29,10 @@ import ArchivedConversations from './pages/ArchivedConversations';
 import TeacherArchive from './pages/TeacherArchive';
 import StudentArchive from './pages/student/Archive';
 import Groups from './pages/Groups';
-import Pricing from './pages/Pricing'; // Import the new Pricing page
+import Pricing from './pages/Pricing';
+import TutorSignup from './pages/TutorSignup';
+import OnboardingReturn from './pages/OnboardingReturn';
+import OnboardingRefresh from './pages/OnboardingRefresh';
 
 const AppContent = () => {
   const { token } = useAuth();
@@ -44,10 +47,13 @@ const AppContent = () => {
           <Route path="/register" element={<Register />} />
           <Route path="/archive" element={<Archive />} />
           <Route path="/groups" element={<Groups />} />
-          <Route path="/pricing" element={<Pricing />} /> {/* New Pricing route */}
+          <Route path="/pricing" element={<Pricing />} />
+          <Route path="/onboarding/tutor" element={<TutorSignup />} />
 
           {/* Protected Routes */}
           <Route element={<ProtectedRoute />}>
+            <Route path="/onboarding/return" element={<OnboardingReturn />} />
+            <Route path="/onboarding/refresh" element={<OnboardingRefresh />} />
             <Route path="/projects" element={<ProjectList />} />
             <Route path="/projects/:id" element={<ProjectDetail />} />
             <Route path="/requests" element={<RequestList />} />
