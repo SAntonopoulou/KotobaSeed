@@ -33,8 +33,19 @@ import Pricing from './pages/Pricing';
 import TutorSignup from './pages/TutorSignup';
 import OnboardingReturn from './pages/OnboardingReturn';
 import OnboardingRefresh from './pages/OnboardingRefresh';
+import TutorHome from './pages/TutorHome';
+import { useTenant } from './hooks/useTenant';
 
-const AppContent = () => {
+const TutorShell = () => (
+  // Tutor subdomains get their own minimal shell — no apex Kotobaseed nav,
+  // no apex Footer. The tutor page renders its own header + footer below.
+  <Routes>
+    <Route path="/" element={<TutorHome />} />
+    <Route path="*" element={<Navigate to="/" replace />} />
+  </Routes>
+);
+
+const ApexShell = () => {
   const { token } = useAuth();
 
   return (
@@ -94,6 +105,11 @@ const AppContent = () => {
     </div>
   );
 }
+
+const AppContent = () => {
+  const tenant = useTenant();
+  return tenant.kind === 'tutor' ? <TutorShell /> : <ApexShell />;
+};
 
 function App() {
   return (
