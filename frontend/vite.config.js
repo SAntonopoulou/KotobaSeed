@@ -5,8 +5,11 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   server: {
-    // Allow requests from the ngrok domain
-    // Replace 'lamentable-hue-attractingly.ngrok-free.dev' with your actual ngrok domain
-    allowedHosts: ['kotobaseed.ngrok.app'],
+    // Accept any host. We want `*.localhost` subdomains so dev mirrors the
+    // production multi-tenant routing (e.g. `test.localhost:5173` matches
+    // `test.kotobaseed.net` on prod). This is dev-only — vite is never
+    // exposed publicly.
+    host: true,
+    allowedHosts: true,
   },
 })
