@@ -208,3 +208,50 @@ def test_invalid_days_rejected(client, active_tutor, pack60):
         headers={"Host": "vasso.kotobaseed.net"},
     )
     assert r.status_code == 400
+
+
+def test_paid_slots_ignore_allow_trial_flag(
+    client, active_tutor, pack60, teacher_user, db_session
+):
+    """Paid-lesson slot computation includes every availability window,
+    regardless of whether it's flagged trial-eligible. Trial windows must
+    never narrow paid availability — they only ever widen it for trials."""
+    today_weekday = datetime.now(UTC).weekday()
+    target_weekday = (today_weekday + 3) % 7
+    # Seed both a regular-only window AND a trial-flagged window on the
+    # same day; both should produce paid slots.
+    db_session.add(
+        TutorAvailability(
+            tutor_id=active_tutor.id,
+            weekday=target_weekday,
+            start_minute=540,  # 9:00
+            end_minute=720,  # 12:00 — trial-eligible
+            allow_trial=True,
+        )
+    )
+    db_session.add(
+        TutorAvailability(
+            tutor_id=active_tutor.id,
+            weekday=target_weekday,
+            start_minute=840,  # 14:00
+            end_minute=1020,  # 17:00 — paid-only peak hours
+            allow_trial=False,
+        )
+    )
+    db_session.commit()
+
+    r = client.get(
+        f"/tutor/availability/slots?pack_id={pack60.id}&days=14",
+        headers={"Host": "vasso.kotobaseed.net"},
+    )
+    assert r.status_code == 200
+    slots = r.json()
+    days_ahead = ((target_weekday - today_weekday) % 7) or 7
+    target_day = (datetime.now(UTC) + timedelta(days=days_ahead)).date()
+    same_day = [s for s in slots if s["scheduled_at"].startswith(target_day.isoformat())]
+    # Morning window (3hr) and afternoon window (3hr) at 30-min steps with
+    # 60-min lessons → at least the afternoon's slots must appear.
+    afternoon_slots = [
+        s for s in same_day if int(s["scheduled_at"][11:13]) >= 14
+    ]
+    assert len(afternoon_slots) >= 1, "paid slots must include allow_trial=False windows"

@@ -630,6 +630,11 @@ class TutorAvailability(SQLModel, table=True):
     weekday: int = Field(ge=0, le=6, index=True)
     start_minute: int = Field(ge=0, le=1440)
     end_minute: int = Field(ge=0, le=1440)
+    # When True, this window is ALSO eligible for free-trial bookings. A
+    # superset flag on regular availability — never carves out paid hours.
+    # Lets a tutor say "9-10am is open to trials too" while keeping their
+    # 10am-noon peak hours paid-only.
+    allow_trial: bool = Field(default=False)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 

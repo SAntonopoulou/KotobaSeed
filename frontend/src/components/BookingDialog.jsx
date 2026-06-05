@@ -13,44 +13,6 @@ const TIME_LABEL = new Intl.DateTimeFormat(undefined, {
   minute: '2-digit',
 });
 
-// Client-side slot generation for the free-trial branch. The trial doesn't
-// reference a real LessonPack server-side (we don't want to expose the
-// managed trial pack id), so we project the tutor's regular availability
-// windows ourselves using `trial_duration_minutes`. Filters out times in
-// the past + the same 15-minute lead the backend uses.
-const generateClientSideSlots = (windows, durationMinutes) => {
-  if (!windows.length) return [];
-  const now = Date.now();
-  const earliest = now + 15 * 60_000;
-  const horizon = now + 21 * 24 * 60 * 60_000;
-  const step = 30; // minutes
-  const slots = [];
-  for (let dayOffset = 0; dayOffset < 21; dayOffset++) {
-    const day = new Date(now + dayOffset * 24 * 60 * 60_000);
-    const weekday = (day.getDay() + 6) % 7; // local weekday with Mon=0
-    for (const w of windows) {
-      if (w.weekday !== weekday) continue;
-      for (let m = w.start_minute; m + durationMinutes <= w.end_minute; m += step) {
-        const slotDate = new Date(
-          day.getFullYear(),
-          day.getMonth(),
-          day.getDate(),
-          Math.floor(m / 60),
-          m % 60
-        );
-        const ts = slotDate.getTime();
-        if (ts < earliest || ts > horizon) continue;
-        slots.push({
-          scheduled_at: slotDate.toISOString(),
-          duration_minutes: durationMinutes,
-        });
-      }
-    }
-  }
-  slots.sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at));
-  return slots;
-};
-
 const BookingDialog = ({ pack, tutorDisplayName, onClose }) => {
   const navigate = useNavigate();
   const { token } = useAuth();
@@ -74,20 +36,14 @@ const BookingDialog = ({ pack, tutorDisplayName, onClose }) => {
     setError('');
     (async () => {
       try {
-        // Trial branch: we don't have a real pack_id, so synthesize a
-        // slot list from the tutor's regular availability windows using
-        // the trial duration. For paid packs the backend endpoint already
-        // does that for us.
-        if (pack.isTrial) {
-          const [windows] = await Promise.all([
-            client.get('/tutor/availability'),
-          ]);
-          const generated = generateClientSideSlots(windows.data || [], pack.duration_minutes);
-          if (!cancelled) setSlots(generated);
-        } else {
-          const res = await client.get(`/tutor/availability/slots?pack_id=${pack.id}&days=21`);
-          if (!cancelled) setSlots(res.data || []);
-        }
+        // Trial branch hits its own slot endpoint — the backend filters to
+        // windows with allow_trial=True so the student only ever sees
+        // tutor-approved trial times.
+        const path = pack.isTrial
+          ? '/tutor/availability/trial-slots?days=21'
+          : `/tutor/availability/slots?pack_id=${pack.id}&days=21`;
+        const res = await client.get(path);
+        if (!cancelled) setSlots(res.data || []);
       } catch (err) {
         if (!cancelled) {
           setError(err?.response?.data?.detail || 'Could not load times.');
@@ -99,7 +55,7 @@ const BookingDialog = ({ pack, tutorDisplayName, onClose }) => {
     return () => {
       cancelled = true;
     };
-  }, [pack.id, pack.isTrial, pack.duration_minutes]);
+  }, [pack.id, pack.isTrial]);
 
   const groupedByDay = useMemo(() => {
     const groups = new Map();

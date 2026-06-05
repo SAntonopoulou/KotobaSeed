@@ -119,7 +119,7 @@ const TrialSettings = () => {
       )}
 
       <p className="mt-4 text-xs text-kotoba-text/60">
-        Each student can book one free trial with you, lifetime — protects the trial as a conversion tool. Trials use your regular availability windows. Dedicated "trial-only" times come later.
+        Each student can book one free trial with you, lifetime — protects the trial as a conversion tool. To open specific times to trials, switch to <span className="font-medium">Regular + trial</span> mode in your availability grid above. Trial-flagged windows stay bookable for paid lessons too — they just additionally accept trials, so your peak hours stay yours.
       </p>
     </section>
   );

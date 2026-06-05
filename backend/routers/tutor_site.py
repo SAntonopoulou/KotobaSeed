@@ -471,6 +471,21 @@ def book_trial(
         session.commit()
         session.refresh(trial_pack)
 
+    # Trial windows are a SUPERSET overlay on regular availability — the
+    # tutor opts in per-window so they can protect peak hours for paid
+    # students. The booking must land inside a window flagged allow_trial.
+    if not _slot_fits_window(
+        tutor=tutor,
+        scheduled_at=payload.scheduled_at,
+        duration_minutes=trial_pack.duration_minutes,
+        session=session,
+        trial_only=True,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This time isn't open for free trials. Pick a slot from the suggested list.",
+        )
+
     # Hard cap: ONE free trial per student per tutor, lifetime. Not
     # configurable — Sophia's call, prevents abuse and keeps the "trial"
     # concept meaningful as a conversion hook. Anything except an
@@ -751,11 +766,17 @@ def deactivate_lesson_pack(
 
 
 class AvailabilityWindow(BaseModel):
-    """One contiguous availability block on a weekly recurrence."""
+    """One contiguous availability block on a weekly recurrence.
+
+    `allow_trial=True` opts the window into free-trial bookings as well as
+    paid bookings. Paid bookings ignore the flag entirely — trial windows
+    only widen what's offered, never narrow paid availability.
+    """
 
     weekday: int = Field(ge=0, le=6, description="0=Monday, 6=Sunday")
     start_minute: int = Field(ge=0, le=1440, description="Minutes from midnight in tutor TZ")
     end_minute: int = Field(ge=0, le=1440)
+    allow_trial: bool = False
 
 
 class AvailabilityReplace(BaseModel):
@@ -786,6 +807,7 @@ def list_availability(
             weekday=r.weekday,
             start_minute=r.start_minute,
             end_minute=r.end_minute,
+            allow_trial=r.allow_trial,
         )
         for r in rows
     ]
@@ -832,6 +854,7 @@ def replace_availability(
                 weekday=w.weekday,
                 start_minute=w.start_minute,
                 end_minute=w.end_minute,
+                allow_trial=w.allow_trial,
             )
         )
     session.commit()
@@ -971,6 +994,163 @@ def list_available_slots(
 
     slots.sort(key=lambda s: s.scheduled_at)
     return slots
+
+
+def _compute_slots(
+    *,
+    tutor: Tutor,
+    duration_minutes: int,
+    days: int,
+    slot_step_minutes: int,
+    session: Session,
+    trial_only: bool,
+) -> list[AvailableSlot]:
+    """Shared slot walker used by paid and trial slot endpoints.
+
+    When `trial_only=True`, only windows with `allow_trial=True` are walked.
+    Otherwise every availability window contributes — paid bookings see all.
+    """
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+    tz_name = (tutor.user.timezone if tutor.user else "UTC") or "UTC"
+    try:
+        tz = ZoneInfo(tz_name)
+    except ZoneInfoNotFoundError:
+        tz = ZoneInfo("UTC")
+
+    windows_q = select(TutorAvailability).where(
+        TutorAvailability.tutor_id == tutor.id
+    )
+    if trial_only:
+        windows_q = windows_q.where(TutorAvailability.allow_trial == True)  # noqa: E712
+    windows = list(session.exec(windows_q).all())
+    if not windows:
+        return []
+
+    now_utc = datetime.now(UTC)
+    horizon_utc = now_utc + timedelta(days=days)
+    bookings = list(
+        session.exec(
+            select(Booking)
+            .where(Booking.tutor_id == tutor.id)
+            .where(Booking.scheduled_at >= now_utc - timedelta(hours=1))
+            .where(Booking.scheduled_at <= horizon_utc + timedelta(hours=1))
+        ).all()
+    )
+
+    windows_by_weekday: dict[int, list[TutorAvailability]] = {}
+    for w in windows:
+        windows_by_weekday.setdefault(w.weekday, []).append(w)
+
+    today_local = now_utc.astimezone(tz).date()
+    slots: list[AvailableSlot] = []
+
+    for day_offset in range(days):
+        local_date = today_local + timedelta(days=day_offset)
+        weekday = local_date.weekday()
+        for window in windows_by_weekday.get(weekday, []):
+            candidate_minute = window.start_minute
+            while candidate_minute + duration_minutes <= window.end_minute:
+                local_start = datetime(
+                    local_date.year,
+                    local_date.month,
+                    local_date.day,
+                    hour=candidate_minute // 60,
+                    minute=candidate_minute % 60,
+                    tzinfo=tz,
+                )
+                slot_utc = local_start.astimezone(UTC)
+                if slot_utc < now_utc + timedelta(minutes=15):
+                    candidate_minute += slot_step_minutes
+                    continue
+                if slot_utc > horizon_utc:
+                    break
+                if not _slot_conflicts(slot_utc, duration_minutes, bookings):
+                    slots.append(
+                        AvailableSlot(
+                            scheduled_at=slot_utc,
+                            duration_minutes=duration_minutes,
+                        )
+                    )
+                candidate_minute += slot_step_minutes
+
+    slots.sort(key=lambda s: s.scheduled_at)
+    return slots
+
+
+def _slot_fits_window(
+    *,
+    tutor: Tutor,
+    scheduled_at: datetime,
+    duration_minutes: int,
+    session: Session,
+    trial_only: bool,
+) -> bool:
+    """True if [scheduled_at, scheduled_at+duration) fits inside one of
+    the tutor's recurring weekly windows. Respects the tutor's local TZ.
+
+    When `trial_only=True`, only `allow_trial=True` windows are eligible.
+    """
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+    tz_name = (tutor.user.timezone if tutor.user else "UTC") or "UTC"
+    try:
+        tz = ZoneInfo(tz_name)
+    except ZoneInfoNotFoundError:
+        tz = ZoneInfo("UTC")
+
+    local_start = scheduled_at.astimezone(tz)
+    weekday = local_start.weekday()
+    start_minute = local_start.hour * 60 + local_start.minute
+    end_minute = start_minute + duration_minutes
+
+    q = select(TutorAvailability).where(
+        TutorAvailability.tutor_id == tutor.id,
+        TutorAvailability.weekday == weekday,
+        TutorAvailability.start_minute <= start_minute,
+        TutorAvailability.end_minute >= end_minute,
+    )
+    if trial_only:
+        q = q.where(TutorAvailability.allow_trial == True)  # noqa: E712
+    return session.exec(q).first() is not None
+
+
+@router.get("/availability/trial-slots", response_model=list[AvailableSlot])
+def list_trial_slots(
+    tutor: CurrentTutor,
+    session: Annotated[Session, Depends(get_session)],
+    days: int = 14,
+    slot_step_minutes: int = 30,
+) -> list[AvailableSlot]:
+    """Public — bookable free-trial slots for the next `days` days.
+
+    Filters to availability windows where `allow_trial=True`, then walks
+    them at `slot_step_minutes` granularity for the tutor's configured
+    trial duration. Returns 404 if the tutor isn't offering trials.
+    """
+    if not tutor.offers_free_trial:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="This tutor isn't offering free trials.",
+        )
+    if days < 1 or days > 60:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="`days` must be between 1 and 60.",
+        )
+    if slot_step_minutes < 15 or slot_step_minutes > 120:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="`slot_step_minutes` must be between 15 and 120.",
+        )
+    return _compute_slots(
+        tutor=tutor,
+        duration_minutes=tutor.free_trial_minutes,
+        days=days,
+        slot_step_minutes=slot_step_minutes,
+        session=session,
+        trial_only=True,
+    )
 
 
 # --- Booking management (tutor side) -------------------------------------
