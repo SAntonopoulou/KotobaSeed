@@ -1,22 +1,24 @@
-from typing import List
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlmodel import Session, select
 from pydantic import BaseModel
 from sqlalchemy.orm import selectinload
-import logging
+from sqlmodel import Session, select
 
 from ..database import get_session
 from ..deps import get_current_user
-from ..models import LanguageGroup, User, Project, ProjectStatus, UserLanguageGroup
+from ..models import LanguageGroup, Project, ProjectStatus, User, UserLanguageGroup
 
 router = APIRouter(prefix="/language-groups", tags=["language-groups"])
 logger = logging.getLogger(__name__)
+
 
 class LanguageGroupRead(BaseModel):
     id: int
     language_name: str
 
-@router.get("/", response_model=List[LanguageGroupRead])
+
+@router.get("/", response_model=list[LanguageGroupRead])
 def list_language_groups(session: Session = Depends(get_session)):
     # First, let's check if any LanguageGroups exist at all
     all_groups_statement = select(LanguageGroup.id, LanguageGroup.language_name)
@@ -27,7 +29,11 @@ def list_language_groups(session: Session = Depends(get_session)):
     statement = (
         select(LanguageGroup.id, LanguageGroup.language_name)
         .join(Project, LanguageGroup.language_name == Project.language)
-        .where(Project.status.in_([ProjectStatus.FUNDING, ProjectStatus.SUCCESSFUL, ProjectStatus.COMPLETED]))
+        .where(
+            Project.status.in_(
+                [ProjectStatus.FUNDING, ProjectStatus.SUCCESSFUL, ProjectStatus.COMPLETED]
+            )
+        )
         .group_by(LanguageGroup.id, LanguageGroup.language_name)
         .order_by(LanguageGroup.language_name)
     )
@@ -35,11 +41,12 @@ def list_language_groups(session: Session = Depends(get_session)):
     logger.info(f"Found language groups with active projects: {results}")
     return [LanguageGroupRead(id=id, language_name=language_name) for id, language_name in results]
 
+
 @router.post("/{group_id}/join", status_code=status.HTTP_204_NO_CONTENT)
 def join_language_group(
     group_id: int,
     current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
 ):
     group = session.get(LanguageGroup, group_id)
     if not group:
@@ -53,11 +60,12 @@ def join_language_group(
     session.add(new_link)
     session.commit()
 
+
 @router.delete("/{group_id}/join", status_code=status.HTTP_204_NO_CONTENT)
 def leave_language_group(
     group_id: int,
     current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
 ):
     user_group_link = session.get(UserLanguageGroup, (current_user.id, group_id))
     if not user_group_link:
@@ -66,10 +74,13 @@ def leave_language_group(
     session.delete(user_group_link)
     session.commit()
 
-@router.get("/me", response_model=List[LanguageGroupRead])
+
+@router.get("/me", response_model=list[LanguageGroupRead])
 def get_my_language_groups(
-    current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session)
+    current_user: User = Depends(get_current_user), session: Session = Depends(get_session)
 ):
     user = session.get(User, current_user.id, options=[selectinload(User.language_groups)])
-    return [LanguageGroupRead(id=group.id, language_name=group.language_name) for group in user.language_groups]
+    return [
+        LanguageGroupRead(id=group.id, language_name=group.language_name)
+        for group in user.language_groups
+    ]

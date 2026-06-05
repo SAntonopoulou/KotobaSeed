@@ -4,6 +4,7 @@ Reads DATABASE_URL from `backend.config.settings` (env-driven), and pulls
 the metadata from SQLModel.metadata so autogenerate works against every
 model defined in `backend.models`.
 """
+# ruff: noqa: E402  (sys.path setup must happen before backend imports)
 
 from __future__ import annotations
 

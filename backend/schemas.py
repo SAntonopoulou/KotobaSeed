@@ -1,8 +1,18 @@
 from __future__ import annotations
-from typing import List, Optional
+
 from datetime import datetime
-from pydantic import BaseModel
-from .models import UserRole, RequestStatus, MessageType, OfferStatus, ConversationStatus, ProjectStatus
+
+from pydantic import BaseModel, ConfigDict
+
+from .models import (
+    ConversationStatus,
+    MessageType,
+    OfferStatus,
+    ProjectStatus,
+    RequestStatus,
+    UserRole,
+)
+
 
 class RequestCreate(BaseModel):
     title: str
@@ -10,10 +20,11 @@ class RequestCreate(BaseModel):
     language: str
     level: str
     budget: int = 0
-    target_teacher_id: Optional[int] = None
+    target_teacher_id: int | None = None
     is_private: bool = False
     is_series: bool = False
-    num_videos: Optional[int] = None
+    num_videos: int | None = None
+
 
 class RequestRead(BaseModel):
     id: int
@@ -23,22 +34,22 @@ class RequestRead(BaseModel):
     level: str
     budget: int
     status: RequestStatus
-    target_teacher_id: Optional[int]
-    counter_offer_amount: Optional[int]
+    target_teacher_id: int | None
+    counter_offer_amount: int | None
     is_private: bool
     created_at: datetime
     user_id: int
     user_name: str
-    associated_project_id: Optional[int] = None
-    project_title: Optional[str] = None
-    project_description: Optional[str] = None
-    project_funding_goal: Optional[int] = None
-    tags: Optional[str] = None # Added tags field
+    associated_project_id: int | None = None
+    project_title: str | None = None
+    project_description: str | None = None
+    project_funding_goal: int | None = None
+    tags: str | None = None  # Added tags field
     is_series: bool = False
-    num_videos: Optional[int] = None
+    num_videos: int | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
 
 class ProjectCreate(BaseModel):
     title: str
@@ -47,28 +58,31 @@ class ProjectCreate(BaseModel):
     level: str
     funding_goal: int
     delivery_days: int
-    tags: Optional[str] = None
+    tags: str | None = None
     is_series: bool = False
-    num_videos: Optional[int] = None
-    price_per_video: Optional[int] = None
-    project_image_url: Optional[str] = None
-    series_intro_video_url: Optional[str] = None
+    num_videos: int | None = None
+    price_per_video: int | None = None
+    project_image_url: str | None = None
+    series_intro_video_url: str | None = None
+
 
 class ProjectUpdateModel(BaseModel):
-    title: Optional[str] = None
-    description: Optional[str] = None
-    language: Optional[str] = None
-    level: Optional[str] = None
-    funding_goal: Optional[int] = None
-    deadline: Optional[datetime] = None
-    delivery_days: Optional[int] = None
-    status: Optional[ProjectStatus] = None
-    tags: Optional[str] = None
-    project_image_url: Optional[str] = None
-    series_intro_video_url: Optional[str] = None
+    title: str | None = None
+    description: str | None = None
+    language: str | None = None
+    level: str | None = None
+    funding_goal: int | None = None
+    deadline: datetime | None = None
+    delivery_days: int | None = None
+    status: ProjectStatus | None = None
+    tags: str | None = None
+    project_image_url: str | None = None
+    series_intro_video_url: str | None = None
+
 
 class UpdateCreate(BaseModel):
     content: str
+
 
 class UpdateRead(BaseModel):
     id: int
@@ -76,27 +90,30 @@ class UpdateRead(BaseModel):
     created_at: datetime
     project_id: int
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
 
 class BackerRead(BaseModel):
     id: int
     full_name: str
-    avatar_url: Optional[str] = None
+    avatar_url: str | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
 
 class LanguageLevelsRead(BaseModel):
     language: str
-    levels: List[str]
+    levels: list[str]
+
 
 class MyRatingRead(BaseModel):
     rating: int
-    comment: Optional[str] = None
+    comment: str | None = None
+
 
 class FilterOptionsRead(BaseModel):
-    languages: List[LanguageLevelsRead]
+    languages: list[LanguageLevelsRead]
+
 
 class ProjectRead(BaseModel):
     id: int
@@ -104,46 +121,47 @@ class ProjectRead(BaseModel):
     description: str
     language: str
     level: str
-    tags: Optional[str] = None
+    tags: str | None = None
     funding_goal: int
     current_funding: int
     total_tipped_amount: int = 0
-    deadline: Optional[datetime] = None
-    delivery_days: Optional[int] = None
+    deadline: datetime | None = None
+    delivery_days: int | None = None
     status: ProjectStatus
     is_private: bool
     created_at: datetime
     updated_at: datetime
-    funded_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
+    funded_at: datetime | None = None
+    completed_at: datetime | None = None
     teacher_id: int
     teacher_name: str
-    teacher_avatar_url: Optional[str] = None
-    teacher_stripe_account_id: Optional[str] = None
-    teacher_verified_languages: List[str] = [] # New field
-    origin_request_id: Optional[int] = None
-    origin_request_title: Optional[str] = None
-    origin_request_student_name: Optional[str] = None
-    videos: List[str] = [] # Assuming list of video URLs or IDs
+    teacher_avatar_url: str | None = None
+    teacher_stripe_account_id: str | None = None
+    teacher_verified_languages: list[str] = []  # New field
+    origin_request_id: int | None = None
+    origin_request_title: str | None = None
+    origin_request_student_name: str | None = None
+    videos: list[str] = []  # Assuming list of video URLs or IDs
     is_backed_by_user: bool = False
     is_owner: bool = False
     is_teacher_verified: bool = False
     is_following_teacher: bool = False
-    average_rating: Optional[float] = None
+    average_rating: float | None = None
     total_ratings: int = 0
-    my_rating: Optional[MyRatingRead] = None
+    my_rating: MyRatingRead | None = None
     is_series: bool = False
-    num_videos: Optional[int] = None
-    price_per_video: Optional[int] = None
-    project_image_url: Optional[str] = None
-    series_intro_video_url: Optional[str] = None
+    num_videos: int | None = None
+    price_per_video: int | None = None
+    project_image_url: str | None = None
+    series_intro_video_url: str | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
 
 class PaginatedProjectRead(BaseModel):
-    projects: List[ProjectRead]
+    projects: list[ProjectRead]
     total_count: int
+
 
 class ProjectResponse(BaseModel):
     id: int
@@ -154,20 +172,23 @@ class ProjectResponse(BaseModel):
     funding_goal: int
     status: ProjectStatus
     teacher_id: int
-    origin_request_id: Optional[int] = None
+    origin_request_id: int | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
 
 class CounterOffer(BaseModel):
     amount: int
 
+
 class ConversationCreate(BaseModel):
     request_id: int
 
+
 class MessageCreate(BaseModel):
     content: str
-    replied_to_message_id: Optional[int] = None
+    replied_to_message_id: int | None = None
+
 
 class OfferCreate(BaseModel):
     offer_description: str
@@ -175,22 +196,24 @@ class OfferCreate(BaseModel):
     title: str
     language: str
     level: str
-    tags: Optional[str] = None
-    is_series: Optional[bool] = None
-    num_videos: Optional[int] = None
-    price_per_video: Optional[int] = None
+    tags: str | None = None
+    is_series: bool | None = None
+    num_videos: int | None = None
+    price_per_video: int | None = None
+
 
 class DemoVideoUpdate(BaseModel):
     url: str
 
+
 class UserPublicRead(BaseModel):
     id: int
     full_name: str
-    avatar_url: Optional[str] = None
+    avatar_url: str | None = None
     role: UserRole
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
 
 class MessageRead(BaseModel):
     id: int
@@ -200,24 +223,24 @@ class MessageRead(BaseModel):
     created_at: datetime
     is_read: bool
     sender_full_name: str
-    sender_avatar_url: Optional[str] = None
-    replied_to_message_id: Optional[int] = None
-    replied_to_message_content: Optional[str] = None
-    replied_to_sender_name: Optional[str] = None
+    sender_avatar_url: str | None = None
+    replied_to_message_id: int | None = None
+    replied_to_message_content: str | None = None
+    replied_to_sender_name: str | None = None
     message_type: MessageType
-    offer_description: Optional[str] = None
-    offer_price: Optional[int] = None
-    offer_status: Optional[OfferStatus] = None
-    offer_title: Optional[str] = None
-    offer_language: Optional[str] = None
-    offer_level: Optional[str] = None
-    offer_tags: Optional[str] = None
-    offer_is_series: Optional[bool] = None
-    offer_num_videos: Optional[int] = None
-    offer_price_per_video: Optional[int] = None
+    offer_description: str | None = None
+    offer_price: int | None = None
+    offer_status: OfferStatus | None = None
+    offer_title: str | None = None
+    offer_language: str | None = None
+    offer_level: str | None = None
+    offer_tags: str | None = None
+    offer_is_series: bool | None = None
+    offer_num_videos: int | None = None
+    offer_price_per_video: int | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
 
 class ConversationRead(BaseModel):
     id: int
@@ -225,18 +248,18 @@ class ConversationRead(BaseModel):
     teacher_id: int
     student_id: int
     status: ConversationStatus
-    student_demo_video_url: Optional[str] = None
+    student_demo_video_url: str | None = None
     demo_video_requested: bool = False
     created_at: datetime
     updated_at: datetime
-    
+
     request: RequestRead
     teacher: UserPublicRead
     student: UserPublicRead
-    messages: List[MessageRead] = []
+    messages: list[MessageRead] = []
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
 
 class ConversationSummaryRead(BaseModel):
     id: int
@@ -245,16 +268,16 @@ class ConversationSummaryRead(BaseModel):
     student_id: int
     status: ConversationStatus
     updated_at: datetime
-    
+
     request_title: str
     other_participant: UserPublicRead
-    last_message_content: Optional[str] = None
-    last_message_created_at: Optional[datetime] = None
+    last_message_content: str | None = None
+    last_message_created_at: datetime | None = None
     unread_messages_count: int = 0
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
 
 class InboxSummary(BaseModel):
-    conversations: List[ConversationSummaryRead]
+    conversations: list[ConversationSummaryRead]
     total_unread_count: int

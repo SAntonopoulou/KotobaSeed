@@ -1,7 +1,8 @@
-from typing import Generator, Optional, Callable
+from collections.abc import Callable
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import jwt, JWTError
+from jose import JWTError, jwt
 from pydantic import BaseModel
 from sqlmodel import Session
 
@@ -9,26 +10,20 @@ from .database import get_session
 from .models import User, UserRole
 from .security import ALGORITHM, SECRET_KEY
 
-reusable_oauth2 = OAuth2PasswordBearer(
-    tokenUrl="/auth/token"
-)
+reusable_oauth2 = OAuth2PasswordBearer(tokenUrl="/auth/token")
 
-reusable_oauth2_optional = OAuth2PasswordBearer(
-    tokenUrl="/auth/token",
-    auto_error=False
-)
+reusable_oauth2_optional = OAuth2PasswordBearer(tokenUrl="/auth/token", auto_error=False)
+
 
 class TokenPayload(BaseModel):
-    sub: Optional[str] = None
+    sub: str | None = None
+
 
 def get_current_user(
-    token: str = Depends(reusable_oauth2),
-    session: Session = Depends(get_session)
+    token: str = Depends(reusable_oauth2), session: Session = Depends(get_session)
 ) -> User:
     try:
-        payload = jwt.decode(
-            token, SECRET_KEY, algorithms=[ALGORITHM]
-        )
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         token_data = TokenPayload(**payload)
         if not token_data.sub:
             raise ValueError("No subject in token")
@@ -37,32 +32,31 @@ def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Could not validate credentials",
-        )
-    
+        ) from None
+
     user = session.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return user
 
+
 def get_current_user_optional(
-    token: Optional[str] = Depends(reusable_oauth2_optional),
-    session: Session = Depends(get_session)
-) -> Optional[User]:
+    token: str | None = Depends(reusable_oauth2_optional), session: Session = Depends(get_session)
+) -> User | None:
     if not token:
         return None
     try:
-        payload = jwt.decode(
-            token, SECRET_KEY, algorithms=[ALGORITHM]
-        )
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         token_data = TokenPayload(**payload)
         if not token_data.sub:
             return None
         user_id = int(token_data.sub)
     except (JWTError, ValueError, TypeError):
         return None
-    
+
     user = session.get(User, user_id)
     return user
+
 
 def get_current_admin(
     current_user: User = Depends(get_current_user),
@@ -74,10 +68,12 @@ def get_current_admin(
         )
     return current_user
 
+
 def require_role(role: UserRole) -> Callable[[User], User]:
     """
     Returns a dependency that requires the current user to have a specific role.
     """
+
     def role_checker(current_user: User = Depends(get_current_user)) -> User:
         if current_user.role != role:
             raise HTTPException(
@@ -85,4 +81,5 @@ def require_role(role: UserRole) -> Callable[[User], User]:
                 detail=f"The user must have the '{role.value}' role",
             )
         return current_user
+
     return role_checker

@@ -15,9 +15,20 @@ extend-exclude = ["backend/migrations/versions"]
 # Rule families: pycodestyle (E/W), Pyflakes (F), isort (I), bugbear (B),
 # comprehensions (C4), pyupgrade (UP), simplify (SIM)
 select = ["E", "W", "F", "I", "B", "C4", "UP", "SIM"]
-# E501 line-too-long is handled by formatter; B008 (function default) is fine
-# in FastAPI Depends(...) usage.
-ignore = ["E501", "B008"]
+ignore = [
+    # Line length — formatter handles it
+    "E501",
+    # Mutable default in function signature — fine for FastAPI Depends(...)
+    "B008",
+    # `== True` / `== False` — SQLAlchemy query syntax (where clauses) NEEDS
+    # this; rewriting to `is True` / `not column` breaks queries.
+    "E712",
+    # `!= None` — same story (SQLAlchemy `Column != None` is a SQL filter).
+    "E711",
+    # `class Foo(str, Enum)` → `class Foo(StrEnum)` — works but changes
+    # equality semantics for `.value` callers. Defer until we audit usage.
+    "UP042",
+]
 
 [tool.ruff.lint.isort]
 combine-as-imports = true

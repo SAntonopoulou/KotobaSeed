@@ -3,6 +3,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
+from pydantic import BaseModel, EmailStr
 from sqlmodel import Session, select
 
 from ..database import get_session
@@ -13,9 +14,9 @@ from ..security import (
     get_password_hash,
     verify_password,
 )
-from pydantic import BaseModel, EmailStr
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
 
 class UserCreate(BaseModel):
     email: EmailStr
@@ -23,15 +24,14 @@ class UserCreate(BaseModel):
     full_name: str
     role: UserRole = UserRole.STUDENT
 
+
 class Token(BaseModel):
     access_token: str
     token_type: str
 
+
 @router.post("/register", response_model=User, response_model_exclude={"hashed_password"})
-def register_user(
-    user_in: UserCreate,
-    session: Session = Depends(get_session)
-) -> Any:
+def register_user(user_in: UserCreate, session: Session = Depends(get_session)) -> Any:
     """
     Register a new user.
     """
@@ -43,7 +43,7 @@ def register_user(
             status_code=400,
             detail="A user with this email already exists",
         )
-    
+
     # Create new user
     user = User(
         email=user_in.email,
@@ -56,10 +56,10 @@ def register_user(
     session.refresh(user)
     return user
 
+
 @router.post("/token", response_model=Token)
 def login_access_token(
-    form_data: OAuth2PasswordRequestForm = Depends(),
-    session: Session = Depends(get_session)
+    form_data: OAuth2PasswordRequestForm = Depends(), session: Session = Depends(get_session)
 ) -> Any:
     """
     OAuth2 compatible token login, get an access token for future requests.
@@ -67,17 +67,15 @@ def login_access_token(
     # Find user by email (username field in form_data)
     statement = select(User).where(User.email == form_data.username)
     user = session.exec(statement).first()
-    
+
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Incorrect email or password",
         )
-    
+
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        subject=user.id, expires_delta=access_token_expires
-    )
+    access_token = create_access_token(subject=user.id, expires_delta=access_token_expires)
     return {
         "access_token": access_token,
         "token_type": "bearer",

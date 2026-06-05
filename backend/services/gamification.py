@@ -1,11 +1,16 @@
+import logging
+
 from sqlmodel import Session, select
-from backend.models import User, Achievement, UserAchievement, Notification
+
+from backend.models import Achievement, Notification, User, UserAchievement
+
+log = logging.getLogger(__name__)
 
 
-def award_achievement(user: User, achievement_key: str, session: Session):
-    """
-    Awards an achievement to a user if they don't already have it.
-    This function does not commit the session.
+def award_achievement(user: User, achievement_key: str, session: Session) -> None:
+    """Award an achievement to a user if they don't already have it.
+
+    Does not commit — the caller is responsible.
     """
     # Check if the user already has the achievement by joining with the Achievement table
     statement = (
@@ -26,8 +31,7 @@ def award_achievement(user: User, achievement_key: str, session: Session):
     achievement = session.exec(statement).one_or_none()
 
     if not achievement:
-        # In a real application, you might want to log this error
-        print(f"ERROR: Achievement with key '{achievement_key}' not found.")
+        log.warning("Achievement with key %r not found", achievement_key)
         return
 
     # Create the link table entry

@@ -1,23 +1,23 @@
-from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from ..database import get_session
 from ..deps import get_current_user, require_role
-from ..models import TeacherVerification, User, UserRole, VerificationStatus, Notification
+from ..models import Notification, TeacherVerification, User, UserRole, VerificationStatus
 from ..services.gamification import award_achievement
-from pydantic import BaseModel
 
 router = APIRouter(prefix="/verifications", tags=["verifications"])
+
 
 class VerificationCreate(BaseModel):
     language: str
     document_url: str
 
-@router.get("/", response_model=List[TeacherVerification])
+
+@router.get("/", response_model=list[TeacherVerification])
 def get_my_verifications(
-    current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session)
+    current_user: User = Depends(get_current_user), session: Session = Depends(get_session)
 ):
     """
     Retrieves all verification requests for the current teacher.
@@ -25,9 +25,9 @@ def get_my_verifications(
     if current_user.role != UserRole.TEACHER:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only teachers can view their verification requests."
+            detail="Only teachers can view their verification requests.",
         )
-    
+
     verifications = session.exec(
         select(TeacherVerification)
         .where(TeacherVerification.teacher_id == current_user.id)
@@ -35,11 +35,12 @@ def get_my_verifications(
     ).all()
     return verifications
 
+
 @router.post("/", response_model=TeacherVerification, status_code=status.HTTP_201_CREATED)
 def submit_verification(
     verification_in: VerificationCreate,
     current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
 ):
     """
     Allows a teacher to submit a new language verification request.
@@ -48,7 +49,7 @@ def submit_verification(
     if not current_user.is_pro_subscriber:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You must be a Pro subscriber to submit verification requests."
+            detail="You must be a Pro subscriber to submit verification requests.",
         )
 
     # Check if a verification for this language already exists and is pending or approved
@@ -56,19 +57,20 @@ def submit_verification(
         select(TeacherVerification)
         .where(TeacherVerification.teacher_id == current_user.id)
         .where(TeacherVerification.language == verification_in.language)
-        .where(TeacherVerification.status.in_([VerificationStatus.PENDING, VerificationStatus.APPROVED]))
+        .where(
+            TeacherVerification.status.in_(
+                [VerificationStatus.PENDING, VerificationStatus.APPROVED]
+            )
+        )
     ).first()
 
     if existing_verification:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"A verification for {verification_in.language} is already {existing_verification.status.value}."
+            detail=f"A verification for {verification_in.language} is already {existing_verification.status.value}.",
         )
 
-    verification = TeacherVerification(
-        **verification_in.dict(),
-        teacher_id=current_user.id
-    )
+    verification = TeacherVerification(**verification_in.model_dump(), teacher_id=current_user.id)
     session.add(verification)
 
     # Notify all admins of the new verification request
@@ -77,7 +79,7 @@ def submit_verification(
         notification = Notification(
             user_id=admin.id,
             message=f"New verification request from {current_user.full_name} for {verification.language}.",
-            link="/admin/dashboard"
+            link="/admin/dashboard",
         )
         session.add(notification)
 
@@ -85,11 +87,12 @@ def submit_verification(
     session.refresh(verification)
     return verification
 
+
 @router.post("/{verification_id}/approve", response_model=TeacherVerification)
 def approve_verification(
     verification_id: int,
     admin_user: User = Depends(require_role(UserRole.ADMIN)),
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
 ):
     """
     Approves a teacher's verification request. (Admin only)
@@ -102,7 +105,7 @@ def approve_verification(
         raise HTTPException(status_code=400, detail="Verification is already approved.")
 
     verification.status = VerificationStatus.APPROVED
-    
+
     # Award achievement to the teacher
     teacher = session.get(User, verification.teacher_id)
     if teacher:
@@ -111,5 +114,5 @@ def approve_verification(
     session.add(verification)
     session.commit()
     session.refresh(verification)
-    
+
     return verification

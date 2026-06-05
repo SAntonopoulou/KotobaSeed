@@ -1,22 +1,46 @@
-from datetime import datetime
-from typing import List, Optional, Dict
-from collections import defaultdict
-
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlmodel import Session, select, func
-from sqlalchemy.orm import selectinload
-from sqlalchemy import or_
-import os
-import stripe
-from pydantic import BaseModel
-
 import logging
+import os
+from collections import defaultdict
+from datetime import UTC, datetime
+
+import stripe
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
+from sqlalchemy import or_
+from sqlalchemy.orm import selectinload
+from sqlmodel import Session, func, select
+
 from ..database import get_session
 from ..deps import get_current_user, get_current_user_optional
-from ..models import Project, ProjectStatus, User, UserRole, Pledge, PledgeStatus, Notification, Request, RequestStatus, ProjectUpdate, ProjectRating, Video, TeacherVerification, VerificationStatus, RequestBlacklist, LanguageGroup, TeacherFollower
+from ..models import (
+    LanguageGroup,
+    Notification,
+    Pledge,
+    PledgeStatus,
+    Project,
+    ProjectRating,
+    ProjectStatus,
+    ProjectUpdate,
+    Request,
+    RequestBlacklist,
+    RequestStatus,
+    TeacherFollower,
+    TeacherVerification,
+    User,
+    UserRole,
+    VerificationStatus,
+)
 from ..schemas import (
-    ProjectRead, ProjectCreate, ProjectUpdateModel, UpdateCreate, UpdateRead, BackerRead, 
-    LanguageLevelsRead, FilterOptionsRead, PaginatedProjectRead, MyRatingRead
+    BackerRead,
+    FilterOptionsRead,
+    LanguageLevelsRead,
+    MyRatingRead,
+    PaginatedProjectRead,
+    ProjectCreate,
+    ProjectRead,
+    ProjectUpdateModel,
+    UpdateCreate,
+    UpdateRead,
 )
 
 logger = logging.getLogger(__name__)
@@ -27,11 +51,15 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
+
 class TipRequest(BaseModel):
     amount: int
 
+
 # Helper function to create ProjectRead from Project model
-def _create_project_read(project: Project, current_user: Optional[User], session: Session) -> ProjectRead:
+def _create_project_read(
+    project: Project, current_user: User | None, session: Session
+) -> ProjectRead:
     is_backed_by_user = False
     is_following_teacher = False
     my_rating = None
@@ -44,12 +72,12 @@ def _create_project_read(project: Project, current_user: Optional[User], session
         ).first()
         if pledge:
             is_backed_by_user = True
-        
+
         if project.teacher_id:
             follow = session.get(TeacherFollower, (project.teacher_id, current_user.id))
             if follow:
                 is_following_teacher = True
-        
+
         if project.status == ProjectStatus.COMPLETED:
             user_rating = session.exec(
                 select(ProjectRating)
@@ -67,8 +95,9 @@ def _create_project_read(project: Project, current_user: Optional[User], session
 
     # Fetch average rating and total ratings
     avg_rating_result = session.exec(
-        select(func.avg(ProjectRating.rating), func.count(ProjectRating.id))
-        .where(ProjectRating.project_id == project.id)
+        select(func.avg(ProjectRating.rating), func.count(ProjectRating.id)).where(
+            ProjectRating.project_id == project.id
+        )
     ).first()
     average_rating = avg_rating_result[0] if avg_rating_result and avg_rating_result[0] else None
     total_ratings = avg_rating_result[1] if avg_rating_result and avg_rating_result[1] else 0
@@ -131,7 +160,7 @@ def _create_project_read(project: Project, current_user: Optional[User], session
         num_videos=project.num_videos,
         price_per_video=project.price_per_video,
         project_image_url=project.project_image_url,
-        series_intro_video_url=project.series_intro_video_url
+        series_intro_video_url=project.series_intro_video_url,
     )
 
 
@@ -146,7 +175,11 @@ def _cancel_project_logic(project: Project, session: Session):
                 stripe.Refund.create(payment_intent=pledge.payment_intent_id)
                 pledge.status = PledgeStatus.REFUNDED
                 session.add(pledge)
-                notification = Notification(user_id=pledge.user_id, message=f"Project '{project.title}' was cancelled and you have been refunded.", link="/")
+                notification = Notification(
+                    user_id=pledge.user_id,
+                    message=f"Project '{project.title}' was cancelled and you have been refunded.",
+                    link="/",
+                )
                 session.add(notification)
             except stripe.error.StripeError as e:
                 logger.error(f"Failed to refund pledge {pledge.id}: {e}")
@@ -161,109 +194,152 @@ def _cancel_project_logic(project: Project, session: Session):
             request.target_teacher_id = None
             request.is_private = False
             session.add(request)
-            notification = Notification(user_id=request.user_id, message=f"Project '{project.title}' was cancelled. Your request has been reopened.", link="/requests")
+            notification = Notification(
+                user_id=request.user_id,
+                message=f"Project '{project.title}' was cancelled. Your request has been reopened.",
+                link="/requests",
+            )
             session.add(notification)
 
             # Blacklist the teacher who cancelled the project from this request
             if project.teacher_id:
                 blacklist_entry = RequestBlacklist(
-                    request_id=request.id,
-                    teacher_id=project.teacher_id
+                    request_id=request.id, teacher_id=project.teacher_id
                 )
                 session.add(blacklist_entry)
 
+
 @router.get("/filter-options", response_model=FilterOptionsRead)
 def get_filter_options(session: Session = Depends(get_session)):
-    query = select(Project.language, Project.level).where(Project.status == ProjectStatus.COMPLETED).distinct()
+    query = (
+        select(Project.language, Project.level)
+        .where(Project.status == ProjectStatus.COMPLETED)
+        .distinct()
+    )
     results = session.exec(query).all()
-    
+
     language_levels = defaultdict(set)
     for lang, level in results:
         language_levels[lang].add(level)
-        
+
     languages_list = [
-        LanguageLevelsRead(language=lang, levels=sorted(list(levels)))
+        LanguageLevelsRead(language=lang, levels=sorted(levels))
         for lang, levels in language_levels.items()
     ]
-    
+
     return FilterOptionsRead(languages=sorted(languages_list, key=lambda x: x.language))
+
 
 @router.get("/archive", response_model=PaginatedProjectRead)
 def list_archive_projects(
-    language: Optional[str] = None,
-    level: Optional[str] = None,
-    search: Optional[str] = None,
+    language: str | None = None,
+    level: str | None = None,
+    search: str | None = None,
     limit: int = 9,
     offset: int = 0,
-    current_user: Optional[User] = Depends(get_current_user_optional),
-    session: Session = Depends(get_session)
+    current_user: User | None = Depends(get_current_user_optional),
+    session: Session = Depends(get_session),
 ):
-    base_query = select(Project).join(User, Project.teacher_id == User.id).where(Project.status == ProjectStatus.COMPLETED).where(Project.is_private == False)
-    
-    if language: base_query = base_query.where(Project.language == language)
-    if level: base_query = base_query.where(Project.level == level)
+    base_query = (
+        select(Project)
+        .join(User, Project.teacher_id == User.id)
+        .where(Project.status == ProjectStatus.COMPLETED)
+        .where(Project.is_private == False)
+    )
+
+    if language:
+        base_query = base_query.where(Project.language == language)
+    if level:
+        base_query = base_query.where(Project.level == level)
     if search:
         search_term = f"%{search}%"
-        base_query = base_query.where(or_(
-            Project.title.ilike(search_term),
-            Project.description.ilike(search_term),
-            Project.tags.ilike(search_term),
-            Project.language.ilike(search_term),
-            Project.level.ilike(search_term),
-            User.full_name.ilike(search_term)
-        ))
+        base_query = base_query.where(
+            or_(
+                Project.title.ilike(search_term),
+                Project.description.ilike(search_term),
+                Project.tags.ilike(search_term),
+                Project.language.ilike(search_term),
+                Project.level.ilike(search_term),
+                User.full_name.ilike(search_term),
+            )
+        )
 
     count_statement = select(func.count()).select_from(base_query.subquery())
     total_count = session.exec(count_statement).one()
 
-    projects_statement = base_query.options(
-        selectinload(Project.teacher),
-        selectinload(Project.request).selectinload(Request.user),
-        selectinload(Project.videos)
-    ).offset(offset).limit(limit)
+    projects_statement = (
+        base_query.options(
+            selectinload(Project.teacher),
+            selectinload(Project.request).selectinload(Request.user),
+            selectinload(Project.videos),
+        )
+        .offset(offset)
+        .limit(limit)
+    )
     projects = session.exec(projects_statement).all()
-    
+
     return PaginatedProjectRead(
         projects=[_create_project_read(p, current_user, session) for p in projects],
-        total_count=total_count
+        total_count=total_count,
     )
+
 
 @router.post("/", response_model=Project)
 def create_project(
     project_in: ProjectCreate,
     current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
 ):
     if current_user.role != UserRole.TEACHER and current_user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only teachers can create projects")
-    
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Only teachers can create projects"
+        )
+
     funding_goal = project_in.funding_goal
-    if project_in.is_series and project_in.price_per_video and project_in.num_videos and project_in.num_videos > 0:
+    if (
+        project_in.is_series
+        and project_in.price_per_video
+        and project_in.num_videos
+        and project_in.num_videos > 0
+    ):
         funding_goal = project_in.price_per_video * project_in.num_videos
-    elif project_in.is_series and (project_in.price_per_video is None or project_in.num_videos is None or project_in.num_videos <= 0):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="For series projects, price_per_video and num_videos must be provided and num_videos must be greater than 0.")
-    elif not project_in.is_series and (project_in.price_per_video is not None or project_in.num_videos is not None):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="price_per_video and num_videos should not be provided for non-series projects.")
+    elif project_in.is_series and (
+        project_in.price_per_video is None
+        or project_in.num_videos is None
+        or project_in.num_videos <= 0
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="For series projects, price_per_video and num_videos must be provided and num_videos must be greater than 0.",
+        )
+    elif not project_in.is_series and (
+        project_in.price_per_video is not None or project_in.num_videos is not None
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="price_per_video and num_videos should not be provided for non-series projects.",
+        )
 
     project = Project(
-        **project_in.dict(exclude={"funding_goal"}), 
-        funding_goal=funding_goal, 
-        teacher_id=current_user.id, 
-        status=ProjectStatus.FUNDING
+        **project_in.model_dump(exclude={"funding_goal"}),
+        funding_goal=funding_goal,
+        teacher_id=current_user.id,
+        status=ProjectStatus.FUNDING,
     )
     session.add(project)
     session.commit()
     session.refresh(project)
 
     # Check if LanguageGroup exists, create if not
-    language_group = session.exec(select(LanguageGroup).where(LanguageGroup.language_name == project.language)).first()
+    language_group = session.exec(
+        select(LanguageGroup).where(LanguageGroup.language_name == project.language)
+    ).first()
     if not language_group:
         language_group = LanguageGroup(language_name=project.language)
         session.add(language_group)
-        session.commit() # Commit to get the ID for the new group
+        session.commit()  # Commit to get the ID for the new group
         session.refresh(language_group)
         logger.info(f"Created new LanguageGroup for: {language_group.language_name}")
-
 
     # Notify followers
     teacher = session.get(User, project.teacher_id, options=[selectinload(User.followers)])
@@ -271,98 +347,124 @@ def create_project(
         notification = Notification(
             user_id=follower.id,
             message=f"Teacher {teacher.full_name} has created a new project: '{project.title}'",
-            link=f"/projects/{project.id}"
+            link=f"/projects/{project.id}",
         )
         session.add(notification)
 
     # Notify language group members
     # Re-fetch language_group with members loaded after potential creation
-    language_group = session.exec(select(LanguageGroup).where(LanguageGroup.language_name == project.language).options(selectinload(LanguageGroup.members))).first()
+    language_group = session.exec(
+        select(LanguageGroup)
+        .where(LanguageGroup.language_name == project.language)
+        .options(selectinload(LanguageGroup.members))
+    ).first()
     if language_group:
         for member in language_group.members:
-            if member.id != teacher.id: # Don't notify the teacher about their own project
+            if member.id != teacher.id:  # Don't notify the teacher about their own project
                 notification = Notification(
                     user_id=member.id,
                     message=f"A new project in {project.language} has been posted: '{project.title}'",
-                    link=f"/projects/{project.id}"
+                    link=f"/projects/{project.id}",
                 )
                 session.add(notification)
-    
+
     session.commit()
 
     return project
 
+
 @router.get("/", response_model=PaginatedProjectRead)
 def list_projects(
-    language: Optional[str] = None,
-    level: Optional[str] = None,
-    search: Optional[str] = None,
+    language: str | None = None,
+    level: str | None = None,
+    search: str | None = None,
     limit: int = 9,
     offset: int = 0,
-    current_user: Optional[User] = Depends(get_current_user_optional),
-    session: Session = Depends(get_session)
+    current_user: User | None = Depends(get_current_user_optional),
+    session: Session = Depends(get_session),
 ):
-    base_query = select(Project).join(User, Project.teacher_id == User.id).where(
-        (Project.status == ProjectStatus.FUNDING) | 
-        (Project.status == ProjectStatus.SUCCESSFUL)
-    ).where(
-        (Project.is_private == False)
+    base_query = (
+        select(Project)
+        .join(User, Project.teacher_id == User.id)
+        .where(
+            (Project.status == ProjectStatus.FUNDING) | (Project.status == ProjectStatus.SUCCESSFUL)
+        )
+        .where(Project.is_private == False)
     )
 
-    if language: base_query = base_query.where(Project.language == language)
-    if level: base_query = base_query.where(Project.level == level)
+    if language:
+        base_query = base_query.where(Project.language == language)
+    if level:
+        base_query = base_query.where(Project.level == level)
     if search:
         search_term = f"%{search}%"
-        base_query = base_query.where(or_(
-            Project.title.ilike(search_term),
-            Project.description.ilike(search_term),
-            Project.tags.ilike(search_term),
-            Project.language.ilike(search_term),
-            Project.level.ilike(search_term),
-            User.full_name.ilike(search_term)
-        ))
+        base_query = base_query.where(
+            or_(
+                Project.title.ilike(search_term),
+                Project.description.ilike(search_term),
+                Project.tags.ilike(search_term),
+                Project.language.ilike(search_term),
+                Project.level.ilike(search_term),
+                User.full_name.ilike(search_term),
+            )
+        )
 
     count_statement = select(func.count()).select_from(base_query.subquery())
     total_count = session.exec(count_statement).one()
 
-    projects_statement = base_query.options(
-        selectinload(Project.teacher),
-        selectinload(Project.request).selectinload(Request.user),
-        selectinload(Project.videos)
-    ).offset(offset).limit(limit)
+    projects_statement = (
+        base_query.options(
+            selectinload(Project.teacher),
+            selectinload(Project.request).selectinload(Request.user),
+            selectinload(Project.videos),
+        )
+        .offset(offset)
+        .limit(limit)
+    )
     projects = session.exec(projects_statement).all()
-    
+
     return PaginatedProjectRead(
         projects=[_create_project_read(p, current_user, session) for p in projects],
-        total_count=total_count
+        total_count=total_count,
     )
 
-@router.get("/me", response_model=List[ProjectRead])
+
+@router.get("/me", response_model=list[ProjectRead])
 def list_my_projects(
-    current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session)
+    current_user: User = Depends(get_current_user), session: Session = Depends(get_session)
 ):
     if current_user.role != UserRole.TEACHER and current_user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only teachers can list their projects")
-    
-    query = select(Project).where(Project.teacher_id == current_user.id).options(
-        selectinload(Project.teacher),
-        selectinload(Project.request).selectinload(Request.user),
-        selectinload(Project.videos)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Only teachers can list their projects"
+        )
+
+    query = (
+        select(Project)
+        .where(Project.teacher_id == current_user.id)
+        .options(
+            selectinload(Project.teacher),
+            selectinload(Project.request).selectinload(Request.user),
+            selectinload(Project.videos),
+        )
     )
     projects = session.exec(query).all()
     return [_create_project_read(p, current_user, session) for p in projects]
 
+
 @router.get("/{project_id}", response_model=ProjectRead)
 def get_project(
     project_id: int,
-    current_user: Optional[User] = Depends(get_current_user_optional),
-    session: Session = Depends(get_session)
+    current_user: User | None = Depends(get_current_user_optional),
+    session: Session = Depends(get_session),
 ):
     project = session.exec(
         select(Project)
         .where(Project.id == project_id)
-        .options(selectinload(Project.teacher), selectinload(Project.request).selectinload(Request.user), selectinload(Project.videos))
+        .options(
+            selectinload(Project.teacher),
+            selectinload(Project.request).selectinload(Request.user),
+            selectinload(Project.videos),
+        )
     ).first()
 
     if not project:
@@ -371,168 +473,204 @@ def get_project(
     is_owner = current_user and project.teacher_id == current_user.id
     is_admin = current_user and current_user.role == UserRole.ADMIN
 
-    if project.status in [ProjectStatus.DRAFT, ProjectStatus.ON_HOLD] and not (is_owner or is_admin):
+    if project.status in [ProjectStatus.DRAFT, ProjectStatus.ON_HOLD] and not (
+        is_owner or is_admin
+    ):
         raise HTTPException(status_code=404, detail="Project not found")
     if project.status == ProjectStatus.CANCELLED and not is_admin:
         raise HTTPException(status_code=404, detail="Project not found")
-            
+
     return _create_project_read(project, current_user, session)
+
 
 @router.post("/{project_id}/tip")
 def create_tip_checkout_session(
     project_id: int,
     tip_in: TipRequest,
     session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     project = session.exec(
         select(Project).where(Project.id == project_id).options(selectinload(Project.teacher))
     ).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    
+
     teacher = project.teacher
     if not teacher or not teacher.stripe_account_id:
-        raise HTTPException(status_code=400, detail="This teacher is not set up to receive payments.")
+        raise HTTPException(
+            status_code=400, detail="This teacher is not set up to receive payments."
+        )
 
-    if tip_in.amount < 100: # Minimum tip amount of 1 EUR
+    if tip_in.amount < 100:  # Minimum tip amount of 1 EUR
         raise HTTPException(status_code=400, detail="Tip amount must be at least €1.00")
 
     application_fee = int(tip_in.amount * PLATFORM_FEE_PERCENT)
 
     try:
         checkout_session = stripe.checkout.Session.create(
-            payment_method_types=['card'],
-            line_items=[{
-                'price_data': {
-                    'currency': 'eur',
-                    'product_data': {
-                        'name': f"Tip for '{project.title}'",
+            payment_method_types=["card"],
+            line_items=[
+                {
+                    "price_data": {
+                        "currency": "eur",
+                        "product_data": {
+                            "name": f"Tip for '{project.title}'",
+                        },
+                        "unit_amount": tip_in.amount,
                     },
-                    'unit_amount': tip_in.amount,
-                },
-                'quantity': 1,
-            }],
-            mode='payment',
+                    "quantity": 1,
+                }
+            ],
+            mode="payment",
             success_url=f"{FRONTEND_URL}/projects/{project.id}?tip_success=true",
             cancel_url=f"{FRONTEND_URL}/projects/{project.id}",
             payment_intent_data={
-                'application_fee_amount': application_fee,
-                'transfer_data': {
-                    'destination': teacher.stripe_account_id,
+                "application_fee_amount": application_fee,
+                "transfer_data": {
+                    "destination": teacher.stripe_account_id,
                 },
             },
             metadata={
                 "type": "tip",
                 "project_id": project.id,
                 "teacher_id": teacher.id,
-                "user_id": current_user.id
-            }
+                "user_id": current_user.id,
+            },
         )
         return {"checkout_url": checkout_session.url}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from None
 
-@router.get("/{project_id}/backers", response_model=List[BackerRead])
+
+@router.get("/{project_id}/backers", response_model=list[BackerRead])
 def get_project_backers(project_id: int, session: Session = Depends(get_session)):
-    statement = select(User).join(Pledge).where(Pledge.project_id == project_id, Pledge.status == PledgeStatus.CAPTURED)
+    statement = (
+        select(User)
+        .join(Pledge)
+        .where(Pledge.project_id == project_id, Pledge.status == PledgeStatus.CAPTURED)
+    )
     users = session.exec(statement).all()
     return users
 
-@router.get("/{project_id}/related", response_model=List[ProjectRead])
+
+@router.get("/{project_id}/related", response_model=list[ProjectRead])
 def get_related_projects(
     project_id: int,
     session: Session = Depends(get_session),
-    current_user: Optional[User] = Depends(get_current_user_optional)
+    current_user: User | None = Depends(get_current_user_optional),
 ):
     project = session.get(Project, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    query = select(Project).where(
-        Project.language == project.language,
-        Project.id != project_id,
-        (Project.status == ProjectStatus.FUNDING) | (Project.status == ProjectStatus.SUCCESSFUL),
-        Project.is_private == False
-    ).options(
-        selectinload(Project.teacher),
-        selectinload(Project.request).selectinload(Request.user),
-        selectinload(Project.videos)
-    ).limit(3)
-    
+    query = (
+        select(Project)
+        .where(
+            Project.language == project.language,
+            Project.id != project_id,
+            (Project.status == ProjectStatus.FUNDING)
+            | (Project.status == ProjectStatus.SUCCESSFUL),
+            Project.is_private == False,
+        )
+        .options(
+            selectinload(Project.teacher),
+            selectinload(Project.request).selectinload(Request.user),
+            selectinload(Project.videos),
+        )
+        .limit(3)
+    )
+
     projects = session.exec(query).all()
     return [_create_project_read(p, current_user, session) for p in projects]
+
 
 @router.patch("/{project_id}", response_model=Project)
 def update_project(
     project_id: int,
     project_in: ProjectUpdateModel,
     current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
 ):
     project = session.get(Project, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
     if project.teacher_id != current_user.id and current_user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to update this project")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to update this project"
+        )
 
-    project_data = project_in.dict(exclude_unset=True)
-    if "funding_goal" in project_data and project_data["funding_goal"] != project.funding_goal:
-        if project.status != ProjectStatus.DRAFT or project.origin_request_id:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot change the price of an active project or one created from a request")
+    project_data = project_in.model_dump(exclude_unset=True)
+    if (
+        "funding_goal" in project_data
+        and project_data["funding_goal"] != project.funding_goal
+        and (project.status != ProjectStatus.DRAFT or project.origin_request_id)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot change the price of an active project or one created from a request",
+        )
 
     for key, value in project_data.items():
         setattr(project, key, value)
 
-    project.updated_at = datetime.utcnow()
+    project.updated_at = datetime.now(UTC)
     session.add(project)
     session.commit()
     session.refresh(project)
     return project
 
+
 @router.post("/{project_id}/complete", response_model=Project)
 def complete_project(
     project_id: int,
     current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
 ):
     project = session.exec(
-        select(Project)
-        .where(Project.id == project_id)
-        .options(selectinload(Project.videos))
+        select(Project).where(Project.id == project_id).options(selectinload(Project.videos))
     ).first()
 
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     if project.teacher_id != current_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the project owner can complete the project")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the project owner can complete the project",
+        )
     if project.status != ProjectStatus.SUCCESSFUL:
-        raise HTTPException(status_code=400, detail="Project must be SUCCESSFUL to be marked for completion")
+        raise HTTPException(
+            status_code=400, detail="Project must be SUCCESSFUL to be marked for completion"
+        )
 
     # Video count validation
     if project.is_series:
         if project.num_videos is None or len(project.videos) != project.num_videos:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"For a series project, exactly {project.num_videos} videos must be uploaded. Currently {len(project.videos)}."
+                detail=f"For a series project, exactly {project.num_videos} videos must be uploaded. Currently {len(project.videos)}.",
             )
     else:
         if len(project.videos) != 1:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="For a single video project, exactly 1 video must be uploaded."
+                detail="For a single video project, exactly 1 video must be uploaded.",
             )
 
     project.status = ProjectStatus.PENDING_CONFIRMATION
     session.add(project)
 
-    backers = session.exec(select(User).join(Pledge).where(Pledge.project_id == project_id, Pledge.status == PledgeStatus.CAPTURED)).all()
+    backers = session.exec(
+        select(User)
+        .join(Pledge)
+        .where(Pledge.project_id == project_id, Pledge.status == PledgeStatus.CAPTURED)
+    ).all()
     for backer in backers:
         notification = Notification(
             user_id=backer.id,
             message=f"Project '{project.title}' is ready for your review. Please confirm its completion.",
-            link=f"/projects/{project.id}"
+            link=f"/projects/{project.id}",
         )
         session.add(notification)
 
@@ -540,11 +678,12 @@ def complete_project(
     session.refresh(project)
     return project
 
+
 @router.post("/{project_id}/confirm-completion", response_model=Project)
 def confirm_completion(
     project_id: int,
     current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
 ):
     project = session.get(Project, project_id)
     if not project:
@@ -552,7 +691,13 @@ def confirm_completion(
     if project.status != ProjectStatus.PENDING_CONFIRMATION:
         raise HTTPException(status_code=400, detail="Project is not awaiting confirmation.")
 
-    pledge = session.exec(select(Pledge).where(Pledge.project_id == project.id, Pledge.user_id == current_user.id, Pledge.status == PledgeStatus.CAPTURED)).first()
+    pledge = session.exec(
+        select(Pledge).where(
+            Pledge.project_id == project.id,
+            Pledge.user_id == current_user.id,
+            Pledge.status == PledgeStatus.CAPTURED,
+        )
+    ).first()
     if not pledge:
         raise HTTPException(status_code=403, detail="You are not a backer of this project.")
 
@@ -561,7 +706,9 @@ def confirm_completion(
 
     teacher = session.get(User, project.teacher_id)
     if not teacher or not teacher.stripe_account_id:
-        raise HTTPException(status_code=400, detail="Teacher has not connected a Stripe account for payouts.")
+        raise HTTPException(
+            status_code=400, detail="Teacher has not connected a Stripe account for payouts."
+        )
 
     amount_collected = project.current_funding
     platform_fee = int(amount_collected * PLATFORM_FEE_PERCENT)
@@ -577,7 +724,7 @@ def confirm_completion(
             )
             project.stripe_transfer_id = transfer.id
         except stripe.error.StripeError as e:
-            raise HTTPException(status_code=400, detail=f"Payout failed: {str(e)}")
+            raise HTTPException(status_code=400, detail=f"Payout failed: {str(e)}") from None
 
     project.status = ProjectStatus.COMPLETED
     session.add(project)
@@ -585,7 +732,7 @@ def confirm_completion(
     notification = Notification(
         user_id=project.teacher_id,
         message=f"Your funds for project '{project.title}' have been released.",
-        link=f"/teacher/dashboard"
+        link="/teacher/dashboard",
     )
     session.add(notification)
 
@@ -593,17 +740,23 @@ def confirm_completion(
     session.refresh(project)
     return project
 
+
 @router.post("/{project_id}/cancel", response_model=Project)
 def cancel_project(
     project_id: int,
     current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
 ):
-    project = session.exec(select(Project).where(Project.id == project_id).options(selectinload(Project.pledges))).first()
+    project = session.exec(
+        select(Project).where(Project.id == project_id).options(selectinload(Project.pledges))
+    ).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     if project.teacher_id != current_user.id and current_user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the project owner can cancel the project")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the project owner can cancel the project",
+        )
     if project.status == ProjectStatus.COMPLETED:
         raise HTTPException(status_code=400, detail="Cannot cancel a completed project")
 
@@ -613,12 +766,13 @@ def cancel_project(
     session.refresh(project)
     return project
 
+
 @router.post("/{project_id}/updates", response_model=UpdateRead)
 def add_project_update(
     project_id: int,
     update_in: UpdateCreate,
     current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
 ):
     project = session.get(Project, project_id)
     if not project:
@@ -632,12 +786,13 @@ def add_project_update(
     session.refresh(update)
     return update
 
+
 @router.patch("/updates/{update_id}", response_model=UpdateRead)
 def edit_project_update(
     update_id: int,
     update_in: UpdateCreate,
     current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
 ):
     db_update = session.get(ProjectUpdate, update_id, options=[selectinload(ProjectUpdate.project)])
     if not db_update:
@@ -651,11 +806,13 @@ def edit_project_update(
     session.refresh(db_update)
     return db_update
 
-@router.get("/{project_id}/updates", response_model=List[UpdateRead])
-def list_project_updates(
-    project_id: int,
-    session: Session = Depends(get_session)
-):
-    statement = select(ProjectUpdate).where(ProjectUpdate.project_id == project_id).order_by(ProjectUpdate.created_at.desc())
+
+@router.get("/{project_id}/updates", response_model=list[UpdateRead])
+def list_project_updates(project_id: int, session: Session = Depends(get_session)):
+    statement = (
+        select(ProjectUpdate)
+        .where(ProjectUpdate.project_id == project_id)
+        .order_by(ProjectUpdate.created_at.desc())
+    )
     updates = session.exec(statement).all()
     return updates

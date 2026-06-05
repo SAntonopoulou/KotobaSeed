@@ -1,59 +1,79 @@
-import stripe
 import os
-from typing import List, Optional
-from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlmodel import Session, select, func
-from sqlalchemy.orm import selectinload
-from sqlalchemy import and_, or_
-from pydantic import BaseModel
 from collections import defaultdict
+from datetime import UTC, datetime
+
+import stripe
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, ConfigDict
+from sqlalchemy import and_, or_
+from sqlalchemy.orm import selectinload
+from sqlmodel import Session, func, select
 
 from ..database import get_session
 from ..deps import get_current_user, get_current_user_optional
-from ..models import User, UserRole, Project, Pledge, PledgeStatus, Request, ProjectStatus, ProjectRating, TeacherVerification, VerificationStatus, VideoComment, Notification, Conversation, Message, RequestBlacklist, TeacherFollower, LanguageGroup
-from ..schemas import LanguageLevelsRead, FilterOptionsRead, PaginatedProjectRead, ProjectRead
+from ..models import (
+    Conversation,
+    Message,
+    Notification,
+    Pledge,
+    PledgeStatus,
+    Project,
+    ProjectRating,
+    ProjectStatus,
+    Request,
+    TeacherFollower,
+    TeacherVerification,
+    User,
+    UserRole,
+    VerificationStatus,
+    VideoComment,
+)
 from ..routers.projects import _cancel_project_logic, _create_project_read
+from ..schemas import FilterOptionsRead, LanguageLevelsRead, PaginatedProjectRead
 
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
 router = APIRouter(prefix="/users", tags=["users"])
 
+
 # Pydantic Models
 class OnboardingResponse(BaseModel):
     onboarding_url: str
+
 
 class TeacherRead(BaseModel):
     id: int
     full_name: str
 
+
 class UserProfile(BaseModel):
     id: int
     full_name: str
-    bio: Optional[str]
-    languages: Optional[str]
+    bio: str | None
+    languages: str | None
     role: UserRole
     created_at: str
-    average_rating: Optional[float] = None
-    intro_video_url: Optional[str] = None
-    sample_video_url: Optional[str] = None
-    avatar_url: Optional[str] = None
-    verified_languages: List[str] = []
-    language_groups: List[str] = []
+    average_rating: float | None = None
+    intro_video_url: str | None = None
+    sample_video_url: str | None = None
+    avatar_url: str | None = None
+    verified_languages: list[str] = []
+    language_groups: list[str] = []
     follower_count: int = 0
     is_following: bool = False
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
 
 class UserUpdate(BaseModel):
-    full_name: Optional[str] = None
-    bio: Optional[str] = None
-    languages: Optional[str] = None
-    intro_video_url: Optional[str] = None
-    sample_video_url: Optional[str] = None
-    avatar_url: Optional[str] = None
+    full_name: str | None = None
+    bio: str | None = None
+    languages: str | None = None
+    intro_video_url: str | None = None
+    sample_video_url: str | None = None
+    avatar_url: str | None = None
+
 
 class ProjectInfoForRating(BaseModel):
     id: int
@@ -61,26 +81,29 @@ class ProjectInfoForRating(BaseModel):
     funding_goal: int
     language: str
     level: str
-    tags: Optional[str] = None
+    tags: str | None = None
+
 
 class TeacherRatingRead(BaseModel):
     rating: int
-    comment: Optional[str]
+    comment: str | None
     created_at: datetime
     project: ProjectInfoForRating
-    teacher_response: Optional[str] = None
-    response_created_at: Optional[datetime] = None
+    teacher_response: str | None = None
+    response_created_at: datetime | None = None
+
 
 class FollowerRead(BaseModel):
     id: int
     full_name: str
-    avatar_url: Optional[str]
+    avatar_url: str | None
     total_pledged: int
+
 
 class FollowingTeacherRead(BaseModel):
     id: int
     full_name: str
-    avatar_url: Optional[str]
+    avatar_url: str | None
     total_pledged: int
 
 
@@ -89,31 +112,32 @@ class FollowingTeacherRead(BaseModel):
 def get_me(current_user: User = Depends(get_current_user)):
     return current_user
 
+
 @router.patch("/me", response_model=User)
 def update_me(
     user_in: UserUpdate,
     current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
 ):
-    user_data = user_in.dict(exclude_unset=True)
+    user_data = user_in.model_dump(exclude_unset=True)
     for key, value in user_data.items():
         setattr(current_user, key, value)
-    
+
     session.add(current_user)
     session.commit()
     session.refresh(current_user)
     return current_user
 
+
 @router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
 def delete_me(
-    current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session)
+    current_user: User = Depends(get_current_user), session: Session = Depends(get_session)
 ):
     # 1. Find or create the deleted@system user
     deleted_user_email = "deleted_system_placeholder@example.com"
     deleted_user = session.exec(select(User).where(User.email == deleted_user_email)).first()
     if not deleted_user:
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         deleted_user = User(
             email=deleted_user_email,
             hashed_password="placeholder_deleted_password",
@@ -121,7 +145,7 @@ def delete_me(
             role=UserRole.STUDENT,
             created_at=now,
             updated_at=now,
-            deleted_at=now
+            deleted_at=now,
         )
         session.add(deleted_user)
         session.commit()
@@ -148,33 +172,47 @@ def delete_me(
         pledge.user_id = deleted_user.id
         session.add(pledge)
     # Requests
-    for request_obj in session.exec(select(Request).where(Request.user_id == current_user.id)).all():
+    for request_obj in session.exec(
+        select(Request).where(Request.user_id == current_user.id)
+    ).all():
         request_obj.user_id = deleted_user.id
         session.add(request_obj)
     # ProjectRatings
-    for rating in session.exec(select(ProjectRating).where(ProjectRating.user_id == current_user.id)).all():
+    for rating in session.exec(
+        select(ProjectRating).where(ProjectRating.user_id == current_user.id)
+    ).all():
         rating.user_id = deleted_user.id
         session.add(rating)
     # VideoComments
-    for comment in session.exec(select(VideoComment).where(VideoComment.user_id == current_user.id)).all():
+    for comment in session.exec(
+        select(VideoComment).where(VideoComment.user_id == current_user.id)
+    ).all():
         comment.user_id = deleted_user.id
         session.add(comment)
     # Notifications
-    for notification in session.exec(select(Notification).where(Notification.user_id == current_user.id)).all():
+    for notification in session.exec(
+        select(Notification).where(Notification.user_id == current_user.id)
+    ).all():
         notification.user_id = deleted_user.id
         session.add(notification)
     # TeacherVerifications
     if current_user.role == UserRole.TEACHER:
-        for verification in session.exec(select(TeacherVerification).where(TeacherVerification.teacher_id == current_user.id)).all():
+        for verification in session.exec(
+            select(TeacherVerification).where(TeacherVerification.teacher_id == current_user.id)
+        ).all():
             verification.teacher_id = deleted_user.id
             session.add(verification)
-    
+
     # Conversations and Messages
-    for conv in session.exec(select(Conversation).where(Conversation.student_id == current_user.id)).all():
+    for conv in session.exec(
+        select(Conversation).where(Conversation.student_id == current_user.id)
+    ).all():
         conv.student_demo_video_url = None
         conv.student_id = deleted_user.id
         session.add(conv)
-    for conv in session.exec(select(Conversation).where(Conversation.teacher_id == current_user.id)).all():
+    for conv in session.exec(
+        select(Conversation).where(Conversation.teacher_id == current_user.id)
+    ).all():
         conv.teacher_id = deleted_user.id
         session.add(conv)
     for msg in session.exec(select(Message).where(Message.sender_id == current_user.id)).all():
@@ -182,7 +220,7 @@ def delete_me(
         session.add(msg)
 
     # 3. Anonymize the current_user's data (soft delete)
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
     current_user.full_name = "Deleted User"
     current_user.email = f"deleted_{current_user.id}_{int(now.timestamp())}@system.com"
     current_user.hashed_password = "deleted"
@@ -199,36 +237,42 @@ def delete_me(
     session.commit()
     session.refresh(current_user)
 
+
 @router.get("/{user_id}/profile", response_model=UserProfile)
 def get_user_profile(
     user_id: int,
     session: Session = Depends(get_session),
-    current_user: Optional[User] = Depends(get_current_user_optional)
+    current_user: User | None = Depends(get_current_user_optional),
 ):
     user = session.get(User, user_id, options=[selectinload(User.language_groups)])
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     average_rating = None
     verified_languages = []
     follower_count = 0
     if user.role == UserRole.TEACHER:
         # Calculate average rating
-        rating_statement = select(func.avg(ProjectRating.rating)).join(Project).where(Project.teacher_id == user.id)
+        rating_statement = (
+            select(func.avg(ProjectRating.rating))
+            .join(Project)
+            .where(Project.teacher_id == user.id)
+        )
         avg_rating_result = session.exec(rating_statement).first()
         if avg_rating_result:
             average_rating = round(avg_rating_result, 1)
-        
+
         verification_statement = select(TeacherVerification.language).where(
             TeacherVerification.teacher_id == user.id,
-            TeacherVerification.status == VerificationStatus.APPROVED
+            TeacherVerification.status == VerificationStatus.APPROVED,
         )
         verified_languages = session.exec(verification_statement).all()
 
         # Calculate follower count
         follower_count = session.exec(
-            select(func.count(TeacherFollower.student_id))
-            .where(TeacherFollower.teacher_id == user.id)
+            select(func.count(TeacherFollower.student_id)).where(
+                TeacherFollower.teacher_id == user.id
+            )
         ).one()
 
     is_following = False
@@ -249,18 +293,19 @@ def get_user_profile(
         verified_languages=verified_languages,
         language_groups=[group.language_name for group in user.language_groups],
         follower_count=follower_count,
-        is_following=is_following
+        is_following=is_following,
     )
+
 
 @router.post("/{teacher_id}/follow", status_code=status.HTTP_204_NO_CONTENT)
 def follow_teacher(
     teacher_id: int,
     current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
 ):
     if current_user.id == teacher_id:
         raise HTTPException(status_code=400, detail="You cannot follow yourself.")
-    
+
     teacher = session.get(User, teacher_id)
     if not teacher or teacher.role != UserRole.TEACHER:
         raise HTTPException(status_code=404, detail="Teacher not found.")
@@ -276,16 +321,17 @@ def follow_teacher(
     notification = Notification(
         user_id=teacher_id,
         message=f"{current_user.full_name} is now following you.",
-        link=f"/profile/{current_user.id}"
+        link=f"/profile/{current_user.id}",
     )
     session.add(notification)
     session.commit()
+
 
 @router.delete("/{teacher_id}/follow", status_code=status.HTTP_204_NO_CONTENT)
 def unfollow_teacher(
     teacher_id: int,
     current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
 ):
     follow = session.get(TeacherFollower, (teacher_id, current_user.id))
     if not follow:
@@ -294,12 +340,10 @@ def unfollow_teacher(
     session.delete(follow)
     session.commit()
 
-@router.get("/{teacher_id}/followers", response_model=List[FollowerRead])
+
+@router.get("/{teacher_id}/followers", response_model=list[FollowerRead])
 def get_teacher_followers(
-    teacher_id: int,
-    limit: int = 10,
-    offset: int = 0,
-    session: Session = Depends(get_session)
+    teacher_id: int, limit: int = 10, offset: int = 0, session: Session = Depends(get_session)
 ):
     teacher = session.get(User, teacher_id)
     if not teacher or teacher.role != UserRole.TEACHER:
@@ -308,31 +352,38 @@ def get_teacher_followers(
     followers_statement = (
         select(User, func.sum(Pledge.amount).label("total_pledged"))
         .join(TeacherFollower, User.id == TeacherFollower.student_id)
-        .join(Pledge, and_(User.id == Pledge.user_id, Pledge.status == PledgeStatus.CAPTURED), isouter=True)
-        .join(Project, and_(Pledge.project_id == Project.id, Project.teacher_id == teacher_id), isouter=True)
+        .join(
+            Pledge,
+            and_(User.id == Pledge.user_id, Pledge.status == PledgeStatus.CAPTURED),
+            isouter=True,
+        )
+        .join(
+            Project,
+            and_(Pledge.project_id == Project.id, Project.teacher_id == teacher_id),
+            isouter=True,
+        )
         .where(TeacherFollower.teacher_id == teacher_id)
         .group_by(User.id)
         .order_by(func.sum(Pledge.amount).desc().nulls_last())
         .limit(limit)
         .offset(offset)
     )
-    
+
     results = session.exec(followers_statement).all()
-    
+
     return [
         FollowerRead(
             id=user.id,
             full_name=user.full_name,
             avatar_url=user.avatar_url,
-            total_pledged=total_pledged or 0
-        ) for user, total_pledged in results
+            total_pledged=total_pledged or 0,
+        )
+        for user, total_pledged in results
     ]
 
-@router.get("/{user_id}/following", response_model=List[FollowingTeacherRead])
-def get_user_following(
-    user_id: int,
-    session: Session = Depends(get_session)
-):
+
+@router.get("/{user_id}/following", response_model=list[FollowingTeacherRead])
+def get_user_following(user_id: int, session: Session = Depends(get_session)):
     """
     Get a list of teachers a specific user is following, ranked by how much that user has pledged to them.
     """
@@ -341,126 +392,142 @@ def get_user_following(
         raise HTTPException(status_code=404, detail="User not found")
 
     statement = (
-        select(
-            User,
-            func.sum(Pledge.amount).label("total_pledged")
-        )
+        select(User, func.sum(Pledge.amount).label("total_pledged"))
         .join(TeacherFollower, User.id == TeacherFollower.teacher_id)
-        .join(
-            Project,
-            User.id == Project.teacher_id,
-            isouter=True
-        )
+        .join(Project, User.id == Project.teacher_id, isouter=True)
         .join(
             Pledge,
             and_(
                 Project.id == Pledge.project_id,
-                Pledge.user_id == user_id, # Use the user_id from the path
-                Pledge.status == PledgeStatus.CAPTURED
+                Pledge.user_id == user_id,  # Use the user_id from the path
+                Pledge.status == PledgeStatus.CAPTURED,
             ),
-            isouter=True
+            isouter=True,
         )
-        .where(TeacherFollower.student_id == user_id) # Use the user_id from the path
+        .where(TeacherFollower.student_id == user_id)  # Use the user_id from the path
         .group_by(User.id)
         .order_by(func.sum(Pledge.amount).desc().nulls_last())
     )
     results = session.exec(statement).all()
     return [
-        FollowingTeacherRead(id=teacher.id, full_name=teacher.full_name, avatar_url=teacher.avatar_url, total_pledged=total_pledged or 0)
+        FollowingTeacherRead(
+            id=teacher.id,
+            full_name=teacher.full_name,
+            avatar_url=teacher.avatar_url,
+            total_pledged=total_pledged or 0,
+        )
         for teacher, total_pledged in results
     ]
+
 
 @router.get("/{user_id}/backed-projects", response_model=PaginatedProjectRead)
 def get_user_backed_projects(
     user_id: int,
     limit: int = 10,
     offset: int = 0,
-    current_user: Optional[User] = Depends(get_current_user_optional),
-    session: Session = Depends(get_session)
+    current_user: User | None = Depends(get_current_user_optional),
+    session: Session = Depends(get_session),
 ):
     user = session.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
     base_query = select(Project).join(Pledge).where(Pledge.user_id == user_id)
-    
+
     count_statement = select(func.count()).select_from(base_query.subquery())
     total_count = session.exec(count_statement).one()
 
-    projects_statement = base_query.options(selectinload(Project.teacher), selectinload(Project.videos)).offset(offset).limit(limit)
+    projects_statement = (
+        base_query.options(selectinload(Project.teacher), selectinload(Project.videos))
+        .offset(offset)
+        .limit(limit)
+    )
     projects = session.exec(projects_statement).all()
-    
+
     return PaginatedProjectRead(
         projects=[_create_project_read(p, current_user, session) for p in projects],
-        total_count=total_count
+        total_count=total_count,
     )
+
 
 @router.get("/{user_id}/completed-projects", response_model=PaginatedProjectRead)
 def get_teacher_completed_projects(
     user_id: int,
-    language: Optional[str] = None,
-    level: Optional[str] = None,
-    search: Optional[str] = None,
+    language: str | None = None,
+    level: str | None = None,
+    search: str | None = None,
     limit: int = 10,
     offset: int = 0,
-    current_user: Optional[User] = Depends(get_current_user_optional),
-    session: Session = Depends(get_session)
+    current_user: User | None = Depends(get_current_user_optional),
+    session: Session = Depends(get_session),
 ):
     teacher = session.get(User, user_id)
     if not teacher or teacher.role != UserRole.TEACHER:
         raise HTTPException(status_code=404, detail="Teacher not found")
 
-    base_query = select(Project).where(Project.teacher_id == user_id, Project.status == ProjectStatus.COMPLETED)
-    
-    if language: base_query = base_query.where(Project.language == language)
-    if level: base_query = base_query.where(Project.level == level)
+    base_query = select(Project).where(
+        Project.teacher_id == user_id, Project.status == ProjectStatus.COMPLETED
+    )
+
+    if language:
+        base_query = base_query.where(Project.language == language)
+    if level:
+        base_query = base_query.where(Project.level == level)
     if search:
         search_term = f"%{search}%"
-        base_query = base_query.where(or_(
-            Project.title.ilike(search_term),
-            Project.description.ilike(search_term),
-            Project.tags.ilike(search_term),
-        ))
+        base_query = base_query.where(
+            or_(
+                Project.title.ilike(search_term),
+                Project.description.ilike(search_term),
+                Project.tags.ilike(search_term),
+            )
+        )
 
     count_statement = select(func.count()).select_from(base_query.subquery())
     total_count = session.exec(count_statement).one()
 
-    projects_statement = base_query.options(selectinload(Project.teacher), selectinload(Project.videos)).offset(offset).limit(limit)
+    projects_statement = (
+        base_query.options(selectinload(Project.teacher), selectinload(Project.videos))
+        .offset(offset)
+        .limit(limit)
+    )
     projects = session.exec(projects_statement).all()
-    
+
     return PaginatedProjectRead(
         projects=[_create_project_read(p, current_user, session) for p in projects],
-        total_count=total_count
+        total_count=total_count,
     )
 
+
 @router.get("/{user_id}/completed-projects/filter-options", response_model=FilterOptionsRead)
-def get_teacher_completed_projects_filter_options(user_id: int, session: Session = Depends(get_session)):
+def get_teacher_completed_projects_filter_options(
+    user_id: int, session: Session = Depends(get_session)
+):
     teacher = session.get(User, user_id)
     if not teacher or teacher.role != UserRole.TEACHER:
         raise HTTPException(status_code=404, detail="Teacher not found")
 
-    query = select(Project.language, Project.level).where(
-        Project.teacher_id == user_id,
-        Project.status == ProjectStatus.COMPLETED
-    ).distinct()
+    query = (
+        select(Project.language, Project.level)
+        .where(Project.teacher_id == user_id, Project.status == ProjectStatus.COMPLETED)
+        .distinct()
+    )
     results = session.exec(query).all()
-    
+
     language_levels = defaultdict(set)
     for lang, level in results:
         language_levels[lang].add(level)
-        
+
     languages_list = [
-        LanguageLevelsRead(language=lang, levels=sorted(list(levels)))
+        LanguageLevelsRead(language=lang, levels=sorted(levels))
         for lang, levels in language_levels.items()
     ]
-    
+
     return FilterOptionsRead(languages=sorted(languages_list, key=lambda x: x.language))
 
-@router.get("/{user_id}/ratings", response_model=List[TeacherRatingRead])
-def get_teacher_ratings(
-    user_id: int,
-    session: Session = Depends(get_session)
-):
+
+@router.get("/{user_id}/ratings", response_model=list[TeacherRatingRead])
+def get_teacher_ratings(user_id: int, session: Session = Depends(get_session)):
     teacher = session.get(User, user_id)
     if not teacher or teacher.role != UserRole.TEACHER:
         raise HTTPException(status_code=404, detail="Teacher not found")
@@ -468,13 +535,13 @@ def get_teacher_ratings(
     statement = (
         select(ProjectRating)
         .join(Project)
-        .where(Project.teacher_id == teacher.id) # Corrected from user.id to teacher.id
+        .where(Project.teacher_id == teacher.id)  # Corrected from user.id to teacher.id
         .options(selectinload(ProjectRating.project))
         .order_by(ProjectRating.created_at.desc())
     )
-    
+
     ratings = session.exec(statement).all()
-    
+
     return [
         TeacherRatingRead(
             rating=r.rating,
@@ -486,45 +553,48 @@ def get_teacher_ratings(
                 funding_goal=r.project.funding_goal,
                 language=r.project.language,
                 level=r.project.level,
-                tags=r.project.tags
+                tags=r.project.tags,
             ),
             teacher_response=r.teacher_response,
-            response_created_at=r.response_created_at
-        ) for r in ratings
+            response_created_at=r.response_created_at,
+        )
+        for r in ratings
     ]
 
-@router.get("/teachers", response_model=List[TeacherRead])
-def search_teachers(
-    query: str = Query(..., min_length=1),
-    session: Session = Depends(get_session)
-):
-    statement = select(User).where(User.role == UserRole.TEACHER).where(User.full_name.ilike(f"%{query}%"))
+
+@router.get("/teachers", response_model=list[TeacherRead])
+def search_teachers(query: str = Query(..., min_length=1), session: Session = Depends(get_session)):
+    statement = (
+        select(User).where(User.role == UserRole.TEACHER).where(User.full_name.ilike(f"%{query}%"))
+    )
     teachers = session.exec(statement).all()
     return [TeacherRead(id=t.id, full_name=t.full_name) for t in teachers]
 
+
 @router.post("/stripe-onboarding-link", response_model=OnboardingResponse)
 def create_stripe_onboarding_link(
-    current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session)
+    current_user: User = Depends(get_current_user), session: Session = Depends(get_session)
 ):
     if current_user.role != UserRole.TEACHER:
-        raise HTTPException(status_code=403, detail="Only teachers can create Stripe onboarding links.")
-    
+        raise HTTPException(
+            status_code=403, detail="Only teachers can create Stripe onboarding links."
+        )
+
     try:
         if not current_user.stripe_account_id:
-            account = stripe.Account.create(type='express', email=current_user.email)
+            account = stripe.Account.create(type="express", email=current_user.email)
             current_user.stripe_account_id = account.id
             session.add(current_user)
             session.commit()
             session.refresh(current_user)
-        
+
         account_link = stripe.AccountLink.create(
             account=current_user.stripe_account_id,
             refresh_url=f"{FRONTEND_URL}/settings?stripe_reauth=true",
             return_url=f"{FRONTEND_URL}/teacher/dashboard?stripe_return=true",
             type="account_onboarding",
         )
-        
+
         return {"onboarding_url": account_link.url}
     except stripe.error.StripeError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from None
