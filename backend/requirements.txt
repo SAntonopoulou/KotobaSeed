@@ -10,6 +10,7 @@ python-multipart
 email-validator
 stripe
 resend
+apscheduler
 alembic
 psycopg2-binary
 # dev / test

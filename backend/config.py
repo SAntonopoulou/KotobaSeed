@@ -61,6 +61,14 @@ class Settings(BaseSettings):
     # selection to the signup form.
     default_connect_country: str = "GR"
 
+    # ----- Scheduled jobs -------------------------------------------------
+    # Disable in test/dev if needed by setting `scheduler_enabled=false`.
+    scheduler_enabled: bool = True
+    # Days of no completed lessons before a Starter tutor is auto-paused.
+    dormant_pause_days: int = 30
+    # Hour (UTC) when the daily dormant-pause sweep runs.
+    dormant_check_hour_utc: int = 4
+
     # ----- CORS -----------------------------------------------------------
     # Exact-match origins (comma-separated). Use the regex below for patterns
     # like wildcard subdomains.

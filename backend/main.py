@@ -35,6 +35,7 @@ from .routers import (
     videos,
 )
 from .security import get_password_hash
+from .services.dormant_pause import pause_dormant_tutors
 from .tenancy import add_tenant_middleware
 
 log = logging.getLogger(__name__)
@@ -70,13 +71,45 @@ def _sync_language_groups(session: Session) -> None:
     session.commit()
 
 
+def _build_scheduler():
+    """Return a started AsyncIOScheduler with the dormant-pause job, or None
+    if scheduling is disabled. Importing APScheduler lazily so test runs
+    that don't exercise the scheduler don't pay the import cost.
+    """
+    if not settings.scheduler_enabled:
+        log.info("scheduler_enabled=false; skipping APScheduler setup")
+        return None
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
+    from apscheduler.triggers.cron import CronTrigger
+
+    scheduler = AsyncIOScheduler()
+    scheduler.add_job(
+        pause_dormant_tutors,
+        trigger=CronTrigger(hour=settings.dormant_check_hour_utc, minute=0, timezone="UTC"),
+        id="dormant_pause",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
+    scheduler.start()
+    log.info(
+        "Scheduler started — dormant_pause job at %02d:00 UTC daily",
+        settings.dormant_check_hour_utc,
+    )
+    return scheduler
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     create_db_and_tables()
     with Session(_database.engine) as session:
         _seed_admin_user(session)
         _sync_language_groups(session)
-    yield
+    scheduler = _build_scheduler()
+    try:
+        yield
+    finally:
+        if scheduler is not None:
+            scheduler.shutdown(wait=False)
 
 
 app = FastAPI(title="Kotobaseed", lifespan=lifespan)

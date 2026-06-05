@@ -517,6 +517,32 @@ class Achievement(SQLModel, table=True):
     users: list["User"] = Relationship(back_populates="achievements", link_model=UserAchievement)
 
 
+class AuditLog(SQLModel, table=True):
+    """A durable record of admin and system actions.
+
+    Wire admin endpoints to `services.audit.record_audit(...)` so we have an
+    after-the-fact paper trail of who did what. Failures inside record_audit
+    are swallowed — an audit-write hiccup must never roll back the action
+    that prompted it.
+    """
+
+    __tablename__ = "audit_log"
+
+    id: int | None = Field(default=None, primary_key=True)
+    # Null actor_user_id = system action (e.g. cron job). The string actor_label
+    # always has something human-readable for the admin UI.
+    actor_user_id: int | None = Field(default=None, foreign_key="user.id", index=True)
+    actor_label: str = Field(max_length=120)
+    action: str = Field(max_length=80, index=True)
+    target_type: str | None = Field(default=None, max_length=40, index=True)
+    target_id: int | None = Field(default=None, index=True)
+    summary: str = Field(max_length=500)
+    details_json: str | None = Field(default=None)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC), index=True
+    )
+
+
 class StripeWebhookEvent(SQLModel, table=True):
     """One row per processed Stripe webhook event.
 

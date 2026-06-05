@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy.orm import selectinload
 from sqlmodel import Session, func, select
@@ -8,6 +8,7 @@ from sqlmodel import Session, func, select
 from ..database import get_session
 from ..deps import get_current_admin
 from ..models import (
+    AuditLog,
     Notification,
     Pledge,
     PledgeStatus,
@@ -17,14 +18,32 @@ from ..models import (
     User,
     VerificationStatus,
 )
-from ..routers.projects import _cancel_project_logic, _create_project_read  # Corrected import
-from ..schemas import ProjectRead  # Corrected import
+from ..routers.projects import _cancel_project_logic, _create_project_read
+from ..schemas import ProjectRead
+from ..services.audit import record_audit
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
 class VerificationReject(BaseModel):
     admin_notes: str | None = None
+
+
+class AuditLogRead(BaseModel):
+    id: int
+    actor_user_id: int | None
+    actor_label: str
+    action: str
+    target_type: str | None
+    target_id: int | None
+    summary: str
+    details_json: str | None
+    created_at: datetime
+
+
+class AuditLogPage(BaseModel):
+    items: list[AuditLogRead]
+    total: int
 
 
 class VerificationRead(BaseModel):
@@ -86,6 +105,9 @@ def delete_user(
 
     deleted_user = _get_or_create_deleted_user(session)
 
+    deleted_email = user_to_delete.email
+    deleted_role = user_to_delete.role.value
+
     for project in user_to_delete.taught_projects:
         project.teacher_id = deleted_user.id
     for pledge in user_to_delete.pledges:
@@ -95,6 +117,14 @@ def delete_user(
 
     session.delete(user_to_delete)
     session.commit()
+    record_audit(
+        session,
+        actor=current_user,
+        action="user.deleted",
+        target_type="user",
+        target_id=user_id,
+        summary=f"Admin deleted user {deleted_email} (role={deleted_role}).",
+    )
     return
 
 
@@ -123,11 +153,22 @@ def cleanup_abandoned_projects(
     ).all()
 
     count = 0
+    cancelled_ids: list[int] = []
     for project in abandoned_projects:
         _cancel_project_logic(project, session)
+        cancelled_ids.append(project.id)
         count += 1
 
     session.commit()
+    record_audit(
+        session,
+        actor=current_user,
+        action="projects.cleanup_abandoned",
+        target_type="project",
+        target_id=None,
+        summary=f"Cancelled {count} abandoned project(s) from deleted teachers.",
+        details={"project_ids": cancelled_ids},
+    )
 
     return {"message": f"Successfully cancelled and refunded {count} abandoned projects."}
 
@@ -149,9 +190,18 @@ def admin_cancel_project(
             detail=f"Project is already {project.status.value} and cannot be cancelled.",
         )
 
+    project_title = project.title
     _cancel_project_logic(project, session)
     session.commit()
     session.refresh(project)
+    record_audit(
+        session,
+        actor=current_user,
+        action="project.cancelled",
+        target_type="project",
+        target_id=project_id,
+        summary=f"Admin cancelled project: {project_title}.",
+    )
     return project
 
 
@@ -199,7 +249,44 @@ def approve_verification(
     session.add(verification)
     session.commit()
     session.refresh(verification)
+    record_audit(
+        session,
+        actor=current_user,
+        action="verification.approved",
+        target_type="verification",
+        target_id=verification_id,
+        summary=f"Approved {verification.language} verification for teacher #{verification.teacher_id}.",
+    )
     return verification
+
+
+@router.get("/audit-log", response_model=AuditLogPage)
+def list_audit_log(
+    current_user: User = Depends(get_current_admin),
+    session: Session = Depends(get_session),
+    action: str | None = Query(default=None),
+    target_type: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+):
+    """Most recent admin + system actions first. Filterable by action prefix
+    (e.g. `verification.`) or target_type."""
+    filters = []
+    if action:
+        filters.append(AuditLog.action.like(f"{action}%"))
+    if target_type:
+        filters.append(AuditLog.target_type == target_type)
+
+    total = session.exec(
+        select(func.count(AuditLog.id)).where(*filters)
+    ).one()
+    rows = session.exec(
+        select(AuditLog).where(*filters).order_by(AuditLog.created_at.desc()).offset(offset).limit(limit)
+    ).all()
+    return AuditLogPage(
+        items=[AuditLogRead.model_validate(r, from_attributes=True) for r in rows],
+        total=total,
+    )
 
 
 @router.post("/verifications/{verification_id}/reject", response_model=TeacherVerification)
@@ -229,4 +316,13 @@ def reject_verification(
     session.add(verification)
     session.commit()
     session.refresh(verification)
+    record_audit(
+        session,
+        actor=current_user,
+        action="verification.rejected",
+        target_type="verification",
+        target_id=verification_id,
+        summary=f"Rejected {verification.language} verification for teacher #{verification.teacher_id}.",
+        details={"admin_notes": rejection.admin_notes} if rejection.admin_notes else None,
+    )
     return verification
