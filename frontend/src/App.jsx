@@ -45,6 +45,8 @@ import ArticlesIndex from './pages/ArticlesIndex';
 import ArticleReader from './pages/ArticleReader';
 import ArticleEditor from './pages/ArticleEditor';
 import NewsletterUnsubscribe from './pages/NewsletterUnsubscribe';
+import MyAssignments from './pages/MyAssignments';
+import TakeAssignment from './pages/TakeAssignment';
 import { useTenant } from './hooks/useTenant';
 
 const TutorShell = () => (
@@ -101,6 +103,8 @@ const ApexShell = () => {
             {/* Student Routes */}
             <Route path="/student/dashboard" element={<StudentDashboard />} />
             <Route path="/student/:id/archive" element={<StudentArchive />} />
+            <Route path="/student/assignments" element={<MyAssignments />} />
+            <Route path="/student/assignments/:id" element={<TakeAssignment />} />
 
             {/* Teacher Routes */}
             <Route element={<TeacherRoute />}>

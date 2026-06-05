@@ -1923,6 +1923,14 @@ def mark_booking_complete(
     session.commit()
     session.refresh(booking)
 
+    # Auto-assign matching homework templates to the student. Local import
+    # to avoid bootstrapping homework_grading on every tutor_site import.
+    from ..services import homework_auto_assign
+
+    homework_auto_assign.assign_for_completed_booking(
+        session=session, tutor=tutor, booking=booking
+    )
+
     student = session.get(User, booking.student_user_id)
     pack = session.get(LessonPack, booking.lesson_pack_id)
     return _serialize_booking(booking, student=student, pack=pack)

@@ -690,6 +690,110 @@ class LessonPack(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
+class HomeworkQuestionType(str, Enum):
+    """Question types the grading engine knows about.
+
+    - mc_single: one correct option index from a list
+    - mc_multi: a set of correct option indices (all-or-nothing scoring)
+    - fill_blank: free-text answer compared against `accepted_answers`;
+      Greek accent normalization + case insensitivity toggleable per Q
+    - short_answer: free-text answer that always needs manual review
+    """
+
+    MC_SINGLE = "mc_single"
+    MC_MULTI = "mc_multi"
+    FILL_BLANK = "fill_blank"
+    SHORT_ANSWER = "short_answer"
+
+
+class HomeworkTemplate(SQLModel, table=True):
+    """A reusable homework that a tutor can assign to any student or have
+    auto-assigned when a booking is marked complete.
+
+    `questions_json` is the source of truth — a JSON array of question
+    dicts whose shape varies by `type`. We store it as TEXT in SQLite
+    because the structure is heterogeneous; validation happens at the
+    Pydantic schema layer in the router.
+
+    `auto_assign_on_lesson_complete` flips this template into "send
+    automatically after every completed lesson with this tutor" mode.
+    The tutor can keep manually-assigned templates separate.
+    """
+
+    __tablename__ = "homework_template"
+
+    id: int | None = Field(default=None, primary_key=True)
+    tutor_id: int = Field(foreign_key="tutor.id", index=True)
+    title: str = Field(max_length=200)
+    description: str | None = Field(default=None, max_length=2000)
+    questions_json: str = Field(default="[]", max_length=200_000)
+    auto_assign_on_lesson_complete: bool = Field(default=False, index=True)
+    is_active: bool = Field(default=True, index=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class HomeworkAssignmentStatus(str, Enum):
+    OPEN = "open"
+    SUBMITTED = "submitted"
+    GRADED = "graded"
+
+
+class HomeworkAssignment(SQLModel, table=True):
+    """A specific homework given to a specific student.
+
+    Snapshots the template's question set at assign time so future template
+    edits don't retroactively change live work. `template_id` is nullable
+    for one-off assignments tutors compose for a single student.
+    """
+
+    __tablename__ = "homework_assignment"
+
+    id: int | None = Field(default=None, primary_key=True)
+    tutor_id: int = Field(foreign_key="tutor.id", index=True)
+    student_user_id: int = Field(foreign_key="user.id", index=True)
+    template_id: int | None = Field(default=None, foreign_key="homework_template.id")
+    title: str = Field(max_length=200)
+    description: str | None = Field(default=None, max_length=2000)
+    questions_snapshot_json: str = Field(default="[]", max_length=200_000)
+    max_score: int = Field(default=0, ge=0)
+    status: HomeworkAssignmentStatus = Field(
+        default=HomeworkAssignmentStatus.OPEN, index=True
+    )
+    due_at: datetime | None = Field(default=None)
+    assigned_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class HomeworkSubmission(SQLModel, table=True):
+    """One student submission for one assignment.
+
+    One-shot: an assignment can have at most one submission row. Autograded
+    fields populate immediately on submit; `needs_manual_review` flips
+    True when any short_answer question is present. `manual_score` is the
+    tutor's override (when set, it wins over `auto_score`); `feedback`
+    is whatever the tutor wants to write back.
+    """
+
+    __tablename__ = "homework_submission"
+
+    id: int | None = Field(default=None, primary_key=True)
+    assignment_id: int = Field(foreign_key="homework_assignment.id", index=True, unique=True)
+    student_user_id: int = Field(foreign_key="user.id", index=True)
+    answers_json: str = Field(default="{}", max_length=200_000)
+    per_question_results_json: str = Field(default="{}", max_length=200_000)
+    auto_score: int = Field(default=0, ge=0)
+    manual_score: int | None = Field(default=None, ge=0)
+    max_score: int = Field(default=0, ge=0)
+    needs_manual_review: bool = Field(default=False, index=True)
+    feedback: str | None = Field(default=None, max_length=4000)
+    submitted_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    graded_at: datetime | None = Field(default=None)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
 class NewsletterStatus(str, Enum):
     DRAFT = "draft"
     SENT = "sent"
