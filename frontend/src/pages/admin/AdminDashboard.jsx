@@ -95,11 +95,18 @@ const AdminDashboard = () => {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
-        <Link to="/admin/projects">
-          <button className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded">
-            Project Management
-          </button>
-        </Link>
+        <div className="flex gap-2">
+          <Link to="/admin/audit-log">
+            <button className="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-medium py-2 px-4 rounded">
+              Audit log
+            </button>
+          </Link>
+          <Link to="/admin/projects">
+            <button className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded">
+              Project Management
+            </button>
+          </Link>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">

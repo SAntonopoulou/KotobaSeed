@@ -92,6 +92,7 @@ const ApexShell = () => {
             {/* Admin Routes */}
             <Route element={<AdminRoute />}>
               <Route path="/admin/dashboard" element={<AdminDashboard />} />
+              <Route path="/admin/audit-log" element={<AdminAuditLog />} />
               <Route path="/admin/projects" element={<ProjectManagement />} />
             </Route>
 
