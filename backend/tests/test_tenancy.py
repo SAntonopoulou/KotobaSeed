@@ -33,10 +33,25 @@ def test_subdomain_resolves_to_tutor(client, vasso_tutor):
     assert body["display_name"] == "Vasso"
 
 
-def test_custom_domain_resolves_to_tutor(client, vasso_tutor):
+def test_custom_domain_resolves_to_tutor(client, vasso_tutor, db_session):
+    # Tenancy only honours verified custom domains — mark this one as
+    # verified so the existing fixture (which seeds the column directly)
+    # still resolves the way the rest of the suite expects.
+    from datetime import UTC, datetime
+
+    vasso_tutor.custom_domain_verified_at = datetime.now(UTC)
+    db_session.add(vasso_tutor)
+    db_session.commit()
     r = client.get("/tutor/me", headers={"Host": "greekwithvasso.com"})
     assert r.status_code == 200, r.text
     assert r.json()["tutor_slug"] == "vasso"
+
+
+def test_unverified_custom_domain_does_not_resolve(client, vasso_tutor):
+    # The fixture's custom_domain is unverified by default — must 404 until
+    # the tutor goes through /tutor/custom-domain/verify.
+    r = client.get("/tutor/me", headers={"Host": "greekwithvasso.com"})
+    assert r.status_code == 404
 
 
 def test_host_is_case_insensitive(client, vasso_tutor):

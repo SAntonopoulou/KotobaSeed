@@ -798,9 +798,16 @@ class Tutor(SQLModel, table=True):
     )
 
     # ----- Domain -----
+    # Pro/Business tutors can point their own domain at the platform. The
+    # field stays null on Free/Plus. Verification: tutor adds an A record
+    # at their domain pointing at the platform IP; the verify endpoint does
+    # a DNS lookup and stamps custom_domain_verified_at when it matches.
+    # The tenancy middleware only resolves verified domains so an attacker
+    # can't claim a domain they don't own.
     custom_domain: str | None = Field(
         default=None, unique=True, index=True, max_length=255
     )
+    custom_domain_verified_at: datetime | None = Field(default=None)
 
     # ----- Free trial -----
     # Tutor opts in to offering a free trial lesson. When enabled, a managed

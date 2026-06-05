@@ -8,6 +8,7 @@ import BookingsManager from '../components/BookingsManager';
 import AvailabilityEditor from '../components/AvailabilityEditor';
 import TrialSettings from '../components/TrialSettings';
 import SingleLessonQuickSet from '../components/SingleLessonQuickSet';
+import CustomDomainSettings from '../components/CustomDomainSettings';
 
 // Pull the token out of the URL fragment (#token=...) if present, store it,
 // then scrub the URL so the token doesn't sit in the address bar.
@@ -327,6 +328,8 @@ const TutorDashboard = () => {
         <LessonPackManager />
 
         <TrialSettings />
+
+        <CustomDomainSettings />
 
         {/* Placeholder for future modules */}
         <section className="bg-white/60 rounded-2xl p-6 text-sm text-kotoba-text">

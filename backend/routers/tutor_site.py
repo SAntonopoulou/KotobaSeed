@@ -421,6 +421,155 @@ def deactivate_single_lesson(
     session.commit()
 
 
+# --- Custom domain (Pro+ feature) ---------------------------------------
+
+
+class CustomDomainRead(BaseModel):
+    """Owner-side read of the custom-domain config. `status` is computed
+    so the dashboard widget doesn't have to derive it from timestamps:
+      - not_set: no domain on record
+      - pending: domain saved but not yet verified
+      - verified: DNS lookup succeeded; tenancy middleware now honours it
+    """
+
+    domain: str | None
+    status: str  # "not_set" | "pending" | "verified"
+    verified_at: datetime | None
+    target_ip: str | None  # what tutors should point their A record at
+
+
+class CustomDomainUpdate(BaseModel):
+    domain: str = Field(min_length=1, max_length=255)
+
+
+def _custom_domain_state(tutor: Tutor) -> CustomDomainRead:
+    from ..services.custom_domain import expected_target_ip
+
+    if not tutor.custom_domain:
+        status = "not_set"
+    elif tutor.custom_domain_verified_at is None:
+        status = "pending"
+    else:
+        status = "verified"
+    return CustomDomainRead(
+        domain=tutor.custom_domain,
+        status=status,
+        verified_at=tutor.custom_domain_verified_at,
+        target_ip=expected_target_ip(),
+    )
+
+
+@router.get("/custom-domain", response_model=CustomDomainRead)
+def read_custom_domain(
+    current: CurrentUser,
+    tutor: CurrentTutor,
+) -> CustomDomainRead:
+    """Owner-only — current custom-domain config + verification status."""
+    _require_owner(tutor, current)
+    return _custom_domain_state(tutor)
+
+
+@router.put("/custom-domain", response_model=CustomDomainRead)
+def upsert_custom_domain(
+    payload: CustomDomainUpdate,
+    current: CurrentUser,
+    tutor: CurrentTutor,
+    session: Annotated[Session, Depends(get_session)],
+) -> CustomDomainRead:
+    """Owner-only — set or change the tutor's custom domain.
+
+    Plan-gated: PRO and BUSINESS only. Saving a domain resets verification
+    (any prior verified_at is cleared) — the tutor has to re-verify after
+    every change so we never serve traffic for a stale, possibly-spoofed
+    domain.
+    """
+    _require_owner(tutor, current)
+    if not current.is_pro_subscriber:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail="Custom domains are a Pro feature. Upgrade your plan to enable.",
+        )
+    from ..services.custom_domain import DomainValidationError, normalize_domain
+
+    try:
+        normalized = normalize_domain(payload.domain)
+    except DomainValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from None
+
+    existing = session.exec(
+        select(Tutor).where(
+            Tutor.custom_domain == normalized,
+            Tutor.id != tutor.id,
+        )
+    ).first()
+    if existing is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="That domain is already claimed by another tutor.",
+        )
+
+    tutor.custom_domain = normalized
+    tutor.custom_domain_verified_at = None
+    tutor.updated_at = datetime.now(UTC)
+    session.add(tutor)
+    session.commit()
+    session.refresh(tutor)
+    return _custom_domain_state(tutor)
+
+
+@router.post("/custom-domain/verify", response_model=CustomDomainRead)
+def verify_custom_domain(
+    current: CurrentUser,
+    tutor: CurrentTutor,
+    session: Annotated[Session, Depends(get_session)],
+) -> CustomDomainRead:
+    """Owner-only — run the DNS check. Stamps verified_at on success.
+    Idempotent: re-running on an already-verified domain just refreshes
+    the stamp."""
+    _require_owner(tutor, current)
+    if not tutor.custom_domain:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Save your domain first.",
+        )
+    from ..services.custom_domain import verify_domain_dns
+
+    if not verify_domain_dns(tutor.custom_domain):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "We couldn't confirm your DNS yet. Add the A record below "
+                "and try again — DNS changes can take a few minutes to "
+                "propagate."
+            ),
+        )
+    tutor.custom_domain_verified_at = datetime.now(UTC)
+    tutor.updated_at = datetime.now(UTC)
+    session.add(tutor)
+    session.commit()
+    session.refresh(tutor)
+    return _custom_domain_state(tutor)
+
+
+@router.delete("/custom-domain", status_code=status.HTTP_204_NO_CONTENT)
+def remove_custom_domain(
+    current: CurrentUser,
+    tutor: CurrentTutor,
+    session: Annotated[Session, Depends(get_session)],
+) -> None:
+    """Owner-only — clear the custom domain. Tutor's subdomain on
+    kotobaseed.net always still works."""
+    _require_owner(tutor, current)
+    tutor.custom_domain = None
+    tutor.custom_domain_verified_at = None
+    tutor.updated_at = datetime.now(UTC)
+    session.add(tutor)
+    session.commit()
+
+
 # --- Free trial ----------------------------------------------------------
 
 

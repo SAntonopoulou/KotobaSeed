@@ -55,9 +55,16 @@ def _resolve_tutor_for_host(host: str, session: Session) -> Tutor | None:
             return None
         return session.exec(select(Tutor).where(Tutor.tutor_slug == slug)).first()
 
-    # Custom-domain candidate. TODO: signup must lowercase custom_domain on
-    # write so this stays unambiguous against the unique index.
-    return session.exec(select(Tutor).where(Tutor.custom_domain == host)).first()
+    # Custom-domain candidate — only resolves if verification stamp is set.
+    # Unverified custom_domain rows are inert until the tutor proves they
+    # own the domain via the verify endpoint; we won't serve their tenant
+    # for a Host header they haven't proven they control.
+    return session.exec(
+        select(Tutor).where(
+            Tutor.custom_domain == host,
+            Tutor.custom_domain_verified_at != None,  # noqa: E711
+        )
+    ).first()
 
 
 def _resolve_for_request(request: Request) -> tuple[int | None, str | None]:

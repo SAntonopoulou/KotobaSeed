@@ -115,6 +115,16 @@ class Settings(BaseSettings):
     resend_from_email: str = "noreply@kotobaseed.net"
     resend_from_name: str = "Kotobaseed"
 
+    # ----- Custom domains -------------------------------------------------
+    # IP that Pro/Business tutors should point their A record at. When set,
+    # the verify endpoint resolves the tutor's domain and confirms it
+    # matches this IP. Unset locally — dev environments set
+    # `custom_domain_auto_verify=true` instead.
+    kotobaseed_server_ip: str | None = None
+    # Dev short-circuit: skip the DNS lookup and mark domains as verified
+    # immediately so Sophia can exercise the UX flow without real DNS.
+    custom_domain_auto_verify: bool = False
+
     # ----- Classroom video (Daily.co) -------------------------------------
     # Unset is fine — the classroom endpoint returns 503 with a clear
     # message so the rest of the platform keeps working in environments
