@@ -37,6 +37,8 @@ import OnboardingRefresh from './pages/OnboardingRefresh';
 import TutorHome from './pages/TutorHome';
 import TutorDashboard from './pages/TutorDashboard';
 import VerifyEmail from './pages/VerifyEmail';
+import BookingSuccess from './pages/BookingSuccess';
+import BookingCancelled from './pages/BookingCancelled';
 import { useTenant } from './hooks/useTenant';
 
 const TutorShell = () => (
@@ -46,6 +48,8 @@ const TutorShell = () => (
     <Route path="/" element={<TutorHome />} />
     <Route path="/dashboard" element={<TutorDashboard />} />
     <Route path="/login" element={<Login />} />
+    <Route path="/booking/success" element={<BookingSuccess />} />
+    <Route path="/booking/cancelled" element={<BookingCancelled />} />
     <Route path="*" element={<Navigate to="/" replace />} />
   </Routes>
 );

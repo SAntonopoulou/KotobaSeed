@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import client from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { apexUrl } from '../hooks/useTenant';
+import BookingDialog from '../components/BookingDialog';
 
 const parseLanguages = (raw) => {
   if (!raw) return [];
@@ -31,6 +32,7 @@ const TutorHome = () => {
   const { currentUser } = useAuth();
   const [tutor, setTutor] = useState(null);
   const [packs, setPacks] = useState([]);
+  const [bookingPack, setBookingPack] = useState(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -216,11 +218,10 @@ const TutorHome = () => {
                 </p>
                 <button
                   type="button"
-                  disabled
-                  title="Booking checkout is coming next"
-                  className="mt-4 w-full px-4 py-2 rounded-md bg-kotoba-secondary text-kotoba-text font-semibold hover:bg-kotoba-secondary-dark disabled:opacity-60 disabled:cursor-not-allowed"
+                  onClick={() => setBookingPack(pack)}
+                  className="mt-4 w-full px-4 py-2 rounded-md bg-kotoba-secondary text-kotoba-text font-semibold hover:bg-kotoba-secondary-dark"
                 >
-                  Book — coming soon
+                  Book this pack
                 </button>
               </div>
             ))}
@@ -236,6 +237,14 @@ const TutorHome = () => {
           </a>
         </p>
       </footer>
+
+      {bookingPack && (
+        <BookingDialog
+          pack={bookingPack}
+          tutorDisplayName={tutor.display_name}
+          onClose={() => setBookingPack(null)}
+        />
+      )}
     </div>
   );
 };

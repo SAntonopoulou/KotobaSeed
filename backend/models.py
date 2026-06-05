@@ -553,6 +553,50 @@ class AuditLog(SQLModel, table=True):
     )
 
 
+class BookingStatus(str, Enum):
+    PENDING_PAYMENT = "pending_payment"  # Stripe Checkout created, awaiting webhook
+    CONFIRMED = "confirmed"  # paid, scheduled, waiting for the lesson
+    COMPLETED = "completed"  # tutor marked the lesson done
+    CANCELLED = "cancelled"  # before the lesson; pre-refund-window
+    REFUNDED = "refunded"  # refunded inside the 14-day window
+
+
+class Booking(SQLModel, table=True):
+    """One student-buys-and-schedules-a-lesson event.
+
+    A Booking always references a LessonPack (the product the student bought)
+    plus a single scheduled slot. If a pack contains multiple lessons, each
+    one is a separate Booking row pointing at the same pack — that way
+    cancellation, classroom-minute tracking, and the refund window are all
+    per-lesson, not per-pack.
+    """
+
+    __tablename__ = "booking"
+
+    id: int | None = Field(default=None, primary_key=True)
+    tutor_id: int = Field(foreign_key="tutor.id", index=True)
+    student_user_id: int = Field(foreign_key="user.id", index=True)
+    lesson_pack_id: int = Field(foreign_key="lesson_pack.id", index=True)
+    scheduled_at: datetime = Field(index=True)
+    duration_minutes: int = Field(ge=15, le=240)
+    # Snapshot price + currency from the pack at purchase time so later edits
+    # to the pack don't rewrite this booking's history.
+    price_cents: int = Field(ge=0)
+    currency: str = Field(max_length=3)
+    platform_fee_cents: int = Field(default=0, ge=0)
+    status: BookingStatus = Field(default=BookingStatus.PENDING_PAYMENT, index=True)
+    # Stripe wiring
+    stripe_checkout_session_id: str | None = Field(default=None, max_length=128, index=True)
+    stripe_payment_intent_id: str | None = Field(default=None, max_length=128, index=True)
+    # Lifecycle timestamps
+    paid_at: datetime | None = Field(default=None)
+    completed_at: datetime | None = Field(default=None)
+    cancelled_at: datetime | None = Field(default=None)
+    refunded_at: datetime | None = Field(default=None)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
 class LessonPack(SQLModel, table=True):
     """A lesson package a tutor sells to students.
 

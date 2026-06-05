@@ -12,17 +12,31 @@ folds both together so the frontend sees one coherent shape.
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 from typing import Annotated
 
+import stripe
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr, Field
 from sqlmodel import Session, select
 
+from ..config import settings
 from ..database import get_session
 from ..deps import CurrentUser
-from ..models import LessonPack, Tutor, TutorAccountStatus, TutorPlan, User
+from ..models import (
+    Booking,
+    BookingStatus,
+    LessonPack,
+    SubscriptionTier,
+    Tutor,
+    TutorAccountStatus,
+    TutorPlan,
+    User,
+)
 from ..tenancy import CurrentTutor
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/tutor", tags=["tutor-site"])
 
@@ -272,6 +286,153 @@ def update_lesson_pack(
     session.commit()
     session.refresh(pack)
     return LessonPackRead.model_validate(pack)
+
+
+# --- Bookings ------------------------------------------------------------
+
+
+def _tenant_url(tutor_slug: str, path: str) -> str:
+    """Build a URL on the tutor's subdomain matching the configured frontend_url
+    apex. Works in both dev (`http://localhost:5173` → `http://vasso.localhost:5173`)
+    and prod (`https://kotobaseed.net` → `https://vasso.kotobaseed.net`).
+    """
+    from urllib.parse import urlparse
+
+    apex = urlparse(settings.frontend_url)
+    return f"{apex.scheme}://{tutor_slug}.{apex.netloc}{path}"
+
+
+def _platform_fee_for(tutor_user: User, amount_cents: int) -> int:
+    """Application Fee in cents based on the tutor-User's subscription tier.
+
+    Free + Plus → 5% of the lesson price.
+    Pro + Business → 0% (one of the headline Pro perks).
+    """
+    if tutor_user.subscription_tier in (SubscriptionTier.PRO, SubscriptionTier.BUSINESS):
+        return 0
+    return round(amount_cents * 0.05)
+
+
+class BookingCheckoutRequest(BaseModel):
+    scheduled_at: datetime = Field(description="When the student wants the first lesson")
+
+
+class BookingCheckoutResponse(BaseModel):
+    checkout_url: str
+    booking_id: int
+
+
+@router.post(
+    "/lesson-packs/{pack_id}/book",
+    response_model=BookingCheckoutResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def start_booking_checkout(
+    pack_id: int,
+    payload: BookingCheckoutRequest,
+    current: CurrentUser,
+    tutor: CurrentTutor,
+    session: Annotated[Session, Depends(get_session)],
+) -> BookingCheckoutResponse:
+    """Student-initiated. Creates a PENDING_PAYMENT Booking and a Stripe
+    Checkout session that routes the funds to the tutor's Connect account
+    with the platform fee applied.
+    """
+    pack = session.get(LessonPack, pack_id)
+    if not pack or pack.tutor_id != tutor.id or not pack.is_active:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pack not found.")
+    if tutor.account_status != TutorAccountStatus.ACTIVE:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This tutor isn't accepting bookings right now.",
+        )
+    if not tutor.stripe_connect_account_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Tutor's payment account isn't connected yet.",
+        )
+    if payload.scheduled_at <= datetime.now(UTC):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Pick a time in the future.",
+        )
+    if current.id == tutor.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You can't book a lesson with yourself.",
+        )
+
+    fee = _platform_fee_for(tutor.user, pack.price_cents)
+
+    booking = Booking(
+        tutor_id=tutor.id,
+        student_user_id=current.id,
+        lesson_pack_id=pack.id,
+        scheduled_at=payload.scheduled_at,
+        duration_minutes=pack.duration_minutes,
+        price_cents=pack.price_cents,
+        currency=pack.currency,
+        platform_fee_cents=fee,
+        status=BookingStatus.PENDING_PAYMENT,
+    )
+    session.add(booking)
+    session.commit()
+    session.refresh(booking)
+
+    try:
+        checkout = stripe.checkout.Session.create(
+            api_key=settings.stripe_secret_key,
+            mode="payment",
+            payment_method_types=["card"],
+            line_items=[
+                {
+                    "quantity": 1,
+                    "price_data": {
+                        "currency": pack.currency,
+                        "unit_amount": pack.price_cents,
+                        "product_data": {
+                            "name": f"{pack.name} — with {tutor.display_name}",
+                            "description": pack.description or None,
+                        },
+                    },
+                }
+            ],
+            payment_intent_data={
+                "application_fee_amount": fee,
+                "transfer_data": {"destination": tutor.stripe_connect_account_id},
+                "metadata": {
+                    "type": "booking",
+                    "booking_id": str(booking.id),
+                    "tutor_slug": tutor.tutor_slug,
+                },
+            },
+            metadata={
+                "type": "booking",
+                "booking_id": str(booking.id),
+                "tutor_slug": tutor.tutor_slug,
+            },
+            success_url=_tenant_url(tutor.tutor_slug, f"/booking/success?booking={booking.id}"),
+            cancel_url=_tenant_url(tutor.tutor_slug, f"/booking/cancelled?booking={booking.id}"),
+            client_reference_id=str(current.id),
+        )
+    except stripe.error.StripeError:
+        log.exception(
+            "Stripe Checkout creation failed for booking #%s (tutor %s)",
+            booking.id,
+            tutor.tutor_slug,
+        )
+        # Drop the orphaned booking — student can retry without "duplicate" noise.
+        session.delete(booking)
+        session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Could not start checkout. Try again in a moment.",
+        ) from None
+
+    booking.stripe_checkout_session_id = checkout["id"]
+    session.add(booking)
+    session.commit()
+    return BookingCheckoutResponse(checkout_url=checkout["url"], booking_id=booking.id)
 
 
 @router.delete("/lesson-packs/{pack_id}", status_code=status.HTTP_204_NO_CONTENT)

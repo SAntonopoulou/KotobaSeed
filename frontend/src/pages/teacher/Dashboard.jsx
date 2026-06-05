@@ -128,6 +128,27 @@ const Dashboard = () => {
         </Link>
       </div>
 
+      {!user?.tutor_slug && (
+        <div className="bg-gradient-to-r from-kotoba-primary to-green-700 rounded-2xl p-6 text-white shadow-md mb-8">
+          <div className="flex items-start justify-between flex-wrap gap-4">
+            <div className="max-w-2xl">
+              <h2 className="text-xl font-bold mb-2">Get your own tutoring site</h2>
+              <p className="text-sm opacity-90 leading-relaxed">
+                Run one-to-one lessons at <span className="font-mono">yourname.kotobaseed.net</span> alongside the marketplace.
+                Bookings, lesson packs, classroom video, payouts via Stripe — all yours.
+                On Pro you keep 100% of what students pay you.
+              </p>
+            </div>
+            <Link
+              to="/onboarding/tutor"
+              className="inline-flex items-center px-5 py-2.5 rounded-md bg-kotoba-secondary text-kotoba-text font-semibold hover:bg-kotoba-secondary-dark whitespace-nowrap"
+            >
+              Set up my tutor site →
+            </Link>
+          </div>
+        </div>
+      )}
+
       {!user?.stripe_account_id && (
         <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-8">
           <div className="flex">

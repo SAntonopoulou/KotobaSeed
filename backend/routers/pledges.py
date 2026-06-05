@@ -12,6 +12,8 @@ from sqlmodel import Session, select
 from ..database import get_session
 from ..deps import get_current_user
 from ..models import (
+    Booking,
+    BookingStatus,
     Notification,
     Pledge,
     PledgeStatus,
@@ -179,8 +181,56 @@ def get_user_pledges(user_id: int, session: Session = Depends(get_session)):
     return results
 
 
+def _handle_booking_checkout(session: Session, data_object: dict) -> bool:
+    """Confirm a tutor-lesson Booking from a Stripe Checkout completion.
+
+    Returns True if the event was a booking and was handled here, False if
+    the caller should fall through to other types.
+    """
+    metadata = data_object.get("metadata", {})
+    if metadata.get("type") != "booking":
+        return False
+    booking_id = metadata.get("booking_id")
+    if not booking_id:
+        logger.warning("Booking checkout event missing booking_id; metadata=%s", metadata)
+        return True
+
+    booking = session.get(Booking, int(booking_id))
+    if not booking:
+        logger.warning("Booking #%s referenced by webhook not found", booking_id)
+        return True
+    if booking.status != BookingStatus.PENDING_PAYMENT:
+        logger.info(
+            "Booking #%s already in %s state; webhook is a duplicate",
+            booking_id,
+            booking.status,
+        )
+        return True
+
+    now = datetime.now(UTC)
+    booking.status = BookingStatus.CONFIRMED
+    booking.paid_at = now
+    booking.stripe_payment_intent_id = data_object.get("payment_intent")
+    booking.updated_at = now
+    session.add(booking)
+
+    # Notify the tutor that they have a paid booking.
+    tutor = session.get(Tutor, booking.tutor_id)
+    if tutor:
+        notification = Notification(
+            user_id=tutor.user_id,
+            message=f"New booking confirmed for {booking.scheduled_at.strftime('%a %d %b · %H:%M UTC')}.",
+            link="/dashboard",
+        )
+        session.add(notification)
+    session.commit()
+    return True
+
+
 def handle_checkout_session_completed(session: Session, data_object: dict):
     metadata = data_object.get("metadata", {})
+    if _handle_booking_checkout(session, data_object):
+        return
     if metadata.get("type") == "tip":
         try:
             teacher_id = int(metadata["teacher_id"])
