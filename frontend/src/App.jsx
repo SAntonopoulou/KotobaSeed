@@ -39,6 +39,7 @@ import TutorDashboard from './pages/TutorDashboard';
 import VerifyEmail from './pages/VerifyEmail';
 import BookingSuccess from './pages/BookingSuccess';
 import BookingCancelled from './pages/BookingCancelled';
+import Classroom from './pages/Classroom';
 import { useTenant } from './hooks/useTenant';
 
 const TutorShell = () => (
@@ -50,6 +51,7 @@ const TutorShell = () => (
     <Route path="/login" element={<Login />} />
     <Route path="/booking/success" element={<BookingSuccess />} />
     <Route path="/booking/cancelled" element={<BookingCancelled />} />
+    <Route path="/classroom/:bookingId" element={<Classroom />} />
     <Route path="*" element={<Navigate to="/" replace />} />
   </Routes>
 );
@@ -75,6 +77,7 @@ const ApexShell = () => {
           <Route element={<ProtectedRoute />}>
             <Route path="/onboarding/return" element={<OnboardingReturn />} />
             <Route path="/onboarding/refresh" element={<OnboardingRefresh />} />
+            <Route path="/classroom/:bookingId" element={<Classroom />} />
             <Route path="/projects" element={<ProjectList />} />
             <Route path="/projects/:id" element={<ProjectDetail />} />
             <Route path="/requests" element={<RequestList />} />

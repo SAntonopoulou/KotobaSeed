@@ -16,6 +16,7 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
+import httpx
 import stripe
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr, Field
@@ -799,6 +800,125 @@ def list_tutor_bookings(
         _serialize_booking(b, student=students.get(b.student_user_id), pack=packs.get(b.lesson_pack_id))
         for b in rows
     ]
+
+
+class ClassroomTokenResponse(BaseModel):
+    room_url: str
+    token: str
+    role: str  # "tutor" or "student"
+
+
+def _generate_room_name(booking: Booking) -> str:
+    """Stable per-booking room slug."""
+    return f"kb-{booking.id}-{int(booking.scheduled_at.timestamp())}"
+
+
+def _classroom_window_ok(booking: Booking) -> tuple[bool, str | None]:
+    """Return (allowed, reason_if_not). Doors open `classroom_join_lead_minutes`
+    before scheduled_at and close `classroom_join_grace_minutes` after the
+    end."""
+    now = datetime.now(UTC)
+    scheduled = booking.scheduled_at
+    if scheduled.tzinfo is None:
+        scheduled = scheduled.replace(tzinfo=UTC)
+    open_at = scheduled - timedelta(minutes=settings.classroom_join_lead_minutes)
+    close_at = (
+        scheduled
+        + timedelta(minutes=booking.duration_minutes + settings.classroom_join_grace_minutes)
+    )
+    if now < open_at:
+        return False, f"The classroom opens at {open_at.isoformat()} (15 min before the lesson)."
+    if now > close_at:
+        return False, "This lesson is over — the classroom is closed."
+    return True, None
+
+
+def _ensure_room(booking: Booking, session: Session) -> tuple[str, str]:
+    """Lazy-create the Daily room and memoize on the Booking row.
+
+    Returns (room_name, room_url). Raises DailyNotConfiguredError if the
+    platform isn't wired for Daily, or any httpx error if the API call
+    fails.
+    """
+    from ..services.daily import create_room, default_room_expiry
+
+    if booking.daily_room_name and booking.daily_room_url:
+        return booking.daily_room_name, booking.daily_room_url
+
+    name = _generate_room_name(booking)
+    room = create_room(
+        name=name,
+        expires_at=default_room_expiry(booking.scheduled_at, booking.duration_minutes),
+    )
+    booking.daily_room_name = room["name"]
+    booking.daily_room_url = room["url"]
+    booking.updated_at = datetime.now(UTC)
+    session.add(booking)
+    session.commit()
+    session.refresh(booking)
+    return booking.daily_room_name, booking.daily_room_url
+
+
+def _mint_classroom_token(
+    *,
+    booking: Booking,
+    user: User,
+    is_owner: bool,
+    session: Session,
+) -> ClassroomTokenResponse:
+    """Shared inside-the-classroom-token logic for tutor + student endpoints."""
+    from ..services.daily import (
+        DailyNotConfiguredError,
+        create_meeting_token,
+        default_token_expiry,
+    )
+
+    if booking.status not in (BookingStatus.CONFIRMED, BookingStatus.COMPLETED):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Booking is {booking.status.value}; classroom only opens for confirmed lessons.",
+        )
+    ok, reason = _classroom_window_ok(booking)
+    if not ok:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=reason)
+
+    try:
+        room_name, room_url = _ensure_room(booking, session)
+        token = create_meeting_token(
+            room_name=room_name,
+            user_name=user.full_name or user.email,
+            is_owner=is_owner,
+            expires_at=default_token_expiry(booking.scheduled_at, booking.duration_minutes),
+        )
+    except DailyNotConfiguredError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+        ) from None
+    except httpx.HTTPError:
+        log.exception("Daily.co API error for booking #%s", booking.id)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Classroom video service is having a moment. Try again.",
+        ) from None
+
+    return ClassroomTokenResponse(
+        room_url=room_url, token=token, role="tutor" if is_owner else "student"
+    )
+
+
+@router.post("/bookings/{booking_id}/classroom-token", response_model=ClassroomTokenResponse)
+def tutor_classroom_token(
+    booking_id: int,
+    current: CurrentUser,
+    tutor: CurrentTutor,
+    session: Annotated[Session, Depends(get_session)],
+) -> ClassroomTokenResponse:
+    """Tutor-side classroom join. Owner-only. Tutor joins as Daily room owner."""
+    _require_owner(tutor, current)
+    booking = session.get(Booking, booking_id)
+    if not booking or booking.tutor_id != tutor.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found.")
+    return _mint_classroom_token(booking=booking, user=current, is_owner=True, session=session)
 
 
 @router.post("/bookings/{booking_id}/complete", response_model=BookingRead)

@@ -115,6 +115,21 @@ class Settings(BaseSettings):
     resend_from_email: str = "noreply@kotobaseed.net"
     resend_from_name: str = "Kotobaseed"
 
+    # ----- Classroom video (Daily.co) -------------------------------------
+    # Unset is fine — the classroom endpoint returns 503 with a clear
+    # message so the rest of the platform keeps working in environments
+    # that haven't wired it yet.
+    daily_api_key: str | None = None
+    # Subdomain on Daily.co (e.g. "kotobaseed" for kotobaseed.daily.co).
+    # Used only for constructing URLs — Daily's API tells us the URL too,
+    # so this is a hint, not load-bearing.
+    daily_domain: str | None = None
+    # How many minutes before scheduled_at a student/tutor can join.
+    classroom_join_lead_minutes: int = 15
+    # Grace period after scheduled_at + duration for re-joining (e.g. after
+    # a disconnect). The room itself expires shortly after.
+    classroom_join_grace_minutes: int = 30
+
 
 @lru_cache
 def get_settings() -> Settings:

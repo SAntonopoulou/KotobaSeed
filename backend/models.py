@@ -600,6 +600,9 @@ class Booking(SQLModel, table=True):
     # Stripe wiring
     stripe_checkout_session_id: str | None = Field(default=None, max_length=128, index=True)
     stripe_payment_intent_id: str | None = Field(default=None, max_length=128, index=True)
+    # Daily.co classroom — populated on first join (lazy).
+    daily_room_name: str | None = Field(default=None, max_length=128)
+    daily_room_url: str | None = Field(default=None, max_length=512)
     # Lifecycle timestamps
     paid_at: datetime | None = Field(default=None)
     completed_at: datetime | None = Field(default=None)

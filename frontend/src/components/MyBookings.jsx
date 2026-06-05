@@ -1,6 +1,19 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import client from '../api/client';
 import { tutorSiteUrl } from '../hooks/useTenant';
+
+const CLASSROOM_LEAD_MIN = 15;
+const CLASSROOM_GRACE_MIN = 30;
+
+const canJoinClassroom = (booking) => {
+  if (booking.status !== 'confirmed') return false;
+  const start = new Date(booking.scheduled_at).getTime();
+  const open = start - CLASSROOM_LEAD_MIN * 60_000;
+  const close = start + (booking.duration_minutes + CLASSROOM_GRACE_MIN) * 60_000;
+  const now = Date.now();
+  return now >= open && now <= close;
+};
 
 const formatDate = (iso) => {
   try {
@@ -110,6 +123,14 @@ const MyBookings = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className={`px-2 py-0.5 rounded text-xs font-medium ${meta.tone}`}>{meta.label}</span>
+                  {canJoinClassroom(b) && (
+                    <Link
+                      to={`/classroom/${b.id}`}
+                      className="text-sm px-3 py-1 rounded-md bg-emerald-600 text-white font-medium hover:bg-emerald-700"
+                    >
+                      Join
+                    </Link>
+                  )}
                   {canCancel(b) && (
                     <button
                       type="button"

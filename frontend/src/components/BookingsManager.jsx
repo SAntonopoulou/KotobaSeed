@@ -1,5 +1,18 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import client from '../api/client';
+
+const CLASSROOM_LEAD_MIN = 15;
+const CLASSROOM_GRACE_MIN = 30;
+
+const canJoinClassroom = (booking) => {
+  if (booking.status !== 'confirmed') return false;
+  const start = new Date(booking.scheduled_at).getTime();
+  const open = start - CLASSROOM_LEAD_MIN * 60_000;
+  const close = start + (booking.duration_minutes + CLASSROOM_GRACE_MIN) * 60_000;
+  const now = Date.now();
+  return now >= open && now <= close;
+};
 
 const formatDate = (iso) => {
   try {
@@ -160,9 +173,24 @@ const BookingsManager = () => {
                 Upcoming ({upcoming.length})
               </h3>
               <ul className="border border-kotoba-text/10 rounded-lg divide-y divide-kotoba-text/10">
-                {upcoming.map((b) => (
-                  <Row key={b.id} booking={b} />
-                ))}
+                {upcoming.map((b) =>
+                  canJoinClassroom(b) ? (
+                    <Row
+                      key={b.id}
+                      booking={b}
+                      action={
+                        <Link
+                          to={`/classroom/${b.id}`}
+                          className="text-sm px-3 py-1.5 rounded-md bg-kotoba-primary text-white font-medium hover:bg-green-800"
+                        >
+                          Join class
+                        </Link>
+                      }
+                    />
+                  ) : (
+                    <Row key={b.id} booking={b} />
+                  )
+                )}
               </ul>
             </div>
           )}

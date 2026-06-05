@@ -175,6 +175,36 @@ def update_me(
     return current_user
 
 
+class StudentClassroomTokenResponse(BaseModel):
+    room_url: str
+    token: str
+    role: str = "student"
+
+
+@router.post("/me/bookings/{booking_id}/classroom-token", response_model=StudentClassroomTokenResponse)
+def student_classroom_token(
+    booking_id: int,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Student-side classroom join. Returns a Daily.co meeting token + room
+    URL. Time-gated identically to the tutor-side endpoint.
+
+    Delegates to the same `_mint_classroom_token` helper as
+    /tutor/bookings/{id}/classroom-token so the policy + room-creation
+    logic stays in one place.
+    """
+    from .tutor_site import _mint_classroom_token
+
+    booking = session.get(Booking, booking_id)
+    if not booking or booking.student_user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found.")
+    resp = _mint_classroom_token(
+        booking=booking, user=current_user, is_owner=False, session=session
+    )
+    return StudentClassroomTokenResponse(room_url=resp.room_url, token=resp.token)
+
+
 class StudentBookingRead(BaseModel):
     id: int
     tutor_slug: str | None
