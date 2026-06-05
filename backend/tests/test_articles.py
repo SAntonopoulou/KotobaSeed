@@ -199,6 +199,178 @@ def test_patch_can_rename_slug(client, vasso_tutor, teacher_user):
     assert r.json()["slug"] == "renamed-post"
 
 
+def test_default_visibility_is_public(client, vasso_tutor, teacher_user):
+    r = _create(client, auth_headers_for(teacher_user), title="Default")
+    assert r.json()["visibility"] == "public"
+
+
+def test_create_with_subscribers_only_visibility(client, vasso_tutor, teacher_user):
+    r = _create(
+        client,
+        auth_headers_for(teacher_user),
+        title="Sub only",
+        visibility="subscribers_only",
+        is_published=True,
+    )
+    assert r.json()["visibility"] == "subscribers_only"
+    # The public articles index hides it.
+    listing = client.get("/articles", headers={"Host": HOST})
+    assert all(a["slug"] != r.json()["slug"] for a in listing.json())
+
+
+def test_public_reader_404s_subscribers_only_for_anon(
+    client, vasso_tutor, teacher_user
+):
+    _create(
+        client,
+        auth_headers_for(teacher_user),
+        title="Locked",
+        visibility="subscribers_only",
+        is_published=True,
+    )
+    r = client.get("/articles/locked", headers={"Host": HOST})
+    assert r.status_code == 404
+
+
+def test_public_reader_lets_subscribers_through(
+    client, vasso_tutor, teacher_user, db_session
+):
+    """An active StudentTutorSubscription unlocks subscribers-only articles."""
+    from datetime import UTC, datetime, timedelta
+
+    from backend.models import (
+        StudentTutorSubscription,
+        TutorAccountStatus,
+        TutorSubscriptionStatus,
+        User,
+        UserRole,
+    )
+    from backend.security import get_password_hash
+
+    vasso_tutor.account_status = TutorAccountStatus.ACTIVE
+    db_session.add(vasso_tutor)
+    db_session.commit()
+    _create(
+        client,
+        auth_headers_for(teacher_user),
+        title="Locked",
+        visibility="subscribers_only",
+        is_published=True,
+    )
+    student = User(
+        email="sub@example.com",
+        hashed_password=get_password_hash("password123"),
+        full_name="S",
+        role=UserRole.STUDENT,
+        is_active=True,
+        email_verified_at=datetime.now(UTC),
+    )
+    db_session.add(student)
+    db_session.commit()
+    db_session.refresh(student)
+    db_session.add(
+        StudentTutorSubscription(
+            tutor_id=vasso_tutor.id,
+            student_user_id=student.id,
+            status=TutorSubscriptionStatus.ACTIVE,
+            stripe_subscription_id="sub_test",
+            stripe_price_cents_snapshot=1500,
+            current_period_end=datetime.now(UTC) + timedelta(days=10),
+        )
+    )
+    db_session.commit()
+    r = client.get(
+        "/articles/locked",
+        headers={"Host": HOST, **auth_headers_for(student)},
+    )
+    assert r.status_code == 200
+
+
+def test_owner_can_read_own_subscribers_only_article(
+    client, vasso_tutor, teacher_user
+):
+    _create(
+        client,
+        auth_headers_for(teacher_user),
+        title="Mine",
+        visibility="subscribers_only",
+        is_published=True,
+    )
+    r = client.get(
+        "/articles/mine",
+        headers={"Host": HOST, **auth_headers_for(teacher_user)},
+    )
+    assert r.status_code == 200
+
+
+def test_module_only_visible_via_module_purchase(
+    client, vasso_tutor, teacher_user, db_session
+):
+    from datetime import UTC, datetime
+
+    from backend.models import (
+        LessonModule,
+        ModulePurchase,
+        TutorAccountStatus,
+        User,
+        UserRole,
+    )
+    from backend.security import get_password_hash
+
+    vasso_tutor.account_status = TutorAccountStatus.ACTIVE
+    db_session.add(vasso_tutor)
+    db_session.commit()
+    article_create = _create(
+        client,
+        auth_headers_for(teacher_user),
+        title="Module Lesson",
+        visibility="module_only",
+        is_published=True,
+    )
+    article_id = article_create.json()["id"]
+    article_slug = article_create.json()["slug"]
+    # Create a module that includes this article.
+    import json as _json
+
+    module = LessonModule(
+        tutor_id=vasso_tutor.id,
+        slug="m1",
+        title="M1",
+        items_json=_json.dumps([{"kind": "article", "ref_id": article_id}]),
+        is_published=True,
+        published_at=datetime.now(UTC),
+        price_cents=1000,
+    )
+    db_session.add(module)
+    db_session.commit()
+    db_session.refresh(module)
+    student = User(
+        email="moduleowner@example.com",
+        hashed_password=get_password_hash("password123"),
+        full_name="O",
+        role=UserRole.STUDENT,
+        is_active=True,
+        email_verified_at=datetime.now(UTC),
+    )
+    db_session.add(student)
+    db_session.commit()
+    db_session.refresh(student)
+    db_session.add(
+        ModulePurchase(
+            module_id=module.id,
+            tutor_id=vasso_tutor.id,
+            student_user_id=student.id,
+            amount_cents=1000,
+        )
+    )
+    db_session.commit()
+    r = client.get(
+        f"/articles/{article_slug}",
+        headers={"Host": HOST, **auth_headers_for(student)},
+    )
+    assert r.status_code == 200
+
+
 def test_patch_slug_rename_dedups_against_others(client, vasso_tutor, teacher_user):
     """Renaming to a slug another article already has appends -2."""
     _create(client, auth_headers_for(teacher_user), title="Taken")

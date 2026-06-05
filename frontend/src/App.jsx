@@ -50,6 +50,7 @@ import TakeAssignment from './pages/TakeAssignment';
 import PlacementTest from './pages/PlacementTest';
 import ModulesStorefront from './pages/ModulesStorefront';
 import ModuleDetail from './pages/ModuleDetail';
+import MySubscriptions from './pages/MySubscriptions';
 import { useTenant } from './hooks/useTenant';
 
 const TutorShell = () => (
@@ -110,6 +111,7 @@ const ApexShell = () => {
             <Route path="/student/dashboard" element={<StudentDashboard />} />
             <Route path="/student/:id/archive" element={<StudentArchive />} />
             <Route path="/student/assignments" element={<MyAssignments />} />
+            <Route path="/student/subscriptions" element={<MySubscriptions />} />
             <Route path="/student/assignments/:id" element={<TakeAssignment />} />
 
             {/* Teacher Routes */}

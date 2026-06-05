@@ -20,6 +20,7 @@ import HomeworkTemplatesManager from '../components/HomeworkTemplatesManager';
 import HomeworkAssignmentsManager from '../components/HomeworkAssignmentsManager';
 import PlacementTestManager from '../components/PlacementTestManager';
 import ModulesManager from '../components/ModulesManager';
+import SubscriptionPlanManager from '../components/SubscriptionPlanManager';
 
 // Pull the token out of the URL fragment (#token=...) if present, store it,
 // then scrub the URL so the token doesn't sit in the address bar.
@@ -345,6 +346,8 @@ const TutorDashboard = () => {
         <PlacementTestManager />
 
         <ModulesManager />
+
+        <SubscriptionPlanManager />
 
         <TestimonialsManager />
 

@@ -240,6 +240,21 @@ def _has_purchased(
     )
 
 
+def _has_access(
+    session: Session,
+    *,
+    module_id: int,
+    tutor_id: int,
+    student_id: int,
+) -> bool:
+    """Owns this module OR is subscribed to the tutor's content."""
+    from ..services.content_access import has_module_access
+
+    return has_module_access(
+        session, module_id=module_id, tutor_id=tutor_id, student_user_id=student_id
+    )
+
+
 # --- Owner: CRUD ----------------------------------------------------
 
 
@@ -402,7 +417,9 @@ def read_public_module(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Module not found.")
     purchased = False
     if current is not None:
-        purchased = _has_purchased(session, module_id=row.id, student_id=current.id)
+        purchased = _has_access(
+            session, module_id=row.id, tutor_id=tutor.id, student_id=current.id
+        )
     return _to_read(row, purchased=purchased)
 
 
@@ -460,6 +477,17 @@ def start_module_checkout(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="You already own this module.",
+        )
+    # If they're already a subscriber to this tutor's content, redirect
+    # them to use that instead of double-charging.
+    from ..services.content_access import has_active_subscription
+
+    if has_active_subscription(
+        session, tutor_id=tutor.id, student_user_id=current.id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="You already get this module through your subscription.",
         )
     if not tutor.stripe_connect_account_id:
         raise HTTPException(
@@ -563,6 +591,15 @@ def start_premium_homework_checkout(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="You already own this homework.",
+        )
+    from ..services.content_access import has_active_subscription
+
+    if has_active_subscription(
+        session, tutor_id=tutor.id, student_user_id=current.id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="You already get this homework through your subscription.",
         )
     if not tutor.stripe_connect_account_id:
         raise HTTPException(

@@ -829,6 +829,79 @@ class HomeworkPurchase(SQLModel, table=True):
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
+class TutorSubscriptionStatus(str, Enum):
+    """Mirrors Stripe's subscription statuses we actually care about.
+
+    Stripe has more (incomplete, incomplete_expired, etc.) — we collapse
+    everything that isn't active/trialing/past_due/cancelled into
+    `unpaid` so the access check is a clean two-way comparison.
+    """
+
+    ACTIVE = "active"
+    PAST_DUE = "past_due"
+    CANCELLED = "cancelled"
+    UNPAID = "unpaid"
+
+
+class TutorSubscriptionPlan(SQLModel, table=True):
+    """One per tutor — the price + cadence of their content subscription.
+
+    Stripe Price objects aren't created up-front; we pass `price_data`
+    inline on each Checkout Session, which means changing the price
+    here doesn't affect existing subscribers (Stripe keeps charging
+    them at the price they signed up for).
+    """
+
+    __tablename__ = "tutor_subscription_plan"
+
+    id: int | None = Field(default=None, primary_key=True)
+    tutor_id: int = Field(foreign_key="tutor.id", unique=True, index=True)
+    price_cents: int = Field(default=0, ge=0)
+    currency: str = Field(default="eur", max_length=3)
+    is_active: bool = Field(default=False, index=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class StudentTutorSubscription(SQLModel, table=True):
+    """A student's recurring subscription to one tutor's content.
+
+    Composite uniqueness on (tutor_id, student_user_id) so the webhook
+    can re-grant idempotently on duplicate events. Status + current
+    period end together determine access — `is_active_now()` returns
+    True when status is ACTIVE/PAST_DUE/TRIALING AND the period hasn't
+    elapsed yet. PAST_DUE counts as active so a delayed renewal doesn't
+    lock the student out mid-month.
+    """
+
+    __tablename__ = "student_tutor_subscription"
+    __table_args__ = (
+        UniqueConstraint(
+            "tutor_id", "student_user_id", name="uq_student_tutor_sub_pair"
+        ),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    tutor_id: int = Field(foreign_key="tutor.id", index=True)
+    student_user_id: int = Field(foreign_key="user.id", index=True)
+    status: TutorSubscriptionStatus = Field(
+        default=TutorSubscriptionStatus.UNPAID, index=True
+    )
+    # Stripe references — the webhook stamps these so we can refund or
+    # debug later from either side.
+    stripe_subscription_id: str | None = Field(
+        default=None, max_length=128, index=True
+    )
+    stripe_customer_id: str | None = Field(default=None, max_length=128)
+    stripe_price_cents_snapshot: int = Field(default=0, ge=0)
+    currency: str = Field(default="eur", max_length=3)
+    current_period_end: datetime | None = Field(default=None)
+    cancel_at_period_end: bool = Field(default=False)
+    started_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    cancelled_at: datetime | None = Field(default=None)
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
 class LessonModule(SQLModel, table=True):
     """A self-paced lesson module — a tutor's curriculum unit.
 
@@ -1076,13 +1149,32 @@ class Testimonial(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
+class ArticleVisibility(str, Enum):
+    """Who can read this article.
+
+    - public: anyone visiting /articles. Default — backwards-compatible
+      with everything that already exists.
+    - subscribers_only: hidden from the public articles index; readable
+      by students with an active TutorSubscription to this tutor (or
+      anyone who owns a module that contains it).
+    - module_only: not on the public articles index at all; accessible
+      only as an item inside a paid/subscribed module. Lets the tutor
+      write self-paced lesson content that isn't a standalone blog post.
+    """
+
+    PUBLIC = "public"
+    SUBSCRIBERS_ONLY = "subscribers_only"
+    MODULE_ONLY = "module_only"
+
+
 class Article(SQLModel, table=True):
     """A per-tutor markdown article — blog posts, free resources, lesson notes.
 
     The same model serves all three use-cases (the tutor's choice) so we
     don't have to fork CRUD for "lessons" vs "articles" vs "freebies". The
     public list at /articles/ on the tutor's subdomain shows whatever is
-    `is_published=True`; the reader at /articles/<slug>/ renders one row.
+    `is_published=True AND visibility=public`; the reader at
+    /articles/<slug>/ enforces visibility on top.
 
     Slugs are unique per tutor so two tutors can both have an article at
     `welcome` without colliding. Globally-unique would force tutors to
@@ -1092,6 +1184,10 @@ class Article(SQLModel, table=True):
     __tablename__ = "article"
     __table_args__ = (
         UniqueConstraint("tutor_id", "slug", name="uq_article_tutor_slug"),
+    )
+
+    visibility: ArticleVisibility = Field(
+        default=ArticleVisibility.PUBLIC, index=True
     )
 
     id: int | None = Field(default=None, primary_key=True)

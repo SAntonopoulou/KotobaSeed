@@ -339,6 +339,110 @@ def _handle_premium_homework_checkout(
     return True
 
 
+def _handle_tutor_subscription_checkout(session: Session, data_object: dict) -> bool:
+    """Grant/refresh a StudentTutorSubscription row on checkout.session
+    .completed for mode=subscription. Idempotent on (tutor_id,
+    student_user_id) — retries are safe."""
+    metadata = data_object.get("metadata", {})
+    if metadata.get("type") != "tutor_subscription":
+        return False
+    if data_object.get("mode") != "subscription":
+        # Some legacy events might be missing mode; bail out silently to
+        # avoid accidentally grants from non-subscription completes.
+        return True
+    try:
+        tutor_id = int(metadata.get("tutor_id"))
+        student_user_id = int(metadata.get("student_user_id"))
+    except (TypeError, ValueError):
+        logger.warning("Tutor sub checkout missing metadata: %s", metadata)
+        return True
+    from ..models import (
+        StudentTutorSubscription,
+        TutorSubscriptionPlan,
+        TutorSubscriptionStatus,
+    )
+
+    plan = session.exec(
+        select(TutorSubscriptionPlan).where(
+            TutorSubscriptionPlan.tutor_id == tutor_id
+        )
+    ).first()
+    price_cents = plan.price_cents if plan is not None else 0
+    currency = plan.currency if plan is not None else "eur"
+    existing = session.exec(
+        select(StudentTutorSubscription).where(
+            StudentTutorSubscription.tutor_id == tutor_id,
+            StudentTutorSubscription.student_user_id == student_user_id,
+        )
+    ).first()
+    stripe_sub_id = data_object.get("subscription")
+    customer_id = data_object.get("customer")
+    if existing is None:
+        existing = StudentTutorSubscription(
+            tutor_id=tutor_id,
+            student_user_id=student_user_id,
+            status=TutorSubscriptionStatus.ACTIVE,
+            stripe_subscription_id=stripe_sub_id,
+            stripe_customer_id=customer_id,
+            stripe_price_cents_snapshot=price_cents,
+            currency=currency,
+        )
+    else:
+        existing.status = TutorSubscriptionStatus.ACTIVE
+        existing.stripe_subscription_id = stripe_sub_id
+        existing.stripe_customer_id = customer_id
+        existing.stripe_price_cents_snapshot = price_cents
+        existing.currency = currency
+        existing.cancelled_at = None
+        existing.cancel_at_period_end = False
+    existing.updated_at = datetime.now(UTC)
+    session.add(existing)
+    session.commit()
+    return True
+
+
+def _stripe_status_to_local(stripe_status: str | None):
+    from ..models import TutorSubscriptionStatus
+
+    return {
+        "active": TutorSubscriptionStatus.ACTIVE,
+        "trialing": TutorSubscriptionStatus.ACTIVE,
+        "past_due": TutorSubscriptionStatus.PAST_DUE,
+        "canceled": TutorSubscriptionStatus.CANCELLED,
+        "unpaid": TutorSubscriptionStatus.UNPAID,
+    }.get(stripe_status or "", TutorSubscriptionStatus.UNPAID)
+
+
+def handle_subscription_event(session: Session, data_object: dict) -> bool:
+    """Refresh local row from a customer.subscription.{updated,deleted}
+    event. Returns True when we found a matching row, False otherwise."""
+    from ..models import StudentTutorSubscription
+
+    stripe_sub_id = data_object.get("id")
+    if not stripe_sub_id:
+        return False
+    row = session.exec(
+        select(StudentTutorSubscription).where(
+            StudentTutorSubscription.stripe_subscription_id == stripe_sub_id
+        )
+    ).first()
+    if row is None:
+        return False
+    row.status = _stripe_status_to_local(data_object.get("status"))
+    period_end = data_object.get("current_period_end")
+    if period_end is not None:
+        row.current_period_end = datetime.fromtimestamp(int(period_end), UTC)
+    row.cancel_at_period_end = bool(data_object.get("cancel_at_period_end"))
+    if data_object.get("canceled_at"):
+        row.cancelled_at = datetime.fromtimestamp(
+            int(data_object["canceled_at"]), UTC
+        )
+    row.updated_at = datetime.now(UTC)
+    session.add(row)
+    session.commit()
+    return True
+
+
 def handle_checkout_session_completed(session: Session, data_object: dict):
     metadata = data_object.get("metadata", {})
     if _handle_booking_checkout(session, data_object):
@@ -346,6 +450,8 @@ def handle_checkout_session_completed(session: Session, data_object: dict):
     if _handle_module_checkout(session, data_object):
         return
     if _handle_premium_homework_checkout(session, data_object):
+        return
+    if _handle_tutor_subscription_checkout(session, data_object):
         return
     if metadata.get("type") == "tip":
         try:
@@ -528,6 +634,11 @@ async def stripe_webhook(
         handle_account_updated(session, data)
     elif event_type == "charge.refunded":
         handle_charge_refunded(session, data)
+    elif event_type in (
+        "customer.subscription.updated",
+        "customer.subscription.deleted",
+    ):
+        handle_subscription_event(session, data)
     else:
         logger.info(f"Unhandled event type: {event_type}")
 

@@ -112,7 +112,11 @@ def test_trial_booking_fires_confirmation_emails(
         json={"offers_free_trial": True, "free_trial_minutes": 30},
         headers={"Host": "vasso.kotobaseed.net", **auth_headers_for(teacher_user)},
     )
-    when = datetime.now(UTC) + timedelta(days=1)
+    # Anchor at noon so the trial slot never crosses midnight on hosts
+    # where the wall clock is late in the day.
+    when = (datetime.now(UTC) + timedelta(days=1)).replace(
+        hour=12, minute=0, second=0, microsecond=0
+    )
     db_session.add(
         TutorAvailability(
             tutor_id=active_tutor.id,

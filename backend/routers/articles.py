@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 
 from ..database import get_session
-from ..deps import CurrentUser
+from ..deps import CurrentUser, get_current_user_optional
 from ..models import Article, Tutor, User
 from ..tenancy import CurrentTutor
 
@@ -78,6 +78,7 @@ class ArticleSummary(BaseModel):
     title: str
     summary: str | None
     is_published: bool
+    visibility: str
     published_at: datetime | None
     updated_at: datetime
 
@@ -101,6 +102,10 @@ class ArticleCreate(BaseModel):
     lexical_json: str | None = Field(default=None, max_length=500_000)
     slug: str | None = Field(default=None, max_length=120)
     is_published: bool = False
+    visibility: str = Field(
+        default="public",
+        pattern=r"^(public|subscribers_only|module_only)$",
+    )
 
 
 class ArticleUpdate(BaseModel):
@@ -110,6 +115,10 @@ class ArticleUpdate(BaseModel):
     lexical_json: str | None = Field(default=None, max_length=500_000)
     slug: str | None = Field(default=None, max_length=120)
     is_published: bool | None = None
+    visibility: str | None = Field(
+        default=None,
+        pattern=r"^(public|subscribers_only|module_only)$",
+    )
 
 
 def _require_owner(tutor: Tutor, current: User) -> None:
@@ -127,6 +136,7 @@ def _to_summary(article: Article) -> ArticleSummary:
         title=article.title,
         summary=article.summary,
         is_published=article.is_published,
+        visibility=article.visibility,
         published_at=article.published_at,
         updated_at=article.updated_at,
     )
@@ -141,6 +151,7 @@ def _to_read(article: Article) -> ArticleRead:
         body_markdown=article.body_markdown,
         lexical_json=article.lexical_json,
         is_published=article.is_published,
+        visibility=article.visibility,
         published_at=article.published_at,
         updated_at=article.updated_at,
     )
@@ -154,12 +165,15 @@ def list_published_articles(
     tutor: CurrentTutor,
     session: Annotated[Session, Depends(get_session)],
 ) -> list[ArticleSummary]:
-    """Public — published articles for the resolved tenant, newest first."""
+    """Public — published, PUBLICLY-visible articles only. Subscriber-only
+    and module-only articles are intentionally hidden from this feed so
+    the public articles index stays focused on the tutor's free content."""
     rows = session.exec(
         select(Article)
         .where(
             Article.tutor_id == tutor.id,
             Article.is_published == True,  # noqa: E712
+            Article.visibility == "public",
         )
         .order_by(Article.published_at.desc())
     ).all()
@@ -188,9 +202,18 @@ def read_article_by_slug(
     slug: str,
     tutor: CurrentTutor,
     session: Annotated[Session, Depends(get_session)],
+    current: Annotated[User | None, Depends(get_current_user_optional)] = None,
 ) -> ArticleRead:
-    """Public — single published article by slug. 404 for drafts (don't
-    leak the existence of unpublished content)."""
+    """Single published article by slug.
+
+    Visibility rules:
+    - public → anyone reads
+    - subscribers_only → only active subscribers (or the tutor themselves)
+    - module_only → only students who own a module containing it OR
+      active subscribers (or the tutor themselves)
+    Returns 404 for missing access so we never leak that a gated article
+    exists at a given slug.
+    """
     article = session.exec(
         select(Article).where(
             Article.tutor_id == tutor.id,
@@ -200,7 +223,44 @@ def read_article_by_slug(
     ).first()
     if article is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Article not found.")
-    return _to_read(article)
+    if article.visibility == "public":
+        return _to_read(article)
+    # The owner can always read their own articles regardless of visibility.
+    if current is not None and current.id == tutor.user_id:
+        return _to_read(article)
+    if current is None:
+        # Don't reveal that the article exists — same 404 the missing
+        # case would return.
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Article not found.")
+    from ..services.content_access import has_active_subscription
+
+    if has_active_subscription(
+        session, tutor_id=tutor.id, student_user_id=current.id
+    ):
+        return _to_read(article)
+    if article.visibility == "module_only":
+        # Find module purchases for this student against this tutor, then
+        # see whether any of those module item lists references this article.
+        from ..models import LessonModule, ModulePurchase
+        from ..routers.modules import _parse_items
+
+        purchase_rows = session.exec(
+            select(ModulePurchase).where(
+                ModulePurchase.tutor_id == tutor.id,
+                ModulePurchase.student_user_id == current.id,
+                ModulePurchase.refunded_at == None,  # noqa: E711
+            )
+        ).all()
+        module_ids = [p.module_id for p in purchase_rows]
+        if module_ids:
+            owned_modules = session.exec(
+                select(LessonModule).where(LessonModule.id.in_(module_ids))
+            ).all()
+            for m in owned_modules:
+                for it in _parse_items(m.items_json):
+                    if it["kind"] == "article" and it["ref_id"] == article.id:
+                        return _to_read(article)
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Article not found.")
 
 
 # --- Owner writes --------------------------------------------------------
@@ -246,6 +306,7 @@ def create_article(
         body_markdown=payload.body_markdown,
         lexical_json=payload.lexical_json,
         is_published=payload.is_published,
+        visibility=payload.visibility,
         published_at=now if payload.is_published else None,
     )
     session.add(article)
@@ -287,6 +348,8 @@ def update_article(
             # preserves the original published_at so syndication readers
             # don't re-surface old posts as new.
             article.published_at = datetime.now(UTC)
+    if "visibility" in changes:
+        article.visibility = changes["visibility"]
     article.updated_at = datetime.now(UTC)
     session.add(article)
     session.commit()

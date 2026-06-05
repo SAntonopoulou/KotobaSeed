@@ -61,7 +61,10 @@ def _seed_regular_only_window(db_session: Session, tutor, weekday: int) -> None:
 
 def _future_target(db_session: Session, tutor, days: int, *, allow_trial: bool = True):
     """Pick a future datetime and seed a matching window on that weekday."""
-    when = datetime.now(UTC) + timedelta(days=days)
+    # Anchor at noon UTC so a 20-min trial never crosses midnight.
+    when = (datetime.now(UTC) + timedelta(days=days)).replace(
+        hour=12, minute=0, second=0, microsecond=0
+    )
     if allow_trial:
         _seed_trial_window(db_session, tutor, when.weekday())
     else:
@@ -190,31 +193,29 @@ def test_book_trial_enforces_one_per_student_lifetime(
 ):
     """Hard cap of 1 trial per student per tutor — not configurable."""
     _enable_trial(client, teacher_user)
-    # Seed trial windows on three different weekdays so each attempt has a
-    # valid time available — without this the cap test would conflate with
-    # the window check.
-    for offset in (1, 2, 3):
-        _seed_trial_window(
-            db_session,
-            active_tutor,
-            (datetime.now(UTC) + timedelta(days=offset)).weekday(),
-        )
+    # Anchor at noon UTC so trial slots never cross midnight.
+    base = datetime.now(UTC).replace(hour=12, minute=0, second=0, microsecond=0)
+    targets = [base + timedelta(days=o) for o in (1, 2, 3)]
+    # Seed trial windows on each weekday so the cap test isn't confounded
+    # by the new allow_trial-window check.
+    for t in targets:
+        _seed_trial_window(db_session, active_tutor, t.weekday())
     r1 = client.post(
         "/tutor/trial/book",
-        json={"scheduled_at": (datetime.now(UTC) + timedelta(days=1)).isoformat()},
+        json={"scheduled_at": targets[0].isoformat()},
         headers={"Host": "vasso.kotobaseed.net", **auth_headers_for(student_user)},
     )
     assert r1.status_code == 201
     r2 = client.post(
         "/tutor/trial/book",
-        json={"scheduled_at": (datetime.now(UTC) + timedelta(days=2)).isoformat()},
+        json={"scheduled_at": targets[1].isoformat()},
         headers={"Host": "vasso.kotobaseed.net", **auth_headers_for(student_user)},
     )
     assert r2.status_code == 409
     # And a third attempt also blocked — to be very sure the limit is 1, not N.
     r3 = client.post(
         "/tutor/trial/book",
-        json={"scheduled_at": (datetime.now(UTC) + timedelta(days=3)).isoformat()},
+        json={"scheduled_at": targets[2].isoformat()},
         headers={"Host": "vasso.kotobaseed.net", **auth_headers_for(student_user)},
     )
     assert r3.status_code == 409

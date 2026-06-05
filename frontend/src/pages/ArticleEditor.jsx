@@ -18,6 +18,7 @@ const ArticleEditor = () => {
   const [summary, setSummary] = useState('');
   const [slugDraft, setSlugDraft] = useState('');
   const [isPublished, setIsPublished] = useState(false);
+  const [visibility, setVisibility] = useState('public');
   const [bodyMarkdown, setBodyMarkdown] = useState('');
   const [lexicalJson, setLexicalJson] = useState(null);
   const [initialBody, setInitialBody] = useState('');
@@ -41,6 +42,7 @@ const ArticleEditor = () => {
         setSummary(a.summary || '');
         setSlugDraft(a.slug);
         setIsPublished(a.is_published);
+        setVisibility(a.visibility || 'public');
         setInitialBody(a.body_markdown || '');
         setInitialLexical(a.lexical_json || null);
         setBodyMarkdown(a.body_markdown || '');
@@ -79,6 +81,7 @@ const ArticleEditor = () => {
         body_markdown: bodyMarkdown,
         lexical_json: lexicalJson,
         is_published: isPublished,
+        visibility,
       };
       // Only send a slug on update if the tutor changed it — otherwise the
       // server keeps the existing slug rather than reslugifying the title.
@@ -137,7 +140,19 @@ const ArticleEditor = () => {
               {isNew ? 'New article' : 'Edit article'}
             </h1>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <label className="inline-flex items-center gap-2 text-sm">
+              <span className="text-kotoba-text/70">Visibility:</span>
+              <select
+                value={visibility}
+                onChange={(e) => setVisibility(e.target.value)}
+                className="px-2 py-1 border border-kotoba-text/20 rounded text-sm focus:outline-none focus:ring-2 focus:ring-kotoba-primary"
+              >
+                <option value="public">Public (in articles feed)</option>
+                <option value="subscribers_only">Subscribers only</option>
+                <option value="module_only">Module content only</option>
+              </select>
+            </label>
             <label className="inline-flex items-center gap-2 text-sm">
               <input
                 type="checkbox"

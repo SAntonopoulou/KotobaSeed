@@ -38,6 +38,7 @@ from .routers import (
     subscriptions,
     testimonials,
     tutor_site,
+    tutor_subscriptions,
     users,
     verifications,
     videos,
@@ -180,6 +181,7 @@ for router in (
     homework.router,
     placement.router,
     modules.router,
+    tutor_subscriptions.router,
 ):
     app.include_router(router)
 
