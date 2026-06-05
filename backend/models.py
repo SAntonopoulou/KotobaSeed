@@ -675,6 +675,12 @@ class LessonPack(SQLModel, table=True):
     # Auto-managed trial pack. Hidden from the regular-packs UI; reachable
     # only through the tutor's trial settings + the public trial-book flow.
     is_trial: bool = Field(default=False, index=True)
+    # The tutor's headline single-lesson offering. Edited via a dedicated
+    # dashboard widget rather than the LessonPackManager grid — most tutors
+    # only have one single-lesson price, and the inline editor keeps that
+    # common case simple. Public site renders this pack (and any other
+    # num_lessons=1 packs) inline above the multi-lesson packs.
+    is_default_single: bool = Field(default=False, index=True)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 

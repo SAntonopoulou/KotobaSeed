@@ -221,6 +221,7 @@ class LessonPackRead(BaseModel):
     price_cents: int
     currency: str
     is_active: bool
+    is_default_single: bool
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -282,18 +283,142 @@ def list_all_lesson_packs(
     session: Annotated[Session, Depends(get_session)],
 ) -> list[LessonPackRead]:
     """Owner-only — includes inactive paid packs so the dashboard can show
-    + restore. Hides the auto-managed trial pack; the trial is configured
-    through GET/PUT /tutor/trial."""
+    + restore. Hides the auto-managed trial pack AND the headline single-
+    lesson pack; both are configured through dedicated endpoints
+    (/tutor/trial, /tutor/single-lesson) so the LessonPackManager stays
+    focused on multi-lesson packs and any extra single-lesson variants the
+    tutor wants to add."""
     _require_owner(tutor, current)
     rows = session.exec(
         select(LessonPack)
         .where(
             LessonPack.tutor_id == tutor.id,
             LessonPack.is_trial == False,  # noqa: E712
+            LessonPack.is_default_single == False,  # noqa: E712
         )
         .order_by(LessonPack.is_active.desc(), LessonPack.num_lessons.asc(), LessonPack.price_cents.asc())
     ).all()
     return [LessonPackRead.model_validate(r) for r in rows]
+
+
+# --- Headline single lesson ---------------------------------------------
+
+
+class SingleLessonRead(BaseModel):
+    """Owner-side read of the headline single-lesson pack. Returns nulls when
+    the tutor hasn't set one up yet so the dashboard widget can show empty
+    fields without erroring."""
+
+    price_cents: int | None
+    duration_minutes: int | None
+    currency: str | None
+    is_active: bool
+
+
+class SingleLessonUpdate(BaseModel):
+    """Tutor types in their headline single-lesson rate. Both fields required
+    on creation; either can be patched in isolation later."""
+
+    price_cents: int = Field(ge=0, le=10_000_00)
+    duration_minutes: int = Field(ge=15, le=240)
+    currency: str = Field(default="eur", min_length=3, max_length=3)
+
+
+def _get_default_single_pack(tutor: Tutor, session: Session) -> LessonPack | None:
+    """Return the tutor's headline single-lesson pack, if any. There should
+    only ever be one is_default_single=True pack per tutor — we use first()
+    to be lenient in case of historical data."""
+    return session.exec(
+        select(LessonPack).where(
+            LessonPack.tutor_id == tutor.id,
+            LessonPack.is_default_single == True,  # noqa: E712
+        )
+    ).first()
+
+
+@router.get("/single-lesson", response_model=SingleLessonRead)
+def read_single_lesson(
+    tutor: CurrentTutor,
+    session: Annotated[Session, Depends(get_session)],
+) -> SingleLessonRead:
+    """Public — returns the tutor's headline single-lesson config (or nulls).
+    Exposes only the price/duration/active state. The tutor's site uses
+    the regular /lesson-packs feed to render bookable cards."""
+    pack = _get_default_single_pack(tutor, session)
+    if pack is None:
+        return SingleLessonRead(
+            price_cents=None,
+            duration_minutes=None,
+            currency=None,
+            is_active=False,
+        )
+    return SingleLessonRead(
+        price_cents=pack.price_cents,
+        duration_minutes=pack.duration_minutes,
+        currency=pack.currency,
+        is_active=pack.is_active,
+    )
+
+
+@router.put("/single-lesson", response_model=SingleLessonRead)
+def upsert_single_lesson(
+    payload: SingleLessonUpdate,
+    current: CurrentUser,
+    tutor: CurrentTutor,
+    session: Annotated[Session, Depends(get_session)],
+) -> SingleLessonRead:
+    """Owner-only — set or update the headline single-lesson price and
+    duration. Creates the underlying LessonPack with is_default_single=True
+    the first time the tutor saves; subsequent saves just update price +
+    duration."""
+    _require_owner(tutor, current)
+    pack = _get_default_single_pack(tutor, session)
+    now = datetime.now(UTC)
+    if pack is None:
+        pack = LessonPack(
+            tutor_id=tutor.id,
+            name="Single lesson",
+            num_lessons=1,
+            duration_minutes=payload.duration_minutes,
+            price_cents=payload.price_cents,
+            currency=payload.currency,
+            is_active=True,
+            is_default_single=True,
+        )
+        session.add(pack)
+    else:
+        pack.price_cents = payload.price_cents
+        pack.duration_minutes = payload.duration_minutes
+        pack.currency = payload.currency
+        pack.is_active = True
+        pack.updated_at = now
+        session.add(pack)
+    session.commit()
+    session.refresh(pack)
+    return SingleLessonRead(
+        price_cents=pack.price_cents,
+        duration_minutes=pack.duration_minutes,
+        currency=pack.currency,
+        is_active=pack.is_active,
+    )
+
+
+@router.delete("/single-lesson", status_code=status.HTTP_204_NO_CONTENT)
+def deactivate_single_lesson(
+    current: CurrentUser,
+    tutor: CurrentTutor,
+    session: Annotated[Session, Depends(get_session)],
+) -> None:
+    """Owner-only — deactivate the headline single-lesson pack. Soft-delete
+    so any existing bookings continue to read the pack name + duration."""
+    _require_owner(tutor, current)
+    pack = _get_default_single_pack(tutor, session)
+    if pack is None or not pack.is_active:
+        return
+    pack.is_active = False
+    pack.updated_at = datetime.now(UTC)
+    session.add(pack)
+    session.commit()
 
 
 # --- Free trial ----------------------------------------------------------

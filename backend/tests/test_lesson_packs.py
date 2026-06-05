@@ -121,3 +121,114 @@ def test_validation_rejects_silly_inputs(client, vasso_tutor, teacher_user):
     # negative price
     r3 = _make_pack(client, auth_headers_for(teacher_user), price_cents=-1)
     assert r3.status_code == 422
+
+
+# --- Headline single-lesson endpoints ------------------------------------
+
+
+def test_single_lesson_returns_nulls_when_unset(client, vasso_tutor):
+    r = client.get("/tutor/single-lesson", headers={"Host": "vasso.kotobaseed.net"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["price_cents"] is None
+    assert body["duration_minutes"] is None
+    assert body["is_active"] is False
+
+
+def test_single_lesson_put_creates_default_pack(client, vasso_tutor, teacher_user):
+    r = client.put(
+        "/tutor/single-lesson",
+        json={"price_cents": 2500, "duration_minutes": 60, "currency": "eur"},
+        headers={"Host": "vasso.kotobaseed.net", **auth_headers_for(teacher_user)},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["price_cents"] == 2500
+    assert body["duration_minutes"] == 60
+    assert body["is_active"] is True
+
+    # The public lesson-packs feed surfaces it (so the tutor's site can
+    # render it inline).
+    public = client.get("/tutor/lesson-packs", headers={"Host": "vasso.kotobaseed.net"})
+    assert public.status_code == 200
+    items = public.json()
+    assert len(items) == 1
+    assert items[0]["is_default_single"] is True
+
+    # But the owner's "all" feed (used by LessonPackManager) hides it so the
+    # tutor isn't editing the same row in two places.
+    owner_all = client.get(
+        "/tutor/lesson-packs/all",
+        headers={"Host": "vasso.kotobaseed.net", **auth_headers_for(teacher_user)},
+    )
+    assert owner_all.json() == []
+
+
+def test_single_lesson_put_updates_existing(client, vasso_tutor, teacher_user):
+    client.put(
+        "/tutor/single-lesson",
+        json={"price_cents": 2500, "duration_minutes": 60},
+        headers={"Host": "vasso.kotobaseed.net", **auth_headers_for(teacher_user)},
+    )
+    r = client.put(
+        "/tutor/single-lesson",
+        json={"price_cents": 3000, "duration_minutes": 45},
+        headers={"Host": "vasso.kotobaseed.net", **auth_headers_for(teacher_user)},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["price_cents"] == 3000
+    assert body["duration_minutes"] == 45
+
+    # Only one default-single pack ever exists for a tutor.
+    public = client.get("/tutor/lesson-packs", headers={"Host": "vasso.kotobaseed.net"})
+    items = public.json()
+    assert len([p for p in items if p["is_default_single"]]) == 1
+
+
+def test_single_lesson_put_requires_owner(client, vasso_tutor, student_user):
+    r = client.put(
+        "/tutor/single-lesson",
+        json={"price_cents": 2500, "duration_minutes": 60},
+        headers={"Host": "vasso.kotobaseed.net", **auth_headers_for(student_user)},
+    )
+    assert r.status_code == 403
+
+
+def test_single_lesson_delete_soft_deactivates(client, vasso_tutor, teacher_user):
+    client.put(
+        "/tutor/single-lesson",
+        json={"price_cents": 2500, "duration_minutes": 60},
+        headers={"Host": "vasso.kotobaseed.net", **auth_headers_for(teacher_user)},
+    )
+    r = client.delete(
+        "/tutor/single-lesson",
+        headers={"Host": "vasso.kotobaseed.net", **auth_headers_for(teacher_user)},
+    )
+    assert r.status_code == 204
+    # GET returns the soft-deactivated pack but flags it inactive.
+    after = client.get("/tutor/single-lesson", headers={"Host": "vasso.kotobaseed.net"})
+    body = after.json()
+    assert body["is_active"] is False
+    # Public feed no longer surfaces it.
+    public = client.get("/tutor/lesson-packs", headers={"Host": "vasso.kotobaseed.net"})
+    assert public.json() == []
+
+
+def test_single_lesson_put_after_delete_reactivates(client, vasso_tutor, teacher_user):
+    client.put(
+        "/tutor/single-lesson",
+        json={"price_cents": 2500, "duration_minutes": 60},
+        headers={"Host": "vasso.kotobaseed.net", **auth_headers_for(teacher_user)},
+    )
+    client.delete(
+        "/tutor/single-lesson",
+        headers={"Host": "vasso.kotobaseed.net", **auth_headers_for(teacher_user)},
+    )
+    r = client.put(
+        "/tutor/single-lesson",
+        json={"price_cents": 2800, "duration_minutes": 60},
+        headers={"Host": "vasso.kotobaseed.net", **auth_headers_for(teacher_user)},
+    )
+    assert r.status_code == 200
+    assert r.json()["is_active"] is True

@@ -218,7 +218,40 @@ const TutorHome = () => {
           </div>
         )}
 
-        {singleLessons.length > 0 && (
+        {singleLessons.length === 1 && (
+          // Single-lesson inline layout — typical case where a tutor has one
+          // headline rate. Renders as a horizontal row rather than a box so
+          // it reads like a price list line, not a product card.
+          <div className="border-y border-kotoba-text/10 py-4 flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-kotoba-text/60">
+                Single lesson
+              </p>
+              <p className="mt-1 text-kotoba-text">
+                <span className="text-2xl font-extrabold text-kotoba-primary">
+                  {formatPrice(singleLessons[0].price_cents, singleLessons[0].currency)}
+                </span>
+                <span className="ml-2 text-sm text-kotoba-text/70">
+                  · {singleLessons[0].duration_minutes} min
+                </span>
+              </p>
+              {singleLessons[0].description && (
+                <p className="mt-1 text-sm text-kotoba-text/70 whitespace-pre-line">
+                  {singleLessons[0].description}
+                </p>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setBookingPack(singleLessons[0])}
+              className="px-5 py-2.5 rounded-md bg-kotoba-secondary text-kotoba-text font-semibold hover:bg-kotoba-secondary-dark whitespace-nowrap"
+            >
+              Book a lesson
+            </button>
+          </div>
+        )}
+
+        {singleLessons.length > 1 && (
           <div>
             <h3 className="text-sm font-semibold uppercase tracking-wider text-kotoba-text/60 mb-3">
               Single lessons

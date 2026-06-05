@@ -7,6 +7,7 @@ import LessonPackManager from '../components/LessonPackManager';
 import BookingsManager from '../components/BookingsManager';
 import AvailabilityEditor from '../components/AvailabilityEditor';
 import TrialSettings from '../components/TrialSettings';
+import SingleLessonQuickSet from '../components/SingleLessonQuickSet';
 
 // Pull the token out of the URL fragment (#token=...) if present, store it,
 // then scrub the URL so the token doesn't sit in the address bar.
@@ -320,6 +321,8 @@ const TutorDashboard = () => {
         <BookingsManager />
 
         <AvailabilityEditor />
+
+        <SingleLessonQuickSet />
 
         <LessonPackManager />
 
