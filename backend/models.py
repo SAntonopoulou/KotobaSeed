@@ -186,6 +186,10 @@ class User(SQLModel, table=True):
 
     # GDPR consent — captured at signup; required to create an account.
     newsletter_opt_in: bool = Field(default=False)
+    # Public-profile opt-out for students. Teachers and tutors are always
+    # public (it's their business face) — the /profile/<id> endpoint enforces
+    # this rule, so for non-student roles the value is effectively ignored.
+    profile_public: bool = Field(default=True)
     gdpr_consent_at: datetime | None = Field(default=None)
     gdpr_consent_ip: str | None = Field(default=None, max_length=64)
 
@@ -511,6 +515,22 @@ class Achievement(SQLModel, table=True):
     icon_url: str | None = None
 
     users: list["User"] = Relationship(back_populates="achievements", link_model=UserAchievement)
+
+
+class StripeWebhookEvent(SQLModel, table=True):
+    """One row per processed Stripe webhook event.
+
+    Stripe retries webhooks on non-2xx responses (or on network blips); the
+    same event can fire multiple times. Webhook handlers read this table to
+    decide whether they've already done the work — if so, return 200 without
+    re-mutating state.
+    """
+
+    __tablename__ = "stripe_webhook_event"
+
+    event_id: str = Field(primary_key=True, max_length=128)
+    event_type: str = Field(max_length=120)
+    received_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 # ===========================================================================

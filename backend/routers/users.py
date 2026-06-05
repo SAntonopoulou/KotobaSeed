@@ -35,7 +35,39 @@ from ..schemas import FilterOptionsRead, LanguageLevelsRead, PaginatedProjectRea
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
+# Single placeholder User that owns data orphaned by self-delete or admin
+# delete. Lookup-by-email is the way to dedupe; previously this lived in two
+# files with two different addresses and could collide.
+DELETED_USER_EMAIL = "deleted-user@kotobaseed.internal"
+
 router = APIRouter(prefix="/users", tags=["users"])
+
+
+def _get_or_create_deleted_user(session: Session) -> User:
+    """Return the singleton placeholder User that owns orphaned data.
+
+    Idempotent — safe to call from both the self-delete and admin-delete paths.
+    """
+    placeholder = session.exec(
+        select(User).where(User.email == DELETED_USER_EMAIL)
+    ).first()
+    if placeholder:
+        return placeholder
+    now = datetime.now(UTC)
+    placeholder = User(
+        email=DELETED_USER_EMAIL,
+        hashed_password="placeholder_deleted_password",
+        full_name="Deleted User",
+        role=UserRole.STUDENT,
+        is_active=False,
+        created_at=now,
+        updated_at=now,
+        deleted_at=now,
+    )
+    session.add(placeholder)
+    session.commit()
+    session.refresh(placeholder)
+    return placeholder
 
 
 # Pydantic Models
@@ -74,6 +106,7 @@ class UserUpdate(BaseModel):
     intro_video_url: str | None = None
     sample_video_url: str | None = None
     avatar_url: str | None = None
+    profile_public: bool | None = None
 
 
 class ProjectInfoForRating(BaseModel):
@@ -143,23 +176,8 @@ def update_me(
 def delete_me(
     current_user: User = Depends(get_current_user), session: Session = Depends(get_session)
 ):
-    # 1. Find or create the deleted@system user
-    deleted_user_email = "deleted_system_placeholder@example.com"
-    deleted_user = session.exec(select(User).where(User.email == deleted_user_email)).first()
-    if not deleted_user:
-        now = datetime.now(UTC)
-        deleted_user = User(
-            email=deleted_user_email,
-            hashed_password="placeholder_deleted_password",
-            full_name="Deleted User",
-            role=UserRole.STUDENT,
-            created_at=now,
-            updated_at=now,
-            deleted_at=now,
-        )
-        session.add(deleted_user)
-        session.commit()
-        session.refresh(deleted_user)
+    # 1. Find or create the singleton deleted-user placeholder
+    deleted_user = _get_or_create_deleted_user(session)
 
     # If the user is a teacher, cancel their non-completed projects
     if current_user.role == UserRole.TEACHER:
@@ -256,6 +274,16 @@ def get_user_profile(
 ):
     user = session.get(User, user_id, options=[selectinload(User.language_groups)])
     if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Privacy: students who opted out are hidden from anyone but themselves.
+    # Teachers and tutors are always public (their business face). 404 (not
+    # 403) so we don't leak whether the slug exists.
+    if (
+        user.role == UserRole.STUDENT
+        and not user.profile_public
+        and (current_user is None or current_user.id != user.id)
+    ):
         raise HTTPException(status_code=404, detail="User not found")
 
     average_rating = None

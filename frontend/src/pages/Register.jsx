@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import client from '../api/client';
+import { useAuth } from '../context/AuthContext';
 
 const Register = () => {
   const [formData, setFormData] = useState({
@@ -8,21 +9,34 @@ const Register = () => {
     email: '',
     password: '',
     role: 'student',
+    gdpr_consent: false,
   });
   const [error, setError] = useState('');
   const navigate = useNavigate();
+  const { login } = useAuth();
 
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const { name, value, type, checked } = e.target;
+    setFormData({ ...formData, [name]: type === 'checkbox' ? checked : value });
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    if (!formData.gdpr_consent) {
+      setError('Please confirm consent to continue.');
+      return;
+    }
 
     try {
-      await client.post('/auth/register', formData);
-      navigate('/login');
+      // The backend returns an access_token immediately; keep it so the
+      // user can hit /verify-email without going through /login.
+      const res = await client.post('/auth/register', formData);
+      const token = res?.data?.access_token;
+      if (token) {
+        login(token);
+      }
+      navigate('/verify-email');
     } catch (err) {
       console.error(err);
       setError(err.response?.data?.detail || 'Registration failed');
@@ -116,6 +130,19 @@ const Register = () => {
                 </select>
               </div>
             </div>
+
+            <label className="flex items-start gap-3 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                name="gdpr_consent"
+                checked={formData.gdpr_consent}
+                onChange={handleChange}
+                className="mt-1 h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+              />
+              <span>
+                I agree to Kotobaseed processing my data to provide the platform, per the Privacy Policy. I can delete my account any time.
+              </span>
+            </label>
 
             <div>
               <button

@@ -3,9 +3,8 @@ from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from ..database import get_session
-from ..deps import get_current_user, require_role
+from ..deps import get_current_user
 from ..models import Notification, TeacherVerification, User, UserRole, VerificationStatus
-from ..services.gamification import award_achievement
 
 router = APIRouter(prefix="/verifications", tags=["verifications"])
 
@@ -88,31 +87,8 @@ def submit_verification(
     return verification
 
 
-@router.post("/{verification_id}/approve", response_model=TeacherVerification)
-def approve_verification(
-    verification_id: int,
-    admin_user: User = Depends(require_role(UserRole.ADMIN)),
-    session: Session = Depends(get_session),
-):
-    """
-    Approves a teacher's verification request. (Admin only)
-    """
-    verification = session.get(TeacherVerification, verification_id)
-    if not verification:
-        raise HTTPException(status_code=404, detail="Verification not found.")
-
-    if verification.status == VerificationStatus.APPROVED:
-        raise HTTPException(status_code=400, detail="Verification is already approved.")
-
-    verification.status = VerificationStatus.APPROVED
-
-    # Award achievement to the teacher
-    teacher = session.get(User, verification.teacher_id)
-    if teacher:
-        award_achievement(user=teacher, achievement_key="certified_pro", session=session)
-
-    session.add(verification)
-    session.commit()
-    session.refresh(verification)
-
-    return verification
+# NOTE: the approve / reject endpoints for verifications live in the admin
+# router (`POST /admin/verifications/{id}/approve|reject`). The frontend
+# AdminDashboard.jsx calls those. A duplicate `/verifications/{id}/approve`
+# used to live here too — removed to avoid two sources of truth drifting
+# apart over time.

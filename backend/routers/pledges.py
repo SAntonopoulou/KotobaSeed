@@ -18,6 +18,7 @@ from ..models import (
     Project,
     ProjectRating,
     ProjectStatus,
+    StripeWebhookEvent,
     Tutor,
     TutorAccountStatus,
     User,
@@ -343,8 +344,17 @@ async def stripe_webhook(
     except stripe.error.SignatureVerificationError:
         raise HTTPException(status_code=400, detail="Invalid signature") from None
 
+    event_id = event["id"]
     event_type = event["type"]
     data = event["data"]["object"]
+
+    # Idempotency: Stripe retries webhooks on non-2xx and network blips.
+    # Without this gate, tip credits double-count, priority credits over-
+    # grant, etc. If we've seen this event_id, return 200 silently and let
+    # Stripe stop retrying.
+    if session.get(StripeWebhookEvent, event_id):
+        logger.info(f"Stripe webhook {event_id} ({event_type}) already processed; skipping")
+        return {"status": "duplicate"}
 
     if event_type == "checkout.session.completed":
         handle_checkout_session_completed(session, data)
@@ -355,4 +365,9 @@ async def stripe_webhook(
     else:
         logger.info(f"Unhandled event type: {event_type}")
 
+    # Mark processed only after handlers succeed. If a handler throws, the
+    # event isn't recorded and Stripe's retry will pick it up. Handlers
+    # individually session.commit() on success, so we re-stage the record here.
+    session.add(StripeWebhookEvent(event_id=event_id, event_type=event_type))
+    session.commit()
     return {"status": "success"}

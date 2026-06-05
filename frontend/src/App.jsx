@@ -35,6 +35,7 @@ import OnboardingReturn from './pages/OnboardingReturn';
 import OnboardingRefresh from './pages/OnboardingRefresh';
 import TutorHome from './pages/TutorHome';
 import TutorDashboard from './pages/TutorDashboard';
+import VerifyEmail from './pages/VerifyEmail';
 import { useTenant } from './hooks/useTenant';
 
 const TutorShell = () => (
@@ -63,6 +64,7 @@ const ApexShell = () => {
           <Route path="/groups" element={<Groups />} />
           <Route path="/pricing" element={<Pricing />} />
           <Route path="/onboarding/tutor" element={<TutorSignup />} />
+          <Route path="/verify-email" element={<VerifyEmail />} />
 
           {/* Protected Routes */}
           <Route element={<ProtectedRoute />}>

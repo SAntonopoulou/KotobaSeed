@@ -222,6 +222,35 @@ const Settings = () => {
         </>
       )}
       
+      {currentUser.role === 'student' && (
+        <div className="bg-white shadow overflow-hidden sm:rounded-lg">
+          <div className="px-4 py-5 sm:p-6">
+            <h3 className="text-lg leading-6 font-medium text-gray-900">Privacy</h3>
+            <p className="mt-2 max-w-xl text-sm text-gray-500">
+              Hide your profile page from other users. Your messaging, pledges, and reviews are unaffected — only the public profile at <code>/profile/{currentUser.id}</code> becomes invisible.
+            </p>
+            <div className="mt-4">
+              <label className="inline-flex items-center gap-3 text-sm text-gray-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={currentUser.profile_public !== false}
+                  onChange={async (e) => {
+                    try {
+                      await client.patch('/users/me', { profile_public: e.target.checked });
+                      window.location.reload();
+                    } catch (err) {
+                      addToast('Could not update privacy setting.', 'error');
+                    }
+                  }}
+                  className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                />
+                Show my profile to other users
+              </label>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="bg-white shadow overflow-hidden sm:rounded-lg">
         <div className="px-4 py-5 sm:p-6">
           <h3 className="text-lg leading-6 font-medium text-gray-900">Danger Zone</h3>

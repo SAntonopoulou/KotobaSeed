@@ -15,7 +15,6 @@ from ..models import (
     ProjectStatus,
     TeacherVerification,
     User,
-    UserRole,
     VerificationStatus,
 )
 from ..routers.projects import _cancel_project_logic, _create_project_read  # Corrected import
@@ -83,17 +82,9 @@ def delete_user(
     if user_to_delete.id == current_user.id:
         raise HTTPException(status_code=400, detail="Cannot delete your own admin account")
 
-    deleted_user = session.exec(select(User).where(User.email == "deleted@system")).first()
-    if not deleted_user:
-        deleted_user = User(
-            email="deleted@system",
-            hashed_password="deleted",
-            full_name="Deleted User",
-            role=UserRole.STUDENT,
-        )
-        session.add(deleted_user)
-        session.commit()
-        session.refresh(deleted_user)
+    from .users import _get_or_create_deleted_user
+
+    deleted_user = _get_or_create_deleted_user(session)
 
     for project in user_to_delete.taught_projects:
         project.teacher_id = deleted_user.id
