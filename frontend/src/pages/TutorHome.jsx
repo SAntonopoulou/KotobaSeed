@@ -16,17 +16,35 @@ const parseLanguages = (raw) => {
   return raw.split(',').map((s) => s.trim()).filter(Boolean);
 };
 
+const formatPrice = (cents, currency = 'eur') => {
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: 'currency',
+      currency: currency.toUpperCase(),
+    }).format(cents / 100);
+  } catch {
+    return `€${(cents / 100).toFixed(2)}`;
+  }
+};
+
 const TutorHome = () => {
   const { currentUser } = useAuth();
   const [tutor, setTutor] = useState(null);
+  const [packs, setPacks] = useState([]);
   const [error, setError] = useState('');
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const res = await client.get('/tutor/me');
-        if (!cancelled) setTutor(res.data);
+        const [tutorRes, packsRes] = await Promise.all([
+          client.get('/tutor/me'),
+          client.get('/tutor/lesson-packs').catch(() => ({ data: [] })),
+        ]);
+        if (!cancelled) {
+          setTutor(tutorRes.data);
+          setPacks(packsRes.data || []);
+        }
       } catch (err) {
         if (!cancelled) {
           if (err?.response?.status === 404) {
@@ -170,9 +188,44 @@ const TutorHome = () => {
 
       <section id="book" className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12 bg-white rounded-2xl shadow-sm mx-4 sm:mx-auto mb-16">
         <h2 className="text-2xl font-bold text-kotoba-primary mb-3">Book a lesson</h2>
-        <p className="text-kotoba-text">
-          Lesson booking is coming soon — once it's live, this is where students will pick a time.
-        </p>
+        {packs.length === 0 ? (
+          <p className="text-kotoba-text">
+            {isOwner
+              ? 'No lesson packs yet — add one from your dashboard.'
+              : 'This tutor hasn\'t listed lesson packs yet. Check back soon.'}
+          </p>
+        ) : (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-2">
+            {packs.map((pack) => (
+              <div
+                key={pack.id}
+                className="border border-kotoba-text/10 rounded-xl p-5 flex flex-col bg-kotoba-background/40"
+              >
+                <h3 className="text-lg font-semibold text-kotoba-primary">{pack.name}</h3>
+                <p className="mt-1 text-sm text-kotoba-text/70">
+                  {pack.num_lessons} × {pack.duration_minutes} min
+                </p>
+                {pack.description && (
+                  <p className="mt-3 text-sm text-kotoba-text whitespace-pre-line">
+                    {pack.description}
+                  </p>
+                )}
+                <div className="flex-grow" />
+                <p className="mt-4 text-2xl font-extrabold text-kotoba-primary">
+                  {formatPrice(pack.price_cents, pack.currency)}
+                </p>
+                <button
+                  type="button"
+                  disabled
+                  title="Booking checkout is coming next"
+                  className="mt-4 w-full px-4 py-2 rounded-md bg-kotoba-secondary text-kotoba-text font-semibold hover:bg-kotoba-secondary-dark disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  Book — coming soon
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       <footer className="bg-kotoba-primary text-white/80 py-6 text-center text-sm">

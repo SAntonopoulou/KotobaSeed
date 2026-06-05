@@ -553,6 +553,33 @@ class AuditLog(SQLModel, table=True):
     )
 
 
+class LessonPack(SQLModel, table=True):
+    """A lesson package a tutor sells to students.
+
+    Examples: "1 lesson — €25", "5 lessons — €100", "10 lessons — €180".
+    Each pack is owned by a Tutor; deactivating is preferred over delete so
+    historical bookings stay readable.
+
+    The price stored here is the full price the student pays; the platform
+    fee (5% Free/Plus, 0% Pro/Business) is computed at checkout time and
+    deducted via Stripe Application Fees on Connect.
+    """
+
+    __tablename__ = "lesson_pack"
+
+    id: int | None = Field(default=None, primary_key=True)
+    tutor_id: int = Field(foreign_key="tutor.id", index=True)
+    name: str = Field(max_length=120)
+    description: str | None = Field(default=None, max_length=4000)
+    num_lessons: int = Field(ge=1)
+    duration_minutes: int = Field(ge=15, le=240, description="Length of one lesson")
+    price_cents: int = Field(ge=0)
+    currency: str = Field(default="eur", max_length=3)
+    is_active: bool = Field(default=True, index=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
 class StripeWebhookEvent(SQLModel, table=True):
     """One row per processed Stripe webhook event.
 

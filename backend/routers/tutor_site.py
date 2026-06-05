@@ -17,11 +17,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr, Field
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from ..database import get_session
 from ..deps import CurrentUser
-from ..models import Tutor, TutorAccountStatus, TutorPlan
+from ..models import LessonPack, Tutor, TutorAccountStatus, TutorPlan, User
 from ..tenancy import CurrentTutor
 
 router = APIRouter(prefix="/tutor", tags=["tutor-site"])
@@ -146,3 +146,149 @@ def update_current_tutor(
         session.refresh(tutor)
         session.refresh(current)
     return _serialize_tutor(tutor)
+
+
+# --- Lesson packs --------------------------------------------------------
+
+
+class LessonPackRead(BaseModel):
+    id: int
+    tutor_id: int
+    name: str
+    description: str | None
+    num_lessons: int
+    duration_minutes: int
+    price_cents: int
+    currency: str
+    is_active: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class LessonPackCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    description: str | None = Field(default=None, max_length=4000)
+    num_lessons: int = Field(ge=1, le=200)
+    duration_minutes: int = Field(ge=15, le=240)
+    price_cents: int = Field(ge=0, le=10_000_00)  # max €10 000
+    currency: str = Field(default="eur", min_length=3, max_length=3)
+
+
+class LessonPackUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    description: str | None = Field(default=None, max_length=4000)
+    num_lessons: int | None = Field(default=None, ge=1, le=200)
+    duration_minutes: int | None = Field(default=None, ge=15, le=240)
+    price_cents: int | None = Field(default=None, ge=0, le=10_000_00)
+    is_active: bool | None = None
+
+
+def _require_owner(tutor: Tutor, current: User) -> None:
+    if tutor.user_id != current.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't own this tutor profile.",
+        )
+
+
+@router.get("/lesson-packs", response_model=list[LessonPackRead])
+def list_lesson_packs(
+    tutor: CurrentTutor,
+    session: Annotated[Session, Depends(get_session)],
+) -> list[LessonPackRead]:
+    """Public list of active packs for the resolved tenant."""
+    rows = session.exec(
+        select(LessonPack)
+        .where(LessonPack.tutor_id == tutor.id, LessonPack.is_active == True)  # noqa: E712
+        .order_by(LessonPack.price_cents.asc())
+    ).all()
+    return [LessonPackRead.model_validate(r) for r in rows]
+
+
+@router.get("/lesson-packs/all", response_model=list[LessonPackRead])
+def list_all_lesson_packs(
+    current: CurrentUser,
+    tutor: CurrentTutor,
+    session: Annotated[Session, Depends(get_session)],
+) -> list[LessonPackRead]:
+    """Owner-only — includes inactive packs so the dashboard can show + restore."""
+    _require_owner(tutor, current)
+    rows = session.exec(
+        select(LessonPack)
+        .where(LessonPack.tutor_id == tutor.id)
+        .order_by(LessonPack.is_active.desc(), LessonPack.price_cents.asc())
+    ).all()
+    return [LessonPackRead.model_validate(r) for r in rows]
+
+
+@router.post(
+    "/lesson-packs",
+    response_model=LessonPackRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_lesson_pack(
+    payload: LessonPackCreate,
+    current: CurrentUser,
+    tutor: CurrentTutor,
+    session: Annotated[Session, Depends(get_session)],
+) -> LessonPackRead:
+    _require_owner(tutor, current)
+    pack = LessonPack(
+        tutor_id=tutor.id,
+        name=payload.name.strip(),
+        description=payload.description,
+        num_lessons=payload.num_lessons,
+        duration_minutes=payload.duration_minutes,
+        price_cents=payload.price_cents,
+        currency=payload.currency.lower(),
+    )
+    session.add(pack)
+    session.commit()
+    session.refresh(pack)
+    return LessonPackRead.model_validate(pack)
+
+
+@router.patch("/lesson-packs/{pack_id}", response_model=LessonPackRead)
+def update_lesson_pack(
+    pack_id: int,
+    payload: LessonPackUpdate,
+    current: CurrentUser,
+    tutor: CurrentTutor,
+    session: Annotated[Session, Depends(get_session)],
+) -> LessonPackRead:
+    _require_owner(tutor, current)
+    pack = session.get(LessonPack, pack_id)
+    if not pack or pack.tutor_id != tutor.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pack not found.")
+
+    changes = payload.model_dump(exclude_unset=True)
+    if not changes:
+        return LessonPackRead.model_validate(pack)
+    for key, value in changes.items():
+        setattr(pack, key, value)
+    pack.updated_at = datetime.now(UTC)
+    session.add(pack)
+    session.commit()
+    session.refresh(pack)
+    return LessonPackRead.model_validate(pack)
+
+
+@router.delete("/lesson-packs/{pack_id}", status_code=status.HTTP_204_NO_CONTENT)
+def deactivate_lesson_pack(
+    pack_id: int,
+    current: CurrentUser,
+    tutor: CurrentTutor,
+    session: Annotated[Session, Depends(get_session)],
+) -> None:
+    """Soft-delete — flips `is_active=False` rather than removing the row, so
+    historical bookings that reference this pack stay readable.
+    """
+    _require_owner(tutor, current)
+    pack = session.get(LessonPack, pack_id)
+    if not pack or pack.tutor_id != tutor.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pack not found.")
+    pack.is_active = False
+    pack.updated_at = datetime.now(UTC)
+    session.add(pack)
+    session.commit()
