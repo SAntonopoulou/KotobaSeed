@@ -62,8 +62,13 @@ class Settings(BaseSettings):
     default_connect_country: str = "GR"
 
     # ----- CORS -----------------------------------------------------------
-    # Comma-separated list in env; parsed into a tuple at use time.
+    # Exact-match origins (comma-separated). Use the regex below for patterns
+    # like wildcard subdomains.
     cors_origins: str = "http://localhost:5173,http://localhost:3000"
+    # Regex applied in addition to cors_origins. Default matches any
+    # *.localhost port for dev — `vasso.localhost:5173`, `test.localhost:5173`,
+    # etc. — so tenant subdomains in dev mirror prod without per-tutor config.
+    cors_origin_regex: str = r"^https?://([a-z0-9-]+\.)?localhost(:\d+)?$"
 
     @property
     def cors_origin_list(self) -> list[str]:
