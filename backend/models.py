@@ -74,6 +74,64 @@ class PriorityCreditStatus(str, Enum):
     USED = "used"
 
 
+# ---------------------------------------------------------------------------
+# Multi-tenant tutor platform (Kotobaseed) enums
+# ---------------------------------------------------------------------------
+
+
+class TutorPlan(str, Enum):
+    """Which billing model the tutor is on for their instructor site."""
+
+    STARTER = "starter"  # €0/mo + 5% Application Fee on tutoring revenue
+    PRO = "pro"  # flat monthly fee, 0% Application Fee
+
+
+class TutorAccountStatus(str, Enum):
+    """High-level lifecycle state for the tutor account."""
+
+    ACTIVE = "active"
+    PAUSED_DORMANT = "paused_dormant"  # 30+ days no lesson on Starter
+    PAUSED_BILLING = "paused_billing"  # 60+ days failed subscription on Pro
+    SUSPENDED = "suspended"  # admin action
+
+
+class OveragePolicy(str, Enum):
+    """What happens when a tutor exceeds their monthly classroom minutes."""
+
+    BLOCK = "block"  # classroom refuses to start
+    AUTO_BILL = "auto_bill"  # bills the card on file at the configured rate
+
+
+class TutorVerificationKind(str, Enum):
+    """The kind of credential a verification record attests to."""
+
+    LANGUAGE_PROFICIENCY = "language_proficiency"  # native speaker, fluency cert
+    TEACHING_CREDENTIAL = "teaching_credential"  # CELTA, DELE, JLPT N1, degree
+    IDENTITY = "identity"  # auto-granted by Stripe Connect KYC
+
+
+class StudentEnrollmentStatus(str, Enum):
+    """Whether a student is active on a specific tutor's site."""
+
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+
+
+class TutorPageSectionType(str, Enum):
+    """The library of landing-page section blocks a tutor can pick from."""
+
+    HERO_PORTRAIT = "hero_portrait"
+    FEATURES_GRID = "features_grid"
+    LEVELS_ALPHABET = "levels_alphabet"
+    PRICING_GRID = "pricing_grid"
+    ABOUT_PORTRAIT = "about_portrait"
+    REVIEWS_GRID = "reviews_grid"
+    FAQ_ACCORDION = "faq_accordion"
+    VIDEO_EMBED = "video_embed"
+    CTA_BAND = "cta_band"
+    LANGUAGE_INTRO = "language_intro"
+
+
 # Association table for User and LanguageGroup
 class UserLanguageGroup(SQLModel, table=True):
     user_id: int | None = Field(default=None, foreign_key="user.id", primary_key=True)
@@ -440,3 +498,336 @@ class Achievement(SQLModel, table=True):
     icon_url: str | None = None
 
     users: list["User"] = Relationship(back_populates="achievements", link_model=UserAchievement)
+
+
+# ===========================================================================
+# Multi-tenant tutor platform tables
+#
+# These tables introduce Kotobaseed's per-tutor SaaS structure on top of the
+# existing CompInput identity + marketplace schema. The original User table
+# stays as the platform-level identity; a Tutor row hangs off it for the
+# tenant-specific data (subdomain slug, plan, classroom quota, branding,
+# Stripe Connect settings, custom domain).
+#
+# Existing tables that the marketplace already uses (Project, Pledge,
+# TeacherFollower, etc.) keep User.id as their teacher reference for
+# backwards compatibility. New tutoring-side features (bookings, lesson
+# packs, homework, articles) will reference Tutor.id directly.
+# ===========================================================================
+
+
+class Tutor(SQLModel, table=True):
+    """The per-tenant tutor profile that owns an instructor site.
+
+    Created when a user signs up to teach via the kotobaseed.net onboarding
+    flow. One Tutor per User. The User row stays the source of truth for
+    identity (email, password, role); the Tutor row holds everything
+    platform-specific.
+    """
+
+    __tablename__ = "tutor"
+
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="user.id", unique=True, index=True)
+
+    # ----- Public-facing profile -----
+    tutor_slug: str = Field(
+        unique=True,
+        index=True,
+        max_length=80,
+        description="URL slug, used as `{slug}.kotobaseed.net` subdomain",
+    )
+    display_name: str = Field(max_length=120)
+    bio: str | None = None
+    photo_url: str | None = None
+    languages_taught: str | None = Field(
+        default=None,
+        description="JSON-encoded list of language codes the tutor teaches",
+    )
+    languages_spoken: str | None = Field(
+        default=None,
+        description="JSON-encoded list of languages the tutor speaks fluently",
+    )
+    cefr_level_lowest: str | None = Field(default=None, max_length=8)
+    cefr_level_highest: str | None = Field(default=None, max_length=8)
+
+    # ----- Email + contact -----
+    public_reply_email: str | None = Field(
+        default=None,
+        description="Address used in Reply-To on transactional emails",
+        max_length=255,
+    )
+
+    # ----- Plan + status -----
+    plan: TutorPlan = Field(default=TutorPlan.STARTER, index=True)
+    plan_started_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    account_status: TutorAccountStatus = Field(
+        default=TutorAccountStatus.ACTIVE, index=True
+    )
+    paused_reason: str | None = Field(default=None, max_length=255)
+
+    # ----- Activity-driven anti-abuse -----
+    last_completed_lesson_at: datetime | None = Field(
+        default=None,
+        description="Drives the 30-day Starter dormant auto-pause check",
+    )
+
+    # ----- Classroom minutes -----
+    classroom_minutes_quota: int = Field(
+        default=300, ge=0, description="Monthly quota; Starter=300, Pro=1000"
+    )
+    classroom_minutes_used_this_cycle: int = Field(default=0, ge=0)
+    cycle_started_at: datetime | None = Field(default=None)
+    overage_policy: OveragePolicy = Field(default=OveragePolicy.BLOCK)
+
+    # ----- Stripe -----
+    stripe_connect_account_id: str | None = Field(
+        default=None,
+        index=True,
+        max_length=128,
+        description="Tutor's Stripe Connect Express account",
+    )
+    stripe_platform_customer_id: str | None = Field(
+        default=None,
+        max_length=128,
+        description="Card on file with the platform (for Pro subscription + overages)",
+    )
+
+    # ----- Domain -----
+    custom_domain: str | None = Field(
+        default=None, unique=True, index=True, max_length=255
+    )
+
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class TutorMarketplaceProfile(SQLModel, table=True):
+    """Opt-in marketplace settings for a tutor.
+
+    A tutor isn't visible in the marketplace by default. Toggling
+    `marketplace_enabled` surfaces them in browse + search, lets them
+    publish projects, and lets students follow them.
+    """
+
+    __tablename__ = "tutor_marketplace_profile"
+
+    id: int | None = Field(default=None, primary_key=True)
+    tutor_id: int = Field(foreign_key="tutor.id", unique=True, index=True)
+    marketplace_enabled: bool = Field(default=False, index=True)
+
+    intro_video_url: str | None = None
+    sample_videos_json: str | None = Field(
+        default=None,
+        description="JSON-encoded list of {url, title, language, level}",
+    )
+
+    follower_count: int = Field(default=0, ge=0)
+
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class StudentEnrollment(SQLModel, table=True):
+    """Per-tenant enrollment record — student X is on tutor Y's site.
+
+    A student signing up through `vasso.kotobaseed.net` gets an
+    enrollment for Vasso's tenant. A different tutor's tenant doesn't
+    see this student. The marketplace bypasses enrollments — there a
+    student browses across all tutors freely.
+    """
+
+    __tablename__ = "student_enrollment"
+
+    id: int | None = Field(default=None, primary_key=True)
+    student_user_id: int = Field(foreign_key="user.id", index=True)
+    tutor_id: int = Field(foreign_key="tutor.id", index=True)
+    status: StudentEnrollmentStatus = Field(
+        default=StudentEnrollmentStatus.ACTIVE, index=True
+    )
+
+    first_enrolled_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    last_active_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class TutorVerification(SQLModel, table=True):
+    """Verified credentials shown as a badge on a tutor's site + marketplace.
+
+    Distinct from the legacy `TeacherVerification` table (which is tied to
+    User.id and only knows about language proficiency). New code should
+    use this table; the legacy table sticks around until the marketplace
+    router is refactored to switch over.
+    """
+
+    __tablename__ = "tutor_verification"
+
+    id: int | None = Field(default=None, primary_key=True)
+    tutor_id: int = Field(foreign_key="tutor.id", index=True)
+    kind: TutorVerificationKind = Field(index=True)
+    description: str = Field(
+        max_length=300,
+        description="Human-readable summary, e.g. 'DELE C2', 'CELTA from Cambridge'",
+    )
+    language: str | None = Field(
+        default=None,
+        max_length=40,
+        description="Only set when kind=LANGUAGE_PROFICIENCY",
+    )
+    evidence_file_path: str | None = Field(default=None, max_length=512)
+
+    status: VerificationStatus = Field(default=VerificationStatus.PENDING, index=True)
+    reviewed_by_user_id: int | None = Field(default=None, foreign_key="user.id")
+    reviewed_at: datetime | None = None
+    review_notes: str | None = Field(default=None, max_length=1000)
+
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+# ---------------------------------------------------------------------------
+# Tutor site customization — theming + landing-page sections
+# ---------------------------------------------------------------------------
+
+
+class Theme(SQLModel, table=True):
+    """A curated theme — coordinated palette + typography pair.
+
+    Tutors pick from this list when configuring their site. The CSS class
+    prefix (`css_class_prefix`) tells the frontend which kit's stylesheet
+    to apply.
+    """
+
+    __tablename__ = "theme"
+
+    id: int | None = Field(default=None, primary_key=True)
+    key: str = Field(unique=True, index=True, max_length=64)
+    name: str = Field(max_length=120)
+    description: str | None = Field(default=None, max_length=500)
+    css_class_prefix: str = Field(
+        max_length=64,
+        description="e.g. 'kit-marketing-warm' — drives which CSS file loads",
+    )
+    primary_palette_json: str | None = Field(
+        default=None,
+        description="JSON-encoded list of {key, hex} swatches the tutor can pick from",
+    )
+    typography_pair_json: str | None = Field(
+        default=None,
+        description="JSON-encoded {display, body} font stack identifiers",
+    )
+
+    is_active: bool = Field(default=True, index=True)
+    display_order: int = Field(default=0)
+
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class TutorBranding(SQLModel, table=True):
+    """Per-tutor theme choice + color/logo overrides."""
+
+    __tablename__ = "tutor_branding"
+
+    id: int | None = Field(default=None, primary_key=True)
+    tutor_id: int = Field(foreign_key="tutor.id", unique=True, index=True)
+    theme_id: int = Field(foreign_key="theme.id", index=True)
+
+    primary_color: str | None = Field(
+        default=None,
+        max_length=10,
+        description="Hex from theme's palette",
+    )
+    accent_color: str | None = Field(default=None, max_length=10)
+
+    logo_url: str | None = Field(default=None, max_length=512)
+    favicon_url: str | None = Field(default=None, max_length=512)
+
+    cefr_glyphs_json: str | None = Field(
+        default=None,
+        description=(
+            "JSON-encoded mapping of CEFR level → display glyph, "
+            "e.g. {'A1': 'α', 'A2': 'β'} for Greek or "
+            "{'A1': 'あ', 'A2': 'か'} for Japanese"
+        ),
+    )
+
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class TutorPageSection(SQLModel, table=True):
+    """One block in a tutor's landing page.
+
+    The public homepage reads visible sections ordered by `position` and
+    renders each with its `section_type` component, passing the
+    `content_json` payload as props.
+    """
+
+    __tablename__ = "tutor_page_section"
+
+    id: int | None = Field(default=None, primary_key=True)
+    tutor_id: int = Field(foreign_key="tutor.id", index=True)
+    section_type: TutorPageSectionType
+    position: int = Field(default=0, index=True)
+    is_visible: bool = Field(default=True)
+
+    content_json: str | None = Field(
+        default=None,
+        description="JSON-encoded section-specific content payload",
+    )
+
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+# ---------------------------------------------------------------------------
+# Classroom usage tracking + platform billing
+# ---------------------------------------------------------------------------
+
+
+class TutorMinuteUsageLog(SQLModel, table=True):
+    """Running ledger of classroom minutes consumed per tutor per day.
+
+    Aggregated monthly to compute overage charges + reset the quota.
+    """
+
+    __tablename__ = "tutor_minute_usage_log"
+
+    id: int | None = Field(default=None, primary_key=True)
+    tutor_id: int = Field(foreign_key="tutor.id", index=True)
+    usage_date: datetime = Field(index=True)
+    minutes_used: int = Field(default=0, ge=0)
+    source: str | None = Field(
+        default=None,
+        max_length=64,
+        description="e.g. 'daily_room_ended' (webhook), 'manual_adjustment'",
+    )
+
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class PlatformSubscription(SQLModel, table=True):
+    """Tutor's Pro-plan subscription on the platform's own Stripe account.
+
+    Separate from the Connect account (which receives tutoring + marketplace
+    income). This is what tutors pay Sophia for hosting / platform access.
+    """
+
+    __tablename__ = "platform_subscription"
+
+    id: int | None = Field(default=None, primary_key=True)
+    tutor_id: int = Field(foreign_key="tutor.id", unique=True, index=True)
+    stripe_subscription_id: str = Field(unique=True, index=True, max_length=128)
+    plan: TutorPlan = Field(default=TutorPlan.PRO)
+    status: str = Field(
+        default="incomplete",
+        index=True,
+        description="active / trialing / past_due / canceled / etc. (mirrors Stripe)",
+    )
+
+    current_period_start: datetime | None = None
+    current_period_end: datetime | None = None
+    cancel_at_period_end: bool = Field(default=False)
+
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
