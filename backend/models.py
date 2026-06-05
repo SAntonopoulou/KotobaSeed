@@ -38,6 +38,11 @@ class SubscriptionTier(str, Enum):
     PLUS = "plus"  # student-side perks: priority credits, premium content
     PRO = "pro"  # teacher + tutor perks (verifications, analytics, 0% lesson fee, etc.)
     BUSINESS = "business"  # schools: 5 seats, no Kotobaseed branding, priority support
+    # NOTE: If you ever rename a value here, ship a data migration to
+    # rewrite the column too — SQLAlchemy's Enum type uses a dict lookup
+    # against enum names, and any stray value raises LookupError on read
+    # which 500s every endpoint that joins User. See migration
+    # 20260617_normalize_subscription_tier for the pattern.
 
 
 class ProjectStatus(str, Enum):
