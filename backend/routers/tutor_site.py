@@ -308,7 +308,10 @@ class TrialSettingsRead(BaseModel):
 class TrialSettingsUpdate(BaseModel):
     offers_free_trial: bool
     free_trial_minutes: int | None = Field(default=None, ge=15, le=120)
-    free_trial_limit_per_student: int | None = Field(default=None, ge=1, le=10)
+    # free_trial_limit_per_student is intentionally NOT writable — every
+    # student is capped at one trial per tutor, lifetime. The DB column
+    # stays for now (deprecated; defaults to 1 and isn't used by the
+    # trial-book check anymore).
 
 
 def _ensure_trial_pack(tutor: Tutor, session: Session) -> LessonPack:
@@ -387,8 +390,8 @@ def update_trial_settings(
     tutor.offers_free_trial = payload.offers_free_trial
     if payload.free_trial_minutes is not None:
         tutor.free_trial_minutes = payload.free_trial_minutes
-    if payload.free_trial_limit_per_student is not None:
-        tutor.free_trial_limit_per_student = payload.free_trial_limit_per_student
+    # `free_trial_limit_per_student` is no longer configurable — always 1.
+    tutor.free_trial_limit_per_student = 1
     tutor.updated_at = datetime.now(UTC)
     session.add(tutor)
 
@@ -468,7 +471,10 @@ def book_trial(
         session.commit()
         session.refresh(trial_pack)
 
-    # Enforce per-student lifetime cap on trials with this tutor.
+    # Hard cap: ONE free trial per student per tutor, lifetime. Not
+    # configurable — Sophia's call, prevents abuse and keeps the "trial"
+    # concept meaningful as a conversion hook. Anything except an
+    # explicit CANCELLED counts (a refunded trial is still "consumed").
     prior = session.exec(
         select(Booking).where(
             Booking.tutor_id == tutor.id,
@@ -476,8 +482,8 @@ def book_trial(
             Booking.lesson_pack_id == trial_pack.id,
             Booking.status != BookingStatus.CANCELLED,
         )
-    ).all()
-    if len(prior) >= tutor.free_trial_limit_per_student:
+    ).first()
+    if prior is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(

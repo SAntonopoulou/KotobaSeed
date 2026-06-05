@@ -60,11 +60,6 @@ const TrialSettings = () => {
     setConfig({ ...config, free_trial_minutes: v });
   };
 
-  const handleLimit = (e) => {
-    const v = parseInt(e.target.value || '1', 10);
-    setConfig({ ...config, free_trial_limit_per_student: v });
-  };
-
   const handleBlur = () => {
     save(config);
   };
@@ -102,49 +97,29 @@ const TrialSettings = () => {
       )}
 
       {config.offers_free_trial && (
-        <div className="grid sm:grid-cols-2 gap-4 mt-3">
-          <div>
-            <label className="block text-xs font-medium text-kotoba-text/70 mb-1">
-              Trial duration (minutes)
-            </label>
-            <input
-              type="number"
-              min={15}
-              max={120}
-              step={5}
-              value={config.free_trial_minutes}
-              onChange={handleMinutes}
-              onBlur={handleBlur}
-              disabled={saving}
-              className="w-full px-3 py-2 border border-kotoba-text/20 rounded focus:outline-none focus:ring-2 focus:ring-kotoba-primary"
-            />
-            <p className="mt-1 text-xs text-kotoba-text/60">
-              15–120 minutes. 20 is a common pick.
-            </p>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-kotoba-text/70 mb-1">
-              Trials per student
-            </label>
-            <input
-              type="number"
-              min={1}
-              max={10}
-              value={config.free_trial_limit_per_student}
-              onChange={handleLimit}
-              onBlur={handleBlur}
-              disabled={saving}
-              className="w-full px-3 py-2 border border-kotoba-text/20 rounded focus:outline-none focus:ring-2 focus:ring-kotoba-primary"
-            />
-            <p className="mt-1 text-xs text-kotoba-text/60">
-              Lifetime cap on free trials a single student can book with you.
-            </p>
-          </div>
+        <div className="mt-3 max-w-xs">
+          <label className="block text-xs font-medium text-kotoba-text/70 mb-1">
+            Trial duration (minutes)
+          </label>
+          <input
+            type="number"
+            min={15}
+            max={120}
+            step={5}
+            value={config.free_trial_minutes}
+            onChange={handleMinutes}
+            onBlur={handleBlur}
+            disabled={saving}
+            className="w-full px-3 py-2 border border-kotoba-text/20 rounded focus:outline-none focus:ring-2 focus:ring-kotoba-primary"
+          />
+          <p className="mt-1 text-xs text-kotoba-text/60">
+            15–120 minutes. 20 is a common pick.
+          </p>
         </div>
       )}
 
       <p className="mt-4 text-xs text-kotoba-text/60">
-        For now trials use your regular availability windows. Dedicated "trial-only" times come later.
+        Each student can book one free trial with you, lifetime — protects the trial as a conversion tool. Trials use your regular availability windows. Dedicated "trial-only" times come later.
       </p>
     </section>
   );

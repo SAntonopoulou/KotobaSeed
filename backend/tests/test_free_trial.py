@@ -22,14 +22,11 @@ def active_tutor(db_session: Session, vasso_tutor, teacher_user):
     return vasso_tutor
 
 
-def _enable_trial(client, teacher_user, minutes=20, limit=1):
+def _enable_trial(client, teacher_user, minutes=20):
+    """Trial cap is no longer configurable — always 1 per student per tutor."""
     return client.put(
         "/tutor/trial",
-        json={
-            "offers_free_trial": True,
-            "free_trial_minutes": minutes,
-            "free_trial_limit_per_student": limit,
-        },
+        json={"offers_free_trial": True, "free_trial_minutes": minutes},
         headers={"Host": "vasso.kotobaseed.net", **auth_headers_for(teacher_user)},
     )
 
@@ -112,10 +109,11 @@ def test_book_trial_404_when_disabled(client, active_tutor, student_user):
     assert r.status_code == 404
 
 
-def test_book_trial_enforces_per_student_cap(
+def test_book_trial_enforces_one_per_student_lifetime(
     client, active_tutor, teacher_user, student_user
 ):
-    _enable_trial(client, teacher_user, limit=1)
+    """Hard cap of 1 trial per student per tutor — not configurable."""
+    _enable_trial(client, teacher_user)
     r1 = client.post(
         "/tutor/trial/book",
         json={"scheduled_at": (datetime.now(UTC) + timedelta(days=1)).isoformat()},
@@ -128,6 +126,13 @@ def test_book_trial_enforces_per_student_cap(
         headers={"Host": "vasso.kotobaseed.net", **auth_headers_for(student_user)},
     )
     assert r2.status_code == 409
+    # And a third attempt also blocked — to be very sure the limit is 1, not N.
+    r3 = client.post(
+        "/tutor/trial/book",
+        json={"scheduled_at": (datetime.now(UTC) + timedelta(days=3)).isoformat()},
+        headers={"Host": "vasso.kotobaseed.net", **auth_headers_for(student_user)},
+    )
+    assert r3.status_code == 409
 
 
 def test_tutor_cant_trial_book_self(client, active_tutor, teacher_user):
