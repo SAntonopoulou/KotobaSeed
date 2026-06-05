@@ -23,6 +23,7 @@ from ..models import (
     Request,
     TeacherFollower,
     TeacherVerification,
+    Tutor,
     User,
     UserRole,
     VerificationStatus,
@@ -108,9 +109,18 @@ class FollowingTeacherRead(BaseModel):
 
 
 # API Endpoints
-@router.get("/me", response_model=User)
-def get_me(current_user: User = Depends(get_current_user)):
-    return current_user
+@router.get("/me")
+def get_me(
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Return the User row plus a `tutor_slug` (or null) so the apex
+    Navbar knows whether to show "My site" / "My dashboard" entries.
+    """
+    tutor = session.exec(select(Tutor).where(Tutor.user_id == current_user.id)).first()
+    payload = current_user.model_dump(exclude={"hashed_password"})
+    payload["tutor_slug"] = tutor.tutor_slug if tutor else None
+    return payload
 
 
 @router.patch("/me", response_model=User)

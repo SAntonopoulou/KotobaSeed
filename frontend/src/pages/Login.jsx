@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import client from '../api/client';
-import { useAuth } from '../context/AuthContext'; // Import useAuth
+import { useAuth } from '../context/AuthContext';
+import { useTenant } from '../hooks/useTenant';
 
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const navigate = useNavigate();
-  const { login } = useAuth(); // Get the login function from AuthContext
+  const { login } = useAuth();
+  const tenant = useTenant();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -26,9 +28,10 @@ const Login = () => {
         },
       });
 
-      login(response.data.access_token); // Use the login function from AuthContext
-      navigate('/');
-      // No reload needed; AuthContext handles state updates.
+      login(response.data.access_token);
+      // On a tutor subdomain, send the user straight to the dashboard —
+      // that's the most useful place to land for a returning tutor.
+      navigate(tenant.kind === 'tutor' ? '/dashboard' : '/');
     } catch (err) {
       console.error(err);
       setError('Invalid email or password');

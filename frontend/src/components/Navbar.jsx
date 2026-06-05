@@ -6,6 +6,7 @@ import Notifications from './Notifications';
 import InboxDropdown from './InboxDropdown'; // Import InboxDropdown
 import { useInbox } from '../context/InboxContext'; // Import useInbox
 import { FaEnvelope } from 'react-icons/fa'; // Import an icon
+import { tutorSiteUrl } from '../hooks/useTenant';
 
 const Navbar = () => {
   const navigate = useNavigate();
@@ -89,6 +90,22 @@ const Navbar = () => {
                   {user.role === 'teacher' && <Link to="/teacher/dashboard" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Dashboard</Link>}
                   {user.role === 'student' && <Link to="/student/dashboard" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">My Pledges</Link>}
                   {user.role === 'admin' && <Link to="/admin/dashboard" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Admin</Link>}
+                  {user.tutor_slug && (
+                    <>
+                      <a
+                        href={tutorSiteUrl(user.tutor_slug, '/')}
+                        className="border-transparent text-kotoba-primary hover:border-kotoba-primary inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
+                      >
+                        My site
+                      </a>
+                      <a
+                        href={tutorSiteUrl(user.tutor_slug, '/dashboard')}
+                        className="border-transparent text-kotoba-primary hover:border-kotoba-primary inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
+                      >
+                        My dashboard
+                      </a>
+                    </>
+                  )}
                 </>
               ) : (
                 <>

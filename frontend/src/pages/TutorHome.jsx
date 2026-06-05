@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import client from '../api/client';
+import { useAuth } from '../context/AuthContext';
 
 const parseLanguages = (raw) => {
   if (!raw) return [];
@@ -14,6 +16,7 @@ const parseLanguages = (raw) => {
 };
 
 const TutorHome = () => {
+  const { currentUser } = useAuth();
   const [tutor, setTutor] = useState(null);
   const [error, setError] = useState('');
 
@@ -59,19 +62,30 @@ const TutorHome = () => {
 
   const languages = parseLanguages(tutor.languages_taught);
   const isPaused = tutor.account_status !== 'active';
+  const isOwner = currentUser && currentUser.id === tutor.user_id;
 
   return (
     <div className="bg-kotoba-background min-h-screen">
       {/* Minimal nav with just the tutor's name */}
       <header className="bg-white shadow-sm">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between gap-3">
           <span className="text-xl font-semibold text-kotoba-primary">{tutor.display_name}</span>
-          <a
-            href="#book"
-            className="hidden sm:inline-block px-4 py-2 rounded-md bg-kotoba-secondary text-kotoba-text font-medium hover:bg-kotoba-secondary-dark"
-          >
-            Book a lesson
-          </a>
+          <div className="flex items-center gap-2">
+            {isOwner && (
+              <Link
+                to="/dashboard"
+                className="px-4 py-2 rounded-md border-2 border-kotoba-primary text-kotoba-primary font-medium hover:bg-kotoba-primary hover:text-white transition-colors text-sm"
+              >
+                Manage
+              </Link>
+            )}
+            <a
+              href="#book"
+              className="hidden sm:inline-block px-4 py-2 rounded-md bg-kotoba-secondary text-kotoba-text font-medium hover:bg-kotoba-secondary-dark"
+            >
+              Book a lesson
+            </a>
+          </div>
         </div>
       </header>
 

@@ -43,6 +43,7 @@ const TutorShell = () => (
   <Routes>
     <Route path="/" element={<TutorHome />} />
     <Route path="/dashboard" element={<TutorDashboard />} />
+    <Route path="/login" element={<Login />} />
     <Route path="*" element={<Navigate to="/" replace />} />
   </Routes>
 );

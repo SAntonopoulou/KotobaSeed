@@ -29,6 +29,7 @@ router = APIRouter(prefix="/tutor", tags=["tutor-site"])
 
 class TutorRead(BaseModel):
     id: int
+    user_id: int  # frontend uses this to decide whether the viewer owns this Tutor
     tutor_slug: str
     display_name: str
     # Identity fields — populated from tutor.user (single source).
@@ -49,6 +50,7 @@ def _serialize_tutor(tutor: Tutor) -> TutorRead:
     user = tutor.user  # eager-loaded via the Tutor.user relationship
     return TutorRead(
         id=tutor.id,
+        user_id=tutor.user_id,
         tutor_slug=tutor.tutor_slug,
         display_name=tutor.display_name,
         bio=user.bio if user else None,
