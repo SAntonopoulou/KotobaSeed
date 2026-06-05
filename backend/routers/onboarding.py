@@ -36,7 +36,11 @@ from ..models import Tutor, TutorAccountStatus, TutorPlan, User, UserRole
 from ..routers.auth import EMAIL_CODE_TTL_MINUTES, _issue_email_code
 from ..security import client_ip, create_access_token, hash_password
 from ..services.email import send_verification_code
-from ..services.stripe_connect import create_express_account, create_onboarding_link
+from ..services.stripe_connect import (
+    create_express_account,
+    create_onboarding_link,
+    fetch_account,
+)
 
 log = logging.getLogger(__name__)
 
@@ -250,12 +254,51 @@ def refresh_onboarding_link(
     return RefreshLinkResponse(onboarding_url=url)
 
 
+def _sync_tutor_from_stripe(tutor: Tutor, session: Session) -> Tutor:
+    """Pull live Stripe state and reconcile `tutor.account_status`.
+
+    Self-healing path for when account.updated webhooks didn't reach us
+    (e.g. `stripe listen` wasn't running, or the user returned from
+    Stripe before the event was delivered). Mirrors the same transitions
+    `handle_account_updated` makes from the webhook side.
+    """
+    if not tutor.stripe_connect_account_id:
+        return tutor
+    try:
+        account = fetch_account(account_id=tutor.stripe_connect_account_id)
+    except stripe.error.StripeError:
+        log.exception(
+            "Could not fetch Stripe account for tutor %s (acct %s)",
+            tutor.tutor_slug,
+            tutor.stripe_connect_account_id,
+        )
+        return tutor
+
+    charges_enabled = bool(account.get("charges_enabled"))
+    payouts_enabled = bool(account.get("payouts_enabled"))
+    desired: TutorAccountStatus | None = None
+    if charges_enabled and payouts_enabled:
+        if tutor.account_status == TutorAccountStatus.PAUSED_KYC:
+            desired = TutorAccountStatus.ACTIVE
+    elif tutor.account_status == TutorAccountStatus.ACTIVE:
+        desired = TutorAccountStatus.PAUSED_KYC
+
+    if desired and desired != tutor.account_status:
+        tutor.account_status = desired
+        tutor.updated_at = datetime.now(UTC)
+        session.add(tutor)
+        session.commit()
+        session.refresh(tutor)
+    return tutor
+
+
 @router.get("/tutor/status", response_model=OnboardingStatus)
 def onboarding_status(
     current: CurrentUser,
     session: Annotated[Session, Depends(get_session)],
 ) -> OnboardingStatus:
     tutor = _tutor_for_user(current, session)
+    tutor = _sync_tutor_from_stripe(tutor, session)
     return OnboardingStatus(
         tutor_id=tutor.id,
         tutor_slug=tutor.tutor_slug,

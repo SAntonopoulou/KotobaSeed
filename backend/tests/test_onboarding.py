@@ -17,8 +17,16 @@ from backend.routers.pledges import handle_account_updated
 from .conftest import auth_headers_for
 
 
+@pytest.fixture
+def stripe_account_state():
+    """Mutable state the fake fetch_account returns. Tests tweak this dict
+    to simulate Stripe transitioning the account to charges/payouts enabled.
+    """
+    return {"charges_enabled": False, "payouts_enabled": False}
+
+
 @pytest.fixture(autouse=True)
-def stub_stripe(monkeypatch):
+def stub_stripe(monkeypatch, stripe_account_state):
     """Replace Stripe SDK calls with deterministic stubs."""
     counter = {"n": 0}
 
@@ -29,8 +37,16 @@ def stub_stripe(monkeypatch):
     def fake_create_link(*, account_id: str) -> str:
         return f"https://connect.stripe.com/express/{account_id}/onboarding"
 
+    def fake_fetch_account(*, account_id: str) -> dict:
+        return {
+            "id": account_id,
+            "charges_enabled": stripe_account_state["charges_enabled"],
+            "payouts_enabled": stripe_account_state["payouts_enabled"],
+        }
+
     monkeypatch.setattr(onboarding_module, "create_express_account", fake_create_account)
     monkeypatch.setattr(onboarding_module, "create_onboarding_link", fake_create_link)
+    monkeypatch.setattr(onboarding_module, "fetch_account", fake_fetch_account)
 
 
 # --- Slug validation -------------------------------------------------------
@@ -246,6 +262,43 @@ def test_status_404_when_not_a_tutor(client, student_user):
         headers=auth_headers_for(student_user),
     )
     assert r.status_code == 404
+
+
+def test_status_self_heals_from_stripe(client, db_session: Session, stripe_account_state):
+    """If Stripe says charges+payouts are live, /status flips DB to ACTIVE.
+    Self-heals without needing the account.updated webhook.
+    """
+    r = client.post(
+        "/onboarding/tutor",
+        json={
+            "email": "heal@example.com",
+            "password": "verysecret",
+            "full_name": "Heal",
+            "tutor_slug": "heal",
+            "display_name": "Heal",
+            "gdpr_consent": True,
+        },
+    )
+    token = r.json()["access_token"]
+
+    tutor = db_session.exec(select(Tutor).where(Tutor.tutor_slug == "heal")).first()
+    assert tutor.account_status == TutorAccountStatus.PAUSED_KYC
+
+    # Simulate Stripe finishing onboarding without firing the webhook.
+    stripe_account_state["charges_enabled"] = True
+    stripe_account_state["payouts_enabled"] = True
+
+    r2 = client.get(
+        "/onboarding/tutor/status",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert r2.status_code == 200
+    body = r2.json()
+    assert body["account_status"] == "active"
+    assert body["onboarding_complete"] is True
+
+    db_session.refresh(tutor)
+    assert tutor.account_status == TutorAccountStatus.ACTIVE
 
 
 # --- Webhook account.updated → Tutor.account_status flip --------------------

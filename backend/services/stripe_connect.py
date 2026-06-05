@@ -45,6 +45,16 @@ def create_express_account(*, email: str, country: str | None = None) -> str:
     return account["id"]
 
 
+def fetch_account(*, account_id: str) -> dict:
+    """Pull the live Account object from Stripe.
+
+    Used by /onboarding/tutor/status to self-heal when an account.updated
+    webhook didn't reach us (very common in dev where `stripe listen`
+    isn't always running).
+    """
+    return stripe.Account.retrieve(account_id, api_key=_api_key())
+
+
 def create_onboarding_link(*, account_id: str) -> str:
     """Return a Stripe-hosted URL the tutor visits to do KYC.
 
