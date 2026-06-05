@@ -167,6 +167,8 @@ class User(SQLModel, table=True):
     hashed_password: str
     full_name: str
     role: UserRole = Field(default=UserRole.STUDENT)
+    is_active: bool = Field(default=True, index=True)
+    timezone: str = Field(default="UTC", max_length=64)
     bio: str | None = None
     languages: str | None = None
     intro_video_url: str | None = None
@@ -180,6 +182,16 @@ class User(SQLModel, table=True):
 
     subscription_tier: SubscriptionTier = Field(default=SubscriptionTier.NONE)
     subscription_expires_at: datetime | None = None
+
+    # GDPR consent — captured at signup; required to create an account.
+    newsletter_opt_in: bool = Field(default=False)
+    gdpr_consent_at: datetime | None = Field(default=None)
+    gdpr_consent_ip: str | None = Field(default=None, max_length=64)
+
+    # Email verification — 6-digit code hashed in DB so a leak can't be replayed.
+    email_verified_at: datetime | None = Field(default=None)
+    email_verification_code_hash: str | None = Field(default=None, max_length=255)
+    email_verification_expires_at: datetime | None = Field(default=None)
 
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

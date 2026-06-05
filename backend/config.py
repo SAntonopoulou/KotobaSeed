@@ -58,6 +58,12 @@ class Settings(BaseSettings):
     admin_email: str | None = None
     admin_password: str | None = None
 
+    # ----- Email (Resend) -------------------------------------------------
+    # Unset is fine for local dev — email helpers no-op with a log line.
+    resend_api_key: str | None = None
+    resend_from_email: str = "noreply@kotobaseed.net"
+    resend_from_name: str = "Kotobaseed"
+
 
 @lru_cache
 def get_settings() -> Settings:

@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from typing import Annotated
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -37,7 +38,34 @@ def get_current_user(
     user = session.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account is disabled.",
+        )
     return user
+
+
+CurrentUser = Annotated[User, Depends(get_current_user)]
+
+
+def require_email_verified(current_user: User = Depends(get_current_user)) -> User:
+    """Gate endpoints behind email verification.
+
+    Admins bypass — they're seeded server-side and don't go through the
+    verification flow.
+    """
+    if current_user.role == UserRole.ADMIN:
+        return current_user
+    if current_user.email_verified_at is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Email verification required.",
+        )
+    return current_user
+
+
+CurrentVerifiedUser = Annotated[User, Depends(require_email_verified)]
 
 
 def get_current_user_optional(

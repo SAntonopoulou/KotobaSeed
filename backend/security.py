@@ -9,6 +9,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from fastapi import Request
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 
@@ -30,6 +31,24 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
+
+
+hash_password = get_password_hash
+
+
+def client_ip(request: Request) -> str | None:
+    """Best-effort real client IP.
+
+    Order: Cloudflare's CF-Connecting-IP (set when CF proxy fronts us) →
+    X-Forwarded-For (first hop) → direct peer.
+    """
+    cf_ip = request.headers.get("cf-connecting-ip")
+    if cf_ip:
+        return cf_ip.strip()
+    fwd = request.headers.get("x-forwarded-for")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    return request.client.host if request.client else None
 
 
 def create_access_token(

@@ -258,16 +258,30 @@ class TestAuthSmoke:
             "email": "newuser@example.com",
             "password": "verysecret",
             "full_name": "New User",
+            "gdpr_consent": True,
         }
         r = client.post("/auth/register", json=register_payload)
-        assert r.status_code == 200, r.text
+        assert r.status_code == 201, r.text
+        body = r.json()
+        assert "access_token" in body
+        assert body["token_type"] == "bearer"
+        assert body["expires_in_minutes"] > 0
 
+        # Legacy OAuth2 form login still works (used by Swagger UI).
         r = client.post(
             "/auth/token",
             data={
                 "username": "newuser@example.com",
                 "password": "verysecret",
             },
+        )
+        assert r.status_code == 200, r.text
+        assert "access_token" in r.json()
+
+        # JSON login also works.
+        r = client.post(
+            "/auth/login",
+            json={"email": "newuser@example.com", "password": "verysecret"},
         )
         assert r.status_code == 200, r.text
         assert "access_token" in r.json()

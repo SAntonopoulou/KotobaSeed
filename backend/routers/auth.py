@@ -1,82 +1,282 @@
-from datetime import timedelta
-from typing import Any
+"""Authentication endpoints.
 
-from fastapi import APIRouter, Depends, HTTPException, status
+Flow:
+- POST /auth/register  → creates the user, issues a 6-digit verification code
+                         (emailed), returns a JWT immediately so the client
+                         can call /auth/verify-email without logging in again.
+- POST /auth/verify-email     → consume the code, set email_verified_at.
+- POST /auth/resend-verification → issue a fresh code (overwrites stored hash).
+- POST /auth/login    → JSON {email, password} login. Returns JWT.
+- POST /auth/token    → OAuth2-form login (legacy/Swagger UI compat).
+- GET  /auth/me       → current user (no email-verification gate so the
+                         frontend can render a "verify your email" screen).
+"""
+
+from __future__ import annotations
+
+import logging
+import secrets
+from datetime import UTC, datetime, timedelta
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from sqlmodel import Session, select
 
+from ..config import settings
 from ..database import get_session
+from ..deps import CurrentUser
 from ..models import User, UserRole
 from ..security import (
-    ACCESS_TOKEN_EXPIRE_MINUTES,
+    client_ip,
     create_access_token,
-    get_password_hash,
+    hash_password,
     verify_password,
 )
+from ..services.email import send_verification_code
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
+EMAIL_CODE_TTL_MINUTES = 15
 
-class UserCreate(BaseModel):
+
+def _generate_email_code() -> str:
+    """Zero-padded 6-digit code via secrets.randbelow for uniform distribution."""
+    return f"{secrets.randbelow(1_000_000):06d}"
+
+
+def _issue_email_code(user: User) -> str:
+    """Generate a code, stash its hash + expiry on the user, return plaintext."""
+    code = _generate_email_code()
+    user.email_verification_code_hash = hash_password(code)
+    user.email_verification_expires_at = datetime.now(UTC) + timedelta(
+        minutes=EMAIL_CODE_TTL_MINUTES
+    )
+    return code
+
+
+# --- Request / response models -----------------------------------------
+
+
+class RegisterRequest(BaseModel):
     email: EmailStr
-    password: str
-    full_name: str
+    password: str = Field(min_length=8, max_length=128)
+    full_name: str = Field(min_length=1, max_length=120)
+    timezone: str = Field(default="UTC", max_length=64)
+    newsletter_opt_in: bool = False
+    gdpr_consent: bool
     role: UserRole = UserRole.STUDENT
 
 
-class Token(BaseModel):
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class TokenResponse(BaseModel):
     access_token: str
-    token_type: str
+    token_type: str = "bearer"
+    expires_in_minutes: int
 
 
-@router.post("/register", response_model=User, response_model_exclude={"hashed_password"})
-def register_user(user_in: UserCreate, session: Session = Depends(get_session)) -> Any:
-    """
-    Register a new user.
-    """
-    # Check if user already exists
-    statement = select(User).where(User.email == user_in.email)
-    existing_user = session.exec(statement).first()
-    if existing_user:
+class UserPublic(BaseModel):
+    id: int
+    email: EmailStr
+    full_name: str
+    role: UserRole
+    is_active: bool
+    timezone: str
+    newsletter_opt_in: bool
+    created_at: datetime
+    email_verified_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class VerifyEmailRequest(BaseModel):
+    code: str = Field(min_length=4, max_length=12)
+
+
+class VerifyEmailResponse(BaseModel):
+    verified: bool
+
+
+# --- Endpoints ----------------------------------------------------------
+
+
+@router.post(
+    "/register",
+    response_model=TokenResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def register(
+    payload: RegisterRequest,
+    request: Request,
+    session: Annotated[Session, Depends(get_session)],
+) -> TokenResponse:
+    if not payload.gdpr_consent:
         raise HTTPException(
-            status_code=400,
-            detail="A user with this email already exists",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="GDPR consent is required to create an account.",
         )
 
-    # Create new user
+    email = payload.email.lower().strip()
+    existing = session.exec(select(User).where(User.email == email)).first()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An account with this email already exists.",
+        )
+
+    now = datetime.now(UTC)
     user = User(
-        email=user_in.email,
-        hashed_password=get_password_hash(user_in.password),
-        full_name=user_in.full_name,
-        role=user_in.role,
+        email=email,
+        hashed_password=hash_password(payload.password),
+        full_name=payload.full_name.strip(),
+        role=payload.role,
+        is_active=True,
+        timezone=payload.timezone or "UTC",
+        newsletter_opt_in=payload.newsletter_opt_in,
+        gdpr_consent_at=now,
+        gdpr_consent_ip=client_ip(request),
     )
+    code = _issue_email_code(user)
+
     session.add(user)
     session.commit()
     session.refresh(user)
-    return user
+
+    try:
+        send_verification_code(
+            to_email=user.email,
+            full_name=user.full_name,
+            code=code,
+            expires_minutes=EMAIL_CODE_TTL_MINUTES,
+        )
+    except Exception:
+        log.exception("Could not send verification code at signup for %s", user.email)
+
+    token = create_access_token(
+        subject=user.id,
+        expires_delta=timedelta(minutes=settings.access_token_expire_minutes),
+    )
+    return TokenResponse(
+        access_token=token,
+        expires_in_minutes=settings.access_token_expire_minutes,
+    )
 
 
-@router.post("/token", response_model=Token)
-def login_access_token(
-    form_data: OAuth2PasswordRequestForm = Depends(), session: Session = Depends(get_session)
-) -> Any:
-    """
-    OAuth2 compatible token login, get an access token for future requests.
-    """
-    # Find user by email (username field in form_data)
-    statement = select(User).where(User.email == form_data.username)
-    user = session.exec(statement).first()
-
-    if not user or not verify_password(form_data.password, user.hashed_password):
+@router.post("/verify-email", response_model=VerifyEmailResponse)
+def verify_email(
+    payload: VerifyEmailRequest,
+    current: CurrentUser,
+    session: Annotated[Session, Depends(get_session)],
+) -> VerifyEmailResponse:
+    if current.email_verified_at is not None:
+        return VerifyEmailResponse(verified=True)
+    if (
+        not current.email_verification_code_hash
+        or not current.email_verification_expires_at
+    ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Incorrect email or password",
+            detail="No verification code on file. Request a new one.",
+        )
+    # Stored as naive datetime in SQLite — treat both sides as UTC-aware.
+    expires_at = current.email_verification_expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=UTC)
+    if datetime.now(UTC) > expires_at:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="That code has expired. Request a new one.",
+        )
+    if not verify_password(
+        payload.code.strip(), current.email_verification_code_hash
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="That code doesn't match. Double-check the email we sent.",
         )
 
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(subject=user.id, expires_delta=access_token_expires)
-    return {
-        "access_token": access_token,
-        "token_type": "bearer",
-    }
+    now = datetime.now(UTC)
+    current.email_verified_at = now
+    current.email_verification_code_hash = None
+    current.email_verification_expires_at = None
+    current.updated_at = now
+    session.add(current)
+    session.commit()
+    return VerifyEmailResponse(verified=True)
+
+
+@router.post("/resend-verification", response_model=VerifyEmailResponse)
+def resend_verification(
+    current: CurrentUser,
+    session: Annotated[Session, Depends(get_session)],
+) -> VerifyEmailResponse:
+    if current.email_verified_at is not None:
+        return VerifyEmailResponse(verified=True)
+
+    code = _issue_email_code(current)
+    current.updated_at = datetime.now(UTC)
+    session.add(current)
+    session.commit()
+    try:
+        send_verification_code(
+            to_email=current.email,
+            full_name=current.full_name,
+            code=code,
+            expires_minutes=EMAIL_CODE_TTL_MINUTES,
+        )
+    except Exception:
+        log.exception("Could not resend verification code for %s", current.email)
+    return VerifyEmailResponse(verified=False)
+
+
+def _login(email: str, password: str, session: Session) -> TokenResponse:
+    email_norm = email.lower().strip()
+    user = session.exec(select(User).where(User.email == email_norm)).first()
+    if not user or not verify_password(password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account is disabled.",
+        )
+    token = create_access_token(
+        subject=user.id,
+        expires_delta=timedelta(minutes=settings.access_token_expire_minutes),
+    )
+    return TokenResponse(
+        access_token=token,
+        expires_in_minutes=settings.access_token_expire_minutes,
+    )
+
+
+@router.post("/login", response_model=TokenResponse)
+def login(
+    payload: LoginRequest,
+    session: Annotated[Session, Depends(get_session)],
+) -> TokenResponse:
+    return _login(payload.email, payload.password, session)
+
+
+@router.post("/token", response_model=TokenResponse)
+def login_form(
+    form: Annotated[OAuth2PasswordRequestForm, Depends()],
+    session: Annotated[Session, Depends(get_session)],
+) -> TokenResponse:
+    """OAuth2 password-grant form login. Kept for Swagger UI + legacy frontend."""
+    return _login(form.username, form.password, session)
+
+
+@router.get("/me", response_model=UserPublic)
+def me(current: CurrentUser) -> UserPublic:
+    return UserPublic.model_validate(current)

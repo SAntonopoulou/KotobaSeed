@@ -9,6 +9,7 @@ python-jose[cryptography]
 python-multipart
 email-validator
 stripe
+resend
 alembic
 psycopg2-binary
 # dev / test
