@@ -50,6 +50,17 @@ class Settings(BaseSettings):
     # ----- Frontend -------------------------------------------------------
     frontend_url: str = "http://localhost:5173"
 
+    # ----- Stripe Connect onboarding URLs ---------------------------------
+    # Where Stripe redirects the tutor after onboarding (success or aborted).
+    # Stripe re-issues fresh AccountLinks each time so these don't carry
+    # tokens — safe to be static per-environment.
+    connect_onboarding_return_url: str = "http://localhost:5173/onboarding/return"
+    connect_onboarding_refresh_url: str = "http://localhost:5173/onboarding/refresh"
+    # Stripe Connect Express country (ISO-2). Tutors based elsewhere need to
+    # set this per-account during onboarding — handled when we add country
+    # selection to the signup form.
+    default_connect_country: str = "GR"
+
     # ----- CORS -----------------------------------------------------------
     # Comma-separated list in env; parsed into a tuple at use time.
     cors_origins: str = "http://localhost:5173,http://localhost:3000"

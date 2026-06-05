@@ -23,6 +23,7 @@ from .routers import (
     conversations,
     groups,
     notifications,
+    onboarding,
     pledges,
     projects,
     ratings,
@@ -106,6 +107,7 @@ for router in (
     groups.router,
     subscriptions.router,
     tutor_site.router,
+    onboarding.router,
 ):
     app.include_router(router)
 

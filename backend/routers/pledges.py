@@ -11,7 +11,17 @@ from sqlmodel import Session, select
 
 from ..database import get_session
 from ..deps import get_current_user
-from ..models import Notification, Pledge, PledgeStatus, Project, ProjectRating, ProjectStatus, User
+from ..models import (
+    Notification,
+    Pledge,
+    PledgeStatus,
+    Project,
+    ProjectRating,
+    ProjectStatus,
+    Tutor,
+    TutorAccountStatus,
+    User,
+)
 from ..security import STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
 
 stripe.api_key = STRIPE_SECRET_KEY
@@ -254,14 +264,17 @@ def handle_checkout_session_completed(session: Session, data_object: dict):
 def handle_account_updated(session: Session, data_object: dict):
     try:
         stripe_account_id = data_object["id"]
+        charges_enabled = bool(data_object.get("charges_enabled"))
+        payouts_enabled = bool(data_object.get("payouts_enabled"))
+
+        # Legacy CompInput path: the teacher User owns the Connect account.
         teacher = session.exec(
             select(User).where(User.stripe_account_id == stripe_account_id)
         ).first()
         if teacher:
-            teacher.charges_enabled = data_object["charges_enabled"]
-            teacher.payouts_enabled = data_object["payouts_enabled"]
-
-            if not teacher.charges_enabled:
+            teacher.charges_enabled = charges_enabled
+            teacher.payouts_enabled = payouts_enabled
+            if not charges_enabled:
                 projects_to_hold = session.exec(
                     select(Project).where(
                         Project.teacher_id == teacher.id, Project.status == ProjectStatus.FUNDING
@@ -269,14 +282,31 @@ def handle_account_updated(session: Session, data_object: dict):
                 ).all()
                 for proj in projects_to_hold:
                     proj.status = ProjectStatus.ON_HOLD
-
-            notification = Notification(
-                user_id=teacher.id,
-                message="Your Stripe account status has been updated.",
-                link="/teacher/dashboard",
+            session.add(
+                Notification(
+                    user_id=teacher.id,
+                    message="Your Stripe account status has been updated.",
+                    link="/teacher/dashboard",
+                )
             )
-            session.add(notification)
-            session.commit()
+
+        # Kotobaseed path: the Connect account belongs to a Tutor. Flip
+        # PAUSED_KYC → ACTIVE the first time both flags come back true.
+        tutor = session.exec(
+            select(Tutor).where(Tutor.stripe_connect_account_id == stripe_account_id)
+        ).first()
+        if tutor:
+            if charges_enabled and payouts_enabled:
+                if tutor.account_status == TutorAccountStatus.PAUSED_KYC:
+                    tutor.account_status = TutorAccountStatus.ACTIVE
+                    tutor.updated_at = datetime.now(UTC)
+            elif tutor.account_status == TutorAccountStatus.ACTIVE:
+                # Stripe revoked a capability — back to KYC-pending so the
+                # tutor sees the "finish setup" prompt on next login.
+                tutor.account_status = TutorAccountStatus.PAUSED_KYC
+                tutor.updated_at = datetime.now(UTC)
+
+        session.commit()
     except Exception as e:
         logger.error(f"Error processing account.updated: {e}\n{traceback.format_exc()}")
         session.rollback()

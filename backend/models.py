@@ -89,6 +89,7 @@ class TutorPlan(str, Enum):
 class TutorAccountStatus(str, Enum):
     """High-level lifecycle state for the tutor account."""
 
+    PAUSED_KYC = "paused_kyc"  # not yet finished Stripe Connect onboarding
     ACTIVE = "active"
     PAUSED_DORMANT = "paused_dormant"  # 30+ days no lesson on Starter
     PAUSED_BILLING = "paused_billing"  # 60+ days failed subscription on Pro
