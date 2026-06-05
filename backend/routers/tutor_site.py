@@ -29,6 +29,7 @@ from ..models import (
     Booking,
     BookingStatus,
     LessonPack,
+    Notification,
     SubscriptionTier,
     Tutor,
     TutorAccountStatus,
@@ -256,11 +257,20 @@ def list_lesson_packs(
     tutor: CurrentTutor,
     session: Annotated[Session, Depends(get_session)],
 ) -> list[LessonPackRead]:
-    """Public list of active packs for the resolved tenant."""
+    """Public list of active paid packs for the resolved tenant.
+
+    Excludes the auto-managed trial pack (is_trial=True) — that one is
+    surfaced through GET /tutor/trial separately so the tutor's site can
+    show a distinct "Try a free X-min lesson" CTA.
+    """
     rows = session.exec(
         select(LessonPack)
-        .where(LessonPack.tutor_id == tutor.id, LessonPack.is_active == True)  # noqa: E712
-        .order_by(LessonPack.price_cents.asc())
+        .where(
+            LessonPack.tutor_id == tutor.id,
+            LessonPack.is_active == True,  # noqa: E712
+            LessonPack.is_trial == False,  # noqa: E712
+        )
+        .order_by(LessonPack.num_lessons.asc(), LessonPack.price_cents.asc())
     ).all()
     return [LessonPackRead.model_validate(r) for r in rows]
 
@@ -271,14 +281,245 @@ def list_all_lesson_packs(
     tutor: CurrentTutor,
     session: Annotated[Session, Depends(get_session)],
 ) -> list[LessonPackRead]:
-    """Owner-only — includes inactive packs so the dashboard can show + restore."""
+    """Owner-only — includes inactive paid packs so the dashboard can show
+    + restore. Hides the auto-managed trial pack; the trial is configured
+    through GET/PUT /tutor/trial."""
     _require_owner(tutor, current)
     rows = session.exec(
         select(LessonPack)
-        .where(LessonPack.tutor_id == tutor.id)
-        .order_by(LessonPack.is_active.desc(), LessonPack.price_cents.asc())
+        .where(
+            LessonPack.tutor_id == tutor.id,
+            LessonPack.is_trial == False,  # noqa: E712
+        )
+        .order_by(LessonPack.is_active.desc(), LessonPack.num_lessons.asc(), LessonPack.price_cents.asc())
     ).all()
     return [LessonPackRead.model_validate(r) for r in rows]
+
+
+# --- Free trial ----------------------------------------------------------
+
+
+class TrialSettingsRead(BaseModel):
+    offers_free_trial: bool
+    free_trial_minutes: int
+    free_trial_limit_per_student: int
+
+
+class TrialSettingsUpdate(BaseModel):
+    offers_free_trial: bool
+    free_trial_minutes: int | None = Field(default=None, ge=15, le=120)
+    free_trial_limit_per_student: int | None = Field(default=None, ge=1, le=10)
+
+
+def _ensure_trial_pack(tutor: Tutor, session: Session) -> LessonPack:
+    """Idempotent: ensure exactly one is_trial=True pack exists for the tutor
+    matching the current trial-minutes setting. Reactivates if previously
+    deactivated.
+    """
+    existing = session.exec(
+        select(LessonPack).where(
+            LessonPack.tutor_id == tutor.id,
+            LessonPack.is_trial == True,  # noqa: E712
+        )
+    ).first()
+    now = datetime.now(UTC)
+    if existing:
+        existing.duration_minutes = tutor.free_trial_minutes
+        existing.is_active = True
+        existing.name = f"Free {tutor.free_trial_minutes}-minute trial"
+        existing.price_cents = 0
+        existing.updated_at = now
+        session.add(existing)
+        return existing
+    pack = LessonPack(
+        tutor_id=tutor.id,
+        name=f"Free {tutor.free_trial_minutes}-minute trial",
+        description="A short intro lesson, on us — no card needed.",
+        num_lessons=1,
+        duration_minutes=tutor.free_trial_minutes,
+        price_cents=0,
+        currency="eur",
+        is_active=True,
+        is_trial=True,
+    )
+    session.add(pack)
+    return pack
+
+
+def _deactivate_trial_pack(tutor: Tutor, session: Session) -> None:
+    pack = session.exec(
+        select(LessonPack).where(
+            LessonPack.tutor_id == tutor.id,
+            LessonPack.is_trial == True,  # noqa: E712
+        )
+    ).first()
+    if pack:
+        pack.is_active = False
+        pack.updated_at = datetime.now(UTC)
+        session.add(pack)
+
+
+@router.get("/trial", response_model=TrialSettingsRead)
+def read_trial_settings(tutor: CurrentTutor) -> TrialSettingsRead:
+    """Public — the tutor's trial offer config. Used by the student-facing
+    site to decide whether to show the "Try a free lesson" CTA."""
+    return TrialSettingsRead(
+        offers_free_trial=tutor.offers_free_trial,
+        free_trial_minutes=tutor.free_trial_minutes,
+        free_trial_limit_per_student=tutor.free_trial_limit_per_student,
+    )
+
+
+@router.put("/trial", response_model=TrialSettingsRead)
+def update_trial_settings(
+    payload: TrialSettingsUpdate,
+    current: CurrentUser,
+    tutor: CurrentTutor,
+    session: Annotated[Session, Depends(get_session)],
+) -> TrialSettingsRead:
+    """Owner-only — toggle trial on/off + set duration + per-student cap.
+
+    Side effect: when offers_free_trial flips to True we auto-create (or
+    reactivate) the trial LessonPack; when it flips to False we deactivate
+    that pack so the public site stops advertising it.
+    """
+    _require_owner(tutor, current)
+    tutor.offers_free_trial = payload.offers_free_trial
+    if payload.free_trial_minutes is not None:
+        tutor.free_trial_minutes = payload.free_trial_minutes
+    if payload.free_trial_limit_per_student is not None:
+        tutor.free_trial_limit_per_student = payload.free_trial_limit_per_student
+    tutor.updated_at = datetime.now(UTC)
+    session.add(tutor)
+
+    if tutor.offers_free_trial:
+        _ensure_trial_pack(tutor, session)
+    else:
+        _deactivate_trial_pack(tutor, session)
+    session.commit()
+    session.refresh(tutor)
+    return TrialSettingsRead(
+        offers_free_trial=tutor.offers_free_trial,
+        free_trial_minutes=tutor.free_trial_minutes,
+        free_trial_limit_per_student=tutor.free_trial_limit_per_student,
+    )
+
+
+class TrialBookRequest(BaseModel):
+    scheduled_at: datetime
+
+
+class TrialBookResponse(BaseModel):
+    booking_id: int
+    scheduled_at: datetime
+    duration_minutes: int
+
+
+@router.post(
+    "/trial/book",
+    response_model=TrialBookResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def book_trial(
+    payload: TrialBookRequest,
+    current: CurrentUser,
+    tutor: CurrentTutor,
+    session: Annotated[Session, Depends(get_session)],
+) -> TrialBookResponse:
+    """Student-initiated free trial booking.
+
+    Same validation as paid bookings (active tutor, future slot, slot fits
+    an availability window) but no Stripe call — we create a CONFIRMED
+    booking directly. Enforces `Tutor.free_trial_limit_per_student` across
+    every prior trial booking the student has with this tutor (any status
+    except CANCELLED).
+    """
+    if not tutor.offers_free_trial:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="This tutor isn't offering free trials.",
+        )
+    if tutor.account_status != TutorAccountStatus.ACTIVE:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This tutor isn't accepting bookings right now.",
+        )
+    if payload.scheduled_at <= datetime.now(UTC):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Pick a time in the future.",
+        )
+    if current.id == tutor.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You can't book a trial with yourself.",
+        )
+
+    trial_pack = session.exec(
+        select(LessonPack).where(
+            LessonPack.tutor_id == tutor.id,
+            LessonPack.is_trial == True,  # noqa: E712
+            LessonPack.is_active == True,  # noqa: E712
+        )
+    ).first()
+    if not trial_pack:
+        # Defensive: tutor toggled trials on but we don't have a pack row.
+        trial_pack = _ensure_trial_pack(tutor, session)
+        session.commit()
+        session.refresh(trial_pack)
+
+    # Enforce per-student lifetime cap on trials with this tutor.
+    prior = session.exec(
+        select(Booking).where(
+            Booking.tutor_id == tutor.id,
+            Booking.student_user_id == current.id,
+            Booking.lesson_pack_id == trial_pack.id,
+            Booking.status != BookingStatus.CANCELLED,
+        )
+    ).all()
+    if len(prior) >= tutor.free_trial_limit_per_student:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "You've already booked your free trial with this tutor — "
+                "next steps are a paid lesson."
+            ),
+        )
+
+    booking = Booking(
+        tutor_id=tutor.id,
+        student_user_id=current.id,
+        lesson_pack_id=trial_pack.id,
+        scheduled_at=payload.scheduled_at,
+        duration_minutes=trial_pack.duration_minutes,
+        price_cents=0,
+        currency=trial_pack.currency,
+        platform_fee_cents=0,
+        status=BookingStatus.CONFIRMED,
+        paid_at=datetime.now(UTC),
+    )
+    session.add(booking)
+    session.commit()
+    session.refresh(booking)
+
+    # Mirror the paid-booking notification.
+    session.add(
+        Notification(
+            user_id=tutor.user_id,
+            message=(
+                f"New free trial booked for "
+                f"{booking.scheduled_at.strftime('%a %d %b · %H:%M UTC')}."
+            ),
+            link="/dashboard",
+        )
+    )
+    session.commit()
+
+    return TrialBookResponse(
+        booking_id=booking.id,
+        scheduled_at=booking.scheduled_at,
+        duration_minutes=booking.duration_minutes,
+    )
 
 
 @router.post(

@@ -13,6 +13,44 @@ const TIME_LABEL = new Intl.DateTimeFormat(undefined, {
   minute: '2-digit',
 });
 
+// Client-side slot generation for the free-trial branch. The trial doesn't
+// reference a real LessonPack server-side (we don't want to expose the
+// managed trial pack id), so we project the tutor's regular availability
+// windows ourselves using `trial_duration_minutes`. Filters out times in
+// the past + the same 15-minute lead the backend uses.
+const generateClientSideSlots = (windows, durationMinutes) => {
+  if (!windows.length) return [];
+  const now = Date.now();
+  const earliest = now + 15 * 60_000;
+  const horizon = now + 21 * 24 * 60 * 60_000;
+  const step = 30; // minutes
+  const slots = [];
+  for (let dayOffset = 0; dayOffset < 21; dayOffset++) {
+    const day = new Date(now + dayOffset * 24 * 60 * 60_000);
+    const weekday = (day.getDay() + 6) % 7; // local weekday with Mon=0
+    for (const w of windows) {
+      if (w.weekday !== weekday) continue;
+      for (let m = w.start_minute; m + durationMinutes <= w.end_minute; m += step) {
+        const slotDate = new Date(
+          day.getFullYear(),
+          day.getMonth(),
+          day.getDate(),
+          Math.floor(m / 60),
+          m % 60
+        );
+        const ts = slotDate.getTime();
+        if (ts < earliest || ts > horizon) continue;
+        slots.push({
+          scheduled_at: slotDate.toISOString(),
+          duration_minutes: durationMinutes,
+        });
+      }
+    }
+  }
+  slots.sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at));
+  return slots;
+};
+
 const BookingDialog = ({ pack, tutorDisplayName, onClose }) => {
   const navigate = useNavigate();
   const { token } = useAuth();
@@ -36,8 +74,20 @@ const BookingDialog = ({ pack, tutorDisplayName, onClose }) => {
     setError('');
     (async () => {
       try {
-        const res = await client.get(`/tutor/availability/slots?pack_id=${pack.id}&days=21`);
-        if (!cancelled) setSlots(res.data || []);
+        // Trial branch: we don't have a real pack_id, so synthesize a
+        // slot list from the tutor's regular availability windows using
+        // the trial duration. For paid packs the backend endpoint already
+        // does that for us.
+        if (pack.isTrial) {
+          const [windows] = await Promise.all([
+            client.get('/tutor/availability'),
+          ]);
+          const generated = generateClientSideSlots(windows.data || [], pack.duration_minutes);
+          if (!cancelled) setSlots(generated);
+        } else {
+          const res = await client.get(`/tutor/availability/slots?pack_id=${pack.id}&days=21`);
+          if (!cancelled) setSlots(res.data || []);
+        }
       } catch (err) {
         if (!cancelled) {
           setError(err?.response?.data?.detail || 'Could not load times.');
@@ -49,7 +99,7 @@ const BookingDialog = ({ pack, tutorDisplayName, onClose }) => {
     return () => {
       cancelled = true;
     };
-  }, [pack.id]);
+  }, [pack.id, pack.isTrial, pack.duration_minutes]);
 
   const groupedByDay = useMemo(() => {
     const groups = new Map();
@@ -75,6 +125,16 @@ const BookingDialog = ({ pack, tutorDisplayName, onClose }) => {
     setSubmitting(true);
     setError('');
     try {
+      if (pack.isTrial) {
+        // Trial: no Stripe, just create the CONFIRMED booking and bounce
+        // the student to the success page.
+        const res = await client.post('/tutor/trial/book', {
+          scheduled_at: pickedSlot.scheduled_at,
+        });
+        const bookingId = res.data?.booking_id;
+        window.location.href = `/booking/success?booking=${bookingId ?? ''}&trial=1`;
+        return;
+      }
       const res = await client.post(`/tutor/lesson-packs/${pack.id}/book`, {
         scheduled_at: pickedSlot.scheduled_at,
       });
@@ -85,7 +145,7 @@ const BookingDialog = ({ pack, tutorDisplayName, onClose }) => {
       setError('Checkout did not return a URL. Try again.');
     } catch (err) {
       const detail = err?.response?.data?.detail;
-      setError(typeof detail === 'string' ? detail : 'Could not start checkout.');
+      setError(typeof detail === 'string' ? detail : 'Could not book.');
     } finally {
       setSubmitting(false);
     }
@@ -177,14 +237,23 @@ const BookingDialog = ({ pack, tutorDisplayName, onClose }) => {
           )}
         </div>
 
-        <div className="mt-5 bg-kotoba-background/50 rounded-lg p-4 flex items-center justify-between">
-          <span className="text-sm text-kotoba-text">Total</span>
-          <span className="text-2xl font-extrabold text-kotoba-primary">{total}</span>
-        </div>
+        {!pack.isTrial && (
+          <div className="mt-5 bg-kotoba-background/50 rounded-lg p-4 flex items-center justify-between">
+            <span className="text-sm text-kotoba-text">Total</span>
+            <span className="text-2xl font-extrabold text-kotoba-primary">{total}</span>
+          </div>
+        )}
+        {pack.isTrial && (
+          <div className="mt-5 bg-kotoba-primary/10 rounded-lg p-4 text-sm text-kotoba-primary font-medium">
+            No payment needed — this one's on us.
+          </div>
+        )}
 
         {!token && (
           <p className="mt-3 text-xs text-kotoba-text/60">
-            You'll be asked to sign in or create an account before paying.
+            {pack.isTrial
+              ? "You'll be asked to sign in or create an account first."
+              : "You'll be asked to sign in or create an account before paying."}
           </p>
         )}
 
@@ -194,10 +263,16 @@ const BookingDialog = ({ pack, tutorDisplayName, onClose }) => {
           disabled={submitting || !pickedSlot}
           className="mt-4 w-full py-2.5 rounded-lg bg-kotoba-secondary text-kotoba-text font-semibold hover:bg-kotoba-secondary-dark disabled:opacity-60"
         >
-          {submitting ? 'Loading…' : 'Continue to checkout'}
+          {submitting
+            ? 'Loading…'
+            : pack.isTrial
+              ? 'Book the free trial'
+              : 'Continue to checkout'}
         </button>
         <p className="mt-2 text-xs text-center text-kotoba-text/60">
-          Card details handled by Stripe. You can cancel any time before the lesson.
+          {pack.isTrial
+            ? 'You can cancel any time before the lesson.'
+            : 'Card details handled by Stripe. You can cancel any time before the lesson.'}
         </p>
       </div>
     </div>

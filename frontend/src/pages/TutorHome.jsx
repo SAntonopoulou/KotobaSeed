@@ -32,20 +32,24 @@ const TutorHome = () => {
   const { currentUser } = useAuth();
   const [tutor, setTutor] = useState(null);
   const [packs, setPacks] = useState([]);
+  const [trial, setTrial] = useState(null);
   const [bookingPack, setBookingPack] = useState(null);
+  const [bookingTrial, setBookingTrial] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const [tutorRes, packsRes] = await Promise.all([
+        const [tutorRes, packsRes, trialRes] = await Promise.all([
           client.get('/tutor/me'),
           client.get('/tutor/lesson-packs').catch(() => ({ data: [] })),
+          client.get('/tutor/trial').catch(() => ({ data: null })),
         ]);
         if (!cancelled) {
           setTutor(tutorRes.data);
           setPacks(packsRes.data || []);
+          setTrial(trialRes.data || null);
         }
       } catch (err) {
         if (!cancelled) {
@@ -84,6 +88,9 @@ const TutorHome = () => {
   const languages = parseLanguages(tutor.languages_taught);
   const isPaused = tutor.account_status !== 'active';
   const isOwner = currentUser && currentUser.id === tutor.user_id;
+  const singleLessons = packs.filter((p) => p.num_lessons === 1);
+  const multiPacks = packs.filter((p) => p.num_lessons > 1);
+  const trialOffered = trial?.offers_free_trial;
 
   return (
     <div className="bg-kotoba-background min-h-screen">
@@ -188,44 +195,110 @@ const TutorHome = () => {
         </p>
       </section>
 
-      <section id="book" className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12 bg-white rounded-2xl shadow-sm mx-4 sm:mx-auto mb-16">
-        <h2 className="text-2xl font-bold text-kotoba-primary mb-3">Book a lesson</h2>
-        {packs.length === 0 ? (
+      <section id="book" className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12 bg-white rounded-2xl shadow-sm mx-4 sm:mx-auto mb-16 space-y-10">
+        <div>
+          <h2 className="text-2xl font-bold text-kotoba-primary mb-3">Book a lesson</h2>
+        </div>
+
+        {trialOffered && (
+          <div className="rounded-xl bg-gradient-to-r from-kotoba-primary to-green-700 text-white p-6 flex items-start justify-between gap-4 flex-wrap">
+            <div className="max-w-xl">
+              <h3 className="text-lg font-bold">Try a free {trial.free_trial_minutes}-minute lesson</h3>
+              <p className="text-sm opacity-90 mt-1">
+                A short intro lesson on us — no card needed. See if you click with {tutor.display_name} before committing to anything.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setBookingTrial(true)}
+              className="px-5 py-2.5 rounded-md bg-kotoba-secondary text-kotoba-text font-semibold hover:bg-kotoba-secondary-dark whitespace-nowrap"
+            >
+              Book a free trial →
+            </button>
+          </div>
+        )}
+
+        {singleLessons.length > 0 && (
+          <div>
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-kotoba-text/60 mb-3">
+              Single lessons
+            </h3>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {singleLessons.map((pack) => (
+                <div
+                  key={pack.id}
+                  className="border border-kotoba-text/10 rounded-xl p-5 flex flex-col bg-kotoba-background/40"
+                >
+                  <h4 className="text-lg font-semibold text-kotoba-primary">{pack.name}</h4>
+                  <p className="mt-1 text-sm text-kotoba-text/70">{pack.duration_minutes} min</p>
+                  {pack.description && (
+                    <p className="mt-3 text-sm text-kotoba-text whitespace-pre-line">
+                      {pack.description}
+                    </p>
+                  )}
+                  <div className="flex-grow" />
+                  <p className="mt-4 text-2xl font-extrabold text-kotoba-primary">
+                    {formatPrice(pack.price_cents, pack.currency)}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setBookingPack(pack)}
+                    className="mt-4 w-full px-4 py-2 rounded-md bg-kotoba-secondary text-kotoba-text font-semibold hover:bg-kotoba-secondary-dark"
+                  >
+                    Book this lesson
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {multiPacks.length > 0 && (
+          <div>
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-kotoba-text/60 mb-3">
+              Lesson packs
+            </h3>
+            <p className="text-sm text-kotoba-text/70 mb-4">
+              Bundles of lessons at a better price. You schedule each one as you go.
+            </p>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {multiPacks.map((pack) => (
+                <div
+                  key={pack.id}
+                  className="border border-kotoba-text/10 rounded-xl p-5 flex flex-col bg-kotoba-background/40"
+                >
+                  <h4 className="text-lg font-semibold text-kotoba-primary">{pack.name}</h4>
+                  <p className="mt-1 text-sm text-kotoba-text/70">
+                    {pack.num_lessons} × {pack.duration_minutes} min
+                  </p>
+                  {pack.description && (
+                    <p className="mt-3 text-sm text-kotoba-text whitespace-pre-line">
+                      {pack.description}
+                    </p>
+                  )}
+                  <div className="flex-grow" />
+                  <p className="mt-4 text-2xl font-extrabold text-kotoba-primary">
+                    {formatPrice(pack.price_cents, pack.currency)}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setBookingPack(pack)}
+                    className="mt-4 w-full px-4 py-2 rounded-md bg-kotoba-secondary text-kotoba-text font-semibold hover:bg-kotoba-secondary-dark"
+                  >
+                    Book this pack
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {packs.length === 0 && !trialOffered && (
           <p className="text-kotoba-text">
             {isOwner
-              ? 'No lesson packs yet — add one from your dashboard.'
-              : 'This tutor hasn\'t listed lesson packs yet. Check back soon.'}
+              ? 'No lessons listed yet — add a lesson pack or enable the free trial from your dashboard.'
+              : "This tutor hasn't listed lessons yet. Check back soon."}
           </p>
-        ) : (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-2">
-            {packs.map((pack) => (
-              <div
-                key={pack.id}
-                className="border border-kotoba-text/10 rounded-xl p-5 flex flex-col bg-kotoba-background/40"
-              >
-                <h3 className="text-lg font-semibold text-kotoba-primary">{pack.name}</h3>
-                <p className="mt-1 text-sm text-kotoba-text/70">
-                  {pack.num_lessons} × {pack.duration_minutes} min
-                </p>
-                {pack.description && (
-                  <p className="mt-3 text-sm text-kotoba-text whitespace-pre-line">
-                    {pack.description}
-                  </p>
-                )}
-                <div className="flex-grow" />
-                <p className="mt-4 text-2xl font-extrabold text-kotoba-primary">
-                  {formatPrice(pack.price_cents, pack.currency)}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setBookingPack(pack)}
-                  className="mt-4 w-full px-4 py-2 rounded-md bg-kotoba-secondary text-kotoba-text font-semibold hover:bg-kotoba-secondary-dark"
-                >
-                  Book this pack
-                </button>
-              </div>
-            ))}
-          </div>
         )}
       </section>
 
@@ -243,6 +316,23 @@ const TutorHome = () => {
           pack={bookingPack}
           tutorDisplayName={tutor.display_name}
           onClose={() => setBookingPack(null)}
+        />
+      )}
+
+      {bookingTrial && trial && (
+        <BookingDialog
+          pack={{
+            id: null,
+            name: `Free ${trial.free_trial_minutes}-minute trial`,
+            description: 'A short intro lesson on us — no card needed.',
+            num_lessons: 1,
+            duration_minutes: trial.free_trial_minutes,
+            price_cents: 0,
+            currency: 'eur',
+            isTrial: true,
+          }}
+          tutorDisplayName={tutor.display_name}
+          onClose={() => setBookingTrial(false)}
         />
       )}
     </div>

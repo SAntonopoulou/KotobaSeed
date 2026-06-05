@@ -6,6 +6,7 @@ import { apexUrl } from '../hooks/useTenant';
 import LessonPackManager from '../components/LessonPackManager';
 import BookingsManager from '../components/BookingsManager';
 import AvailabilityEditor from '../components/AvailabilityEditor';
+import TrialSettings from '../components/TrialSettings';
 
 // Pull the token out of the URL fragment (#token=...) if present, store it,
 // then scrub the URL so the token doesn't sit in the address bar.
@@ -321,6 +322,8 @@ const TutorDashboard = () => {
         <AvailabilityEditor />
 
         <LessonPackManager />
+
+        <TrialSettings />
 
         {/* Placeholder for future modules */}
         <section className="bg-white/60 rounded-2xl p-6 text-sm text-kotoba-text">

@@ -637,13 +637,23 @@ class TutorAvailability(SQLModel, table=True):
 class LessonPack(SQLModel, table=True):
     """A lesson package a tutor sells to students.
 
-    Examples: "1 lesson — €25", "5 lessons — €100", "10 lessons — €180".
-    Each pack is owned by a Tutor; deactivating is preferred over delete so
-    historical bookings stay readable.
+    Three flavors, distinguished by `num_lessons` and `is_trial`:
+      - Free trial (is_trial=True, price_cents=0, num_lessons=1) — auto-
+        maintained when the tutor toggles `Tutor.offers_free_trial`. Hidden
+        from the "regular packs" list in the dashboard.
+      - Single lesson (is_trial=False, num_lessons=1) — shown as a single
+        lesson card on the tutor's site, distinct from multi-lesson packs
+        to keep the buying decision simple.
+      - Multi-lesson pack (is_trial=False, num_lessons>1) — bulk-buy with
+        a discount, often.
+
+    Deactivating is preferred over delete so historical bookings that
+    reference an old pack stay readable.
 
     The price stored here is the full price the student pays; the platform
     fee (5% Free/Plus, 0% Pro/Business) is computed at checkout time and
-    deducted via Stripe Application Fees on Connect.
+    deducted via Stripe Application Fees on Connect. Trial packs skip
+    Stripe entirely.
     """
 
     __tablename__ = "lesson_pack"
@@ -657,6 +667,9 @@ class LessonPack(SQLModel, table=True):
     price_cents: int = Field(ge=0)
     currency: str = Field(default="eur", max_length=3)
     is_active: bool = Field(default=True, index=True)
+    # Auto-managed trial pack. Hidden from the regular-packs UI; reachable
+    # only through the tutor's trial settings + the public trial-book flow.
+    is_trial: bool = Field(default=False, index=True)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
@@ -773,6 +786,16 @@ class Tutor(SQLModel, table=True):
     custom_domain: str | None = Field(
         default=None, unique=True, index=True, max_length=255
     )
+
+    # ----- Free trial -----
+    # Tutor opts in to offering a free trial lesson. When enabled, a managed
+    # LessonPack with is_trial=True is auto-maintained — students see a
+    # "Try a free X-minute lesson" CTA on the tutor's site that books
+    # directly without Stripe checkout.
+    offers_free_trial: bool = Field(default=False)
+    free_trial_minutes: int = Field(default=20, ge=15, le=120)
+    # Per-student lifetime cap on trial bookings with this tutor.
+    free_trial_limit_per_student: int = Field(default=1, ge=1, le=10)
 
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
