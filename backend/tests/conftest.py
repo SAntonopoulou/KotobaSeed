@@ -28,7 +28,7 @@ from sqlmodel import Session, SQLModel, create_engine
 
 from backend.database import get_session
 from backend.main import app
-from backend.models import User, UserRole
+from backend.models import Tutor, TutorAccountStatus, TutorPlan, User, UserRole
 from backend.security import create_access_token, get_password_hash
 
 
@@ -53,13 +53,19 @@ def db_session_fixture(engine) -> Iterator[Session]:
 
 
 @pytest.fixture(name="client")
-def client_fixture(engine) -> Iterator[TestClient]:
-    """FastAPI TestClient wired to the test engine."""
+def client_fixture(engine, monkeypatch) -> Iterator[TestClient]:
+    """FastAPI TestClient wired to the test engine.
+
+    Replaces both the `get_session` dependency (used by route handlers) AND
+    `backend.database.engine` (used by middleware that runs outside the
+    dependency graph — e.g. tenant resolution).
+    """
 
     def _get_session_override() -> Iterator[Session]:
         with Session(engine) as session:
             yield session
 
+    monkeypatch.setattr("backend.database.engine", engine)
     app.dependency_overrides[get_session] = _get_session_override
     with TestClient(app) as c:
         yield c
@@ -107,3 +113,39 @@ def admin_user(db_session: Session) -> User:
 def auth_headers_for(user: User) -> dict[str, str]:
     token = create_access_token(subject=user.id)
     return {"Authorization": f"Bearer {token}"}
+
+
+# ----- Tenant fixtures --------------------------------------------------
+
+
+def make_tutor(
+    db_session: Session,
+    *,
+    user: User,
+    slug: str = "vasso",
+    display_name: str = "Vasso",
+    custom_domain: str | None = None,
+) -> Tutor:
+    tutor = Tutor(
+        user_id=user.id,
+        tutor_slug=slug,
+        display_name=display_name,
+        plan=TutorPlan.STARTER,
+        account_status=TutorAccountStatus.ACTIVE,
+        custom_domain=custom_domain,
+    )
+    db_session.add(tutor)
+    db_session.commit()
+    db_session.refresh(tutor)
+    return tutor
+
+
+@pytest.fixture
+def vasso_tutor(db_session: Session, teacher_user: User) -> Tutor:
+    return make_tutor(
+        db_session,
+        user=teacher_user,
+        slug="vasso",
+        display_name="Vasso",
+        custom_domain="greekwithvasso.com",
+    )

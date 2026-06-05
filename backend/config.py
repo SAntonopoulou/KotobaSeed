@@ -58,6 +58,24 @@ class Settings(BaseSettings):
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
+    # ----- Multi-tenant routing -------------------------------------------
+    # The bare apex host means "no tenant" (marketing site + marketplace).
+    platform_apex: str = "kotobaseed.net"
+    # What we strip off the Host to get a slug. Separate from `platform_apex`
+    # so staging can use e.g. `.staging.kotobaseed.net` without changing the
+    # apex semantics.
+    tenant_subdomain_suffix: str = ".kotobaseed.net"
+    # Subdomains that always resolve to "no tenant" even if a tutor claims
+    # the slug. Signup validation should reject these too (later step).
+    reserved_subdomains: str = "www,api,admin"
+    # Header used to override tenant resolution in dev/test. Ignored unless
+    # `environment` is "dev" or "test".
+    tenant_dev_override_header: str = "X-Tenant-Slug"
+
+    @property
+    def reserved_subdomain_set(self) -> frozenset[str]:
+        return frozenset(s.strip().lower() for s in self.reserved_subdomains.split(",") if s.strip())
+
     # ----- Bootstrap admin (optional, dev convenience) --------------------
     admin_email: str | None = None
     admin_password: str | None = None

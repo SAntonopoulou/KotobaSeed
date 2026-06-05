@@ -13,8 +13,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session, select
 
+from . import database as _database  # late-bound engine so tests can swap it
 from .config import settings
-from .database import create_db_and_tables, engine
+from .database import create_db_and_tables
 from .models import LanguageGroup, Project, User, UserRole
 from .routers import (
     admin,
@@ -27,11 +28,13 @@ from .routers import (
     ratings,
     requests,
     subscriptions,
+    tutor_site,
     users,
     verifications,
     videos,
 )
 from .security import get_password_hash
+from .tenancy import add_tenant_middleware
 
 log = logging.getLogger(__name__)
 
@@ -69,7 +72,7 @@ def _sync_language_groups(session: Session) -> None:
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     create_db_and_tables()
-    with Session(engine) as session:
+    with Session(_database.engine) as session:
         _seed_admin_user(session)
         _sync_language_groups(session)
     yield
@@ -77,6 +80,9 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(title="Kotobaseed", lifespan=lifespan)
 
+# Starlette wraps middleware LIFO: the LAST added is outermost. CORS goes
+# last so it handles preflights before tenant resolution runs a DB query.
+add_tenant_middleware(app)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
@@ -99,6 +105,7 @@ for router in (
     conversations.router,
     groups.router,
     subscriptions.router,
+    tutor_site.router,
 ):
     app.include_router(router)
 
