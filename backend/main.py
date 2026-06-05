@@ -25,6 +25,7 @@ from .routers import (
     email_templates,
     groups,
     marketplace,
+    newsletters,
     notifications,
     onboarding,
     pledges,
@@ -172,6 +173,7 @@ for router in (
     articles.router,
     testimonials.router,
     email_templates.router,
+    newsletters.router,
 ):
     app.include_router(router)
 

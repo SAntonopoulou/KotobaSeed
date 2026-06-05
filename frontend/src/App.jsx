@@ -44,6 +44,7 @@ import Classroom from './pages/Classroom';
 import ArticlesIndex from './pages/ArticlesIndex';
 import ArticleReader from './pages/ArticleReader';
 import ArticleEditor from './pages/ArticleEditor';
+import NewsletterUnsubscribe from './pages/NewsletterUnsubscribe';
 import { useTenant } from './hooks/useTenant';
 
 const TutorShell = () => (
@@ -56,6 +57,7 @@ const TutorShell = () => (
     <Route path="/dashboard/articles/:slug/edit" element={<ArticleEditor />} />
     <Route path="/articles" element={<ArticlesIndex />} />
     <Route path="/articles/:slug" element={<ArticleReader />} />
+    <Route path="/newsletters/unsubscribe" element={<NewsletterUnsubscribe />} />
     <Route path="/login" element={<Login />} />
     <Route path="/booking/success" element={<BookingSuccess />} />
     <Route path="/booking/cancelled" element={<BookingCancelled />} />
@@ -79,6 +81,7 @@ const ApexShell = () => {
           <Route path="/groups" element={<Groups />} />
           <Route path="/pricing" element={<Pricing />} />
           <Route path="/library" element={<Library />} />
+          <Route path="/newsletters/unsubscribe" element={<NewsletterUnsubscribe />} />
           <Route path="/onboarding/tutor" element={<TutorSignup />} />
           <Route path="/verify-email" element={<VerifyEmail />} />
 

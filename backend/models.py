@@ -690,6 +690,63 @@ class LessonPack(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
+class NewsletterStatus(str, Enum):
+    DRAFT = "draft"
+    SENT = "sent"
+
+
+class Newsletter(SQLModel, table=True):
+    """A per-tutor newsletter broadcast — drafts and history.
+
+    Tutor composes in markdown; render to HTML at send time using the
+    shared email_templates._markdown_to_html helper so the styling
+    matches our transactional mail. Drafts can be edited freely; SENT
+    rows are immutable so the history matches what students received.
+
+    Audience snapshot lives in `recipient_count` (denormalised at send
+    time) — the actual student list isn't stored long-term to keep the
+    table small and so GDPR deletion of a student doesn't backfill old
+    newsletter rows.
+    """
+
+    __tablename__ = "newsletter"
+
+    id: int | None = Field(default=None, primary_key=True)
+    tutor_id: int = Field(foreign_key="tutor.id", index=True)
+    subject: str = Field(max_length=200)
+    body_markdown: str = Field(default="", max_length=50_000)
+    status: NewsletterStatus = Field(default=NewsletterStatus.DRAFT, index=True)
+    sent_at: datetime | None = Field(default=None)
+    recipient_count: int = Field(default=0)
+    # Tutor sometimes wants to verify the look before broadcasting; stamp
+    # the last time we sent the test so the UI can confirm.
+    last_test_sent_at: datetime | None = Field(default=None)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class NewsletterUnsubscribe(SQLModel, table=True):
+    """One row per (tutor, student) opt-out from newsletter broadcasts.
+
+    Composite uniqueness so an idempotent unsubscribe doesn't error if the
+    student clicks the link twice. We key on student_user_id rather than
+    email so the same student unsubscribed from one tutor still receives
+    from another.
+    """
+
+    __tablename__ = "newsletter_unsubscribe"
+    __table_args__ = (
+        UniqueConstraint(
+            "tutor_id", "student_user_id", name="uq_newsletter_unsub_pair"
+        ),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    tutor_id: int = Field(foreign_key="tutor.id", index=True)
+    student_user_id: int = Field(foreign_key="user.id", index=True)
+    unsubscribed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
 class TutorEmailTemplate(SQLModel, table=True):
     """Per-tutor override of a transactional email's subject + markdown body.
 
