@@ -1,0 +1,40 @@
+[project]
+name = "kotobaseed"
+version = "0.1.0"
+description = "Kotobaseed — language tutor platform + comprehensible-input marketplace."
+requires-python = ">=3.11"
+readme = "README.md"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["backend"]
+extend-exclude = ["backend/migrations/versions"]
+
+[tool.ruff.lint]
+# Rule families: pycodestyle (E/W), Pyflakes (F), isort (I), bugbear (B),
+# comprehensions (C4), pyupgrade (UP), simplify (SIM)
+select = ["E", "W", "F", "I", "B", "C4", "UP", "SIM"]
+# E501 line-too-long is handled by formatter; B008 (function default) is fine
+# in FastAPI Depends(...) usage.
+ignore = ["E501", "B008"]
+
+[tool.ruff.lint.isort]
+combine-as-imports = true
+known-first-party = ["backend"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-ra --strict-markers"
+filterwarnings = [
+    # Stripe SDK throws DeprecationWarning from pkg_resources; not actionable
+    "ignore::DeprecationWarning:stripe",
+]
+asyncio_mode = "auto"

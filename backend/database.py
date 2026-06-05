@@ -1,18 +1,37 @@
-import os
-from sqlmodel import SQLModel, create_engine, Session
+"""Database engine + session factory.
 
-sqlite_file_name = "database.db"
-default_db_url = f"sqlite:///{sqlite_file_name}"
-database_url = os.environ.get("DATABASE_URL", default_db_url)
+Driver picked automatically from `DATABASE_URL`. SQLite keeps the
+`check_same_thread=False` arg so FastAPI's threaded request handlers work;
+Postgres ignores it.
+"""
 
-# Only use check_same_thread for SQLite
-connect_args = {"check_same_thread": False} if "sqlite" in database_url else {}
+from __future__ import annotations
 
-engine = create_engine(database_url, echo=False, connect_args=connect_args)
+from collections.abc import Iterator
 
-def create_db_and_tables():
+from sqlmodel import Session, SQLModel, create_engine
+
+from .config import settings
+
+_connect_args = {"check_same_thread": False} if "sqlite" in settings.database_url else {}
+
+engine = create_engine(
+    settings.database_url,
+    echo=settings.db_echo,
+    pool_pre_ping=True,
+    connect_args=_connect_args,
+)
+
+
+def create_db_and_tables() -> None:
+    """Idempotent schema bootstrap.
+
+    Safe to call at startup. Once Alembic owns the schema, this becomes
+    redundant for production but stays useful for tests.
+    """
     SQLModel.metadata.create_all(engine)
 
-def get_session():
+
+def get_session() -> Iterator[Session]:
     with Session(engine) as session:
         yield session

@@ -34,7 +34,14 @@ frontend/.eslintcache
 
 # Database
 *.db
+*.sqlite
 *.sqlite3
+backend/uploads/
+
+# Pytest / mypy / ruff caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
 
 # IDEs
 .vscode/

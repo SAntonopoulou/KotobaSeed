@@ -1,6 +1,7 @@
 fastapi
 uvicorn[standard]
 sqlmodel
+pydantic-settings
 python-dotenv
 passlib
 argon2-cffi
@@ -8,3 +9,10 @@ python-jose[cryptography]
 python-multipart
 email-validator
 stripe
+alembic
+psycopg2-binary
+# dev / test
+pytest
+pytest-asyncio
+httpx
+ruff
