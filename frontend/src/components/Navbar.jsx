@@ -90,22 +90,6 @@ const Navbar = () => {
                   {user.role === 'teacher' && <Link to="/teacher/dashboard" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Dashboard</Link>}
                   {user.role === 'student' && <Link to="/student/dashboard" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">My Pledges</Link>}
                   {user.role === 'admin' && <Link to="/admin/dashboard" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Admin</Link>}
-                  {user.tutor_slug && (
-                    <>
-                      <a
-                        href={tutorSiteUrl(user.tutor_slug, '/')}
-                        className="border-transparent text-kotoba-primary hover:border-kotoba-primary inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-                      >
-                        My site
-                      </a>
-                      <a
-                        href={tutorSiteUrl(user.tutor_slug, '/dashboard')}
-                        className="border-transparent text-kotoba-primary hover:border-kotoba-primary inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-                      >
-                        My dashboard
-                      </a>
-                    </>
-                  )}
                 </>
               ) : (
                 <>
@@ -166,9 +150,30 @@ const Navbar = () => {
                     </button>
 
                     {showUserMenu && (
-                        <div className="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg py-1 bg-white ring-1 ring-black ring-opacity-5 focus:outline-none">
+                        <div className="origin-top-right absolute right-0 mt-2 w-56 rounded-md shadow-lg py-1 bg-white ring-1 ring-black ring-opacity-5 focus:outline-none">
                             <Link to={`/profile/${user.id}`} className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" onClick={() => setShowUserMenu(false)}>Your Profile</Link>
                             <Link to="/settings" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" onClick={() => setShowUserMenu(false)}>Settings</Link>
+                            {user.tutor_slug && (
+                                <>
+                                    <div className="border-t border-gray-100 my-1" />
+                                    <div className="px-4 pt-2 pb-1 text-xs uppercase tracking-wide text-gray-400">Your tutor site</div>
+                                    <a
+                                        href={tutorSiteUrl(user.tutor_slug, '/')}
+                                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                                        onClick={() => setShowUserMenu(false)}
+                                    >
+                                        Visit your site
+                                    </a>
+                                    <a
+                                        href={tutorSiteUrl(user.tutor_slug, '/dashboard')}
+                                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                                        onClick={() => setShowUserMenu(false)}
+                                    >
+                                        Manage your site
+                                    </a>
+                                    <div className="border-t border-gray-100 my-1" />
+                                </>
+                            )}
                             <button onClick={handleLogout} className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Logout</button>
                         </div>
                     )}

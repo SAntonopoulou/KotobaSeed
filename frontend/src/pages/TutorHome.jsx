@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import client from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import { apexUrl } from '../hooks/useTenant';
 
 const parseLanguages = (raw) => {
   if (!raw) return [];
@@ -66,10 +67,20 @@ const TutorHome = () => {
 
   return (
     <div className="bg-kotoba-background min-h-screen">
-      {/* Minimal nav with just the tutor's name */}
+      {/* Header — tutor name, with a small but visible link back to Kotobaseed */}
       <header className="bg-white shadow-sm">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between gap-3">
-          <span className="text-xl font-semibold text-kotoba-primary">{tutor.display_name}</span>
+          <div className="flex items-center gap-3">
+            <a
+              href={apexUrl('/')}
+              className="text-xs uppercase tracking-wider text-kotoba-text/50 hover:text-kotoba-primary"
+              title="Browse Kotobaseed"
+            >
+              Kotobaseed
+            </a>
+            <span className="text-kotoba-text/30">·</span>
+            <span className="text-xl font-semibold text-kotoba-primary">{tutor.display_name}</span>
+          </div>
           <div className="flex items-center gap-2">
             {isOwner && (
               <Link

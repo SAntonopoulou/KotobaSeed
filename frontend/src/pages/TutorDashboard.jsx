@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import client from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import { apexUrl } from '../hooks/useTenant';
 
 // Pull the token out of the URL fragment (#token=...) if present, store it,
 // then scrub the URL so the token doesn't sit in the address bar.
@@ -129,9 +130,19 @@ const TutorDashboard = () => {
     <div className="bg-kotoba-background min-h-screen">
       <header className="bg-white shadow-sm">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between flex-wrap gap-2">
-          <div>
-            <span className="text-xl font-semibold text-kotoba-primary">{tutor.display_name}</span>
-            <span className="ml-3 text-sm text-kotoba-text/60">Dashboard</span>
+          <div className="flex items-center gap-3">
+            <a
+              href={apexUrl('/')}
+              className="text-xs uppercase tracking-wider text-kotoba-text/50 hover:text-kotoba-primary"
+              title="Browse Kotobaseed"
+            >
+              Kotobaseed
+            </a>
+            <span className="text-kotoba-text/30">·</span>
+            <div>
+              <span className="text-xl font-semibold text-kotoba-primary">{tutor.display_name}</span>
+              <span className="ml-3 text-sm text-kotoba-text/60">Dashboard</span>
+            </div>
           </div>
           <div className="flex items-center gap-3">
             <a href="/" className="text-sm text-kotoba-primary hover:underline">

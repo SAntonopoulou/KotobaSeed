@@ -50,6 +50,19 @@ export function useTenant() {
   return useMemo(getTenant, []);
 }
 
+function _apex() {
+  if (typeof window === 'undefined') return 'kotobaseed.net';
+  let apex = window.location.hostname;
+  if (apex.endsWith('.localhost')) apex = 'localhost';
+  if (apex.endsWith('.kotobaseed.net')) apex = 'kotobaseed.net';
+  return apex;
+}
+
+function _portPart() {
+  if (typeof window === 'undefined') return '';
+  return window.location.port ? `:${window.location.port}` : '';
+}
+
 /**
  * Build a URL on a specific tutor's subdomain, mirroring our current host.
  *
@@ -62,13 +75,18 @@ export function useTenant() {
  */
 export function tutorSiteUrl(slug, path = '/', fragment = '') {
   if (typeof window === 'undefined') return path;
-  const { protocol, hostname, port } = window.location;
-  const portPart = port ? `:${port}` : '';
-  // Apex hosts: drop any subdomain by treating the apex as `hostname`.
-  // For localhost/127.0.0.1 we still treat as apex (no existing subdomain).
-  let apex = hostname;
-  if (apex.endsWith('.localhost')) apex = 'localhost';
-  if (apex.endsWith('.kotobaseed.net')) apex = 'kotobaseed.net';
+  const { protocol } = window.location;
   const frag = fragment ? `#${fragment}` : '';
-  return `${protocol}//${slug}.${apex}${portPart}${path}${frag}`;
+  return `${protocol}//${slug}.${_apex()}${_portPart()}${path}${frag}`;
+}
+
+/**
+ * Build a URL back on the apex (Kotobaseed main site). Used from tutor
+ * subdomains to let visitors (and the tutor themselves) return to the
+ * marketplace / browse other tutors.
+ */
+export function apexUrl(path = '/') {
+  if (typeof window === 'undefined') return path;
+  const { protocol } = window.location;
+  return `${protocol}//${_apex()}${_portPart()}${path}`;
 }
