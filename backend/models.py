@@ -690,6 +690,34 @@ class LessonPack(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
+class TutorEmailTemplate(SQLModel, table=True):
+    """Per-tutor override of a transactional email's subject + markdown body.
+
+    Identified by `template_key` (matches the keys in
+    services.email_templates.DEFAULTS). When no row exists for a (tutor,
+    key) pair, the platform default is used. Tutors edit these from the
+    dashboard so their student-facing emails sound like them rather than
+    like a SaaS platform.
+
+    Body is markdown — rendered to HTML at send time. Subject is plain
+    text. Both run through str.format_map with a safe-fallback dict so a
+    placeholder typo shows literally rather than crashing the send.
+    """
+
+    __tablename__ = "tutor_email_template"
+    __table_args__ = (
+        UniqueConstraint("tutor_id", "template_key", name="uq_tutor_email_template_key"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    tutor_id: int = Field(foreign_key="tutor.id", index=True)
+    template_key: str = Field(max_length=80, index=True)
+    subject: str = Field(max_length=200)
+    body_markdown: str = Field(default="", max_length=20_000)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
 class Testimonial(SQLModel, table=True):
     """A student testimonial shown on the tutor's public site.
 

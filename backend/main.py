@@ -22,6 +22,7 @@ from .routers import (
     articles,
     auth,
     conversations,
+    email_templates,
     groups,
     marketplace,
     notifications,
@@ -170,6 +171,7 @@ for router in (
     marketplace.router,
     articles.router,
     testimonials.router,
+    email_templates.router,
 ):
     app.include_router(router)
 

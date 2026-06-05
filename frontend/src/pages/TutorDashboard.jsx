@@ -14,6 +14,7 @@ import CancellationPolicy from '../components/CancellationPolicy';
 import ArticlesManager from '../components/ArticlesManager';
 import TestimonialsManager from '../components/TestimonialsManager';
 import TutorAnalytics from '../components/TutorAnalytics';
+import EmailTemplatesManager from '../components/EmailTemplatesManager';
 
 // Pull the token out of the URL fragment (#token=...) if present, store it,
 // then scrub the URL so the token doesn't sit in the address bar.
@@ -343,6 +344,8 @@ const TutorDashboard = () => {
         <TrialSettings />
 
         <CancellationPolicy />
+
+        <EmailTemplatesManager />
 
         <CustomDomainSettings />
 

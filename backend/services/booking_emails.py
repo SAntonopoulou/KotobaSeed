@@ -21,7 +21,7 @@ from ..models import (
     Tutor,
     User,
 )
-from . import email as email_service
+from . import email as email_service, email_templates
 
 log = logging.getLogger(__name__)
 
@@ -79,16 +79,25 @@ def send_confirmation_emails(session: Session, booking: Booking) -> None:
 
     if student is not None:
         with contextlib.suppress(Exception):
-            email_service.send_booking_confirmation_student(
-                to_email=student.email,
-                student_name=student.full_name or student.username or "",
-                tutor_display_name=tutor.display_name,
-                pack_name=pack.name,
-                scheduled_at=booking.scheduled_at,
-                duration_minutes=booking.duration_minutes,
-                classroom_url=classroom,
-                tutor_timezone=tutor_tz,
-                is_trial=is_trial,
+            when_str = email_service._format_when(booking.scheduled_at, tutor_tz)
+            ctx = {
+                "student_name": student.full_name or student.username or "there",
+                "tutor_name": tutor.display_name,
+                "when": when_str,
+                "duration_minutes": booking.duration_minutes,
+                "pack_name": pack.name,
+                "classroom_url": classroom,
+            }
+            template_key = (
+                "trial_welcome_student" if is_trial else "booking_confirmation_student"
+            )
+            subject, body_html = email_templates.render(
+                template_key, ctx, session=session, tutor=tutor
+            )
+            email_service.send_email(
+                to=student.email,
+                subject=subject,
+                html=email_service._wrap(subject, body_html),
                 reply_to=tutor.public_reply_email,
             )
 
@@ -123,14 +132,22 @@ def send_reminder_emails(session: Session, booking: Booking) -> None:
 
     if student is not None:
         with contextlib.suppress(Exception):
-            email_service.send_booking_reminder_student(
-                to_email=student.email,
-                student_name=student.full_name or student.username or "",
-                tutor_display_name=tutor.display_name,
-                scheduled_at=booking.scheduled_at,
-                duration_minutes=booking.duration_minutes,
-                classroom_url=classroom,
-                tutor_timezone=tutor_tz,
+            when_str = email_service._format_when(booking.scheduled_at, tutor_tz)
+            ctx = {
+                "student_name": student.full_name or student.username or "there",
+                "tutor_name": tutor.display_name,
+                "when": when_str,
+                "duration_minutes": booking.duration_minutes,
+                "pack_name": pack.name,
+                "classroom_url": classroom,
+            }
+            subject, body_html = email_templates.render(
+                "booking_reminder_student", ctx, session=session, tutor=tutor
+            )
+            email_service.send_email(
+                to=student.email,
+                subject=subject,
+                html=email_service._wrap(subject, body_html),
                 reply_to=tutor.public_reply_email,
             )
 
