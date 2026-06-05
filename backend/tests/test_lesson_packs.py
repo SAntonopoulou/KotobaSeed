@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from sqlmodel import Session, select
-
-from backend.models import LessonPack
+from sqlmodel import Session
 
 from .conftest import auth_headers_for
 
