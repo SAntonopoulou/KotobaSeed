@@ -140,23 +140,8 @@ def signup_tutor(
 
     now = datetime.now(UTC)
 
-    # Step 1: User
-    user = User(
-        email=email,
-        hashed_password=hash_password(payload.password),
-        full_name=payload.full_name.strip(),
-        role=UserRole.TEACHER,
-        is_active=True,
-        timezone=payload.timezone or "UTC",
-        gdpr_consent_at=now,
-        gdpr_consent_ip=client_ip(request),
-    )
-    code = _issue_email_code(user)
-    session.add(user)
-    session.commit()
-    session.refresh(user)
-
-    # Step 2: Stripe Connect account
+    # Try Stripe first — if anything fails we haven't written to our DB yet
+    # so the user can retry with the same email without "already taken" errors.
     try:
         connect_account_id = create_express_account(
             email=email,
@@ -169,8 +154,33 @@ def signup_tutor(
             detail="Could not provision Stripe account. Try again in a moment.",
         ) from None
 
-    # Step 3: Tutor row + onboarding link. New tutors start on Starter; Pro
-    # upgrade happens later through subscription checkout.
+    try:
+        onboarding_url = create_onboarding_link(account_id=connect_account_id)
+    except stripe.error.StripeError:
+        log.exception("AccountLink creation failed for %s (acct %s)", email, connect_account_id)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Could not start Stripe onboarding. Try again in a moment.",
+        ) from None
+
+    # Stripe succeeded — now create both rows atomically. If User commit fails,
+    # the Connect account leaks (rare; cleaned up by a sweeper later); if Tutor
+    # commit fails the same applies. The transaction below rolls both back
+    # together on any DB error.
+    user = User(
+        email=email,
+        hashed_password=hash_password(payload.password),
+        full_name=payload.full_name.strip(),
+        role=UserRole.TEACHER,
+        is_active=True,
+        timezone=payload.timezone or "UTC",
+        gdpr_consent_at=now,
+        gdpr_consent_ip=client_ip(request),
+    )
+    code = _issue_email_code(user)
+    session.add(user)
+    session.flush()  # populate user.id without committing
+
     tutor = Tutor(
         user_id=user.id,
         tutor_slug=slug,
@@ -183,16 +193,8 @@ def signup_tutor(
     )
     session.add(tutor)
     session.commit()
+    session.refresh(user)
     session.refresh(tutor)
-
-    try:
-        onboarding_url = create_onboarding_link(account_id=connect_account_id)
-    except stripe.error.StripeError:
-        log.exception("AccountLink creation failed for %s (acct %s)", email, connect_account_id)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Account created, but onboarding link failed. Use refresh-link to retry.",
-        ) from None
 
     # Verification email — non-blocking; log only on failure.
     try:

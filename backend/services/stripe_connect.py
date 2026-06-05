@@ -46,13 +46,20 @@ def create_express_account(*, email: str, country: str | None = None) -> str:
 
 
 def fetch_account(*, account_id: str) -> dict:
-    """Pull the live Account object from Stripe.
+    """Pull the live Account from Stripe, returning a plain dict.
 
     Used by /onboarding/tutor/status to self-heal when an account.updated
-    webhook didn't reach us (very common in dev where `stripe listen`
-    isn't always running).
+    webhook didn't reach us. StripeObject overrides __getattr__ in a way
+    that breaks `.get()`, so we extract just what we need into a real
+    dict so callers can use dict idioms safely.
     """
-    return stripe.Account.retrieve(account_id, api_key=_api_key())
+    account = stripe.Account.retrieve(account_id, api_key=_api_key())
+    return {
+        "id": account.id,
+        "charges_enabled": bool(account.charges_enabled),
+        "payouts_enabled": bool(account.payouts_enabled),
+        "details_submitted": bool(getattr(account, "details_submitted", False)),
+    }
 
 
 def create_onboarding_link(*, account_id: str) -> str:
