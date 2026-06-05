@@ -695,6 +695,54 @@ class LessonPack(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
+class PlacementTest(SQLModel, table=True):
+    """One placement test per tutor — students take it to find their level
+    before booking. Reuses the homework question schema (mc_single,
+    mc_multi, fill_blank, short_answer) so the same grading engine works.
+
+    Unique on tutor_id: one active test per tutor. To replace it, update
+    the row rather than insert a new one.
+    """
+
+    __tablename__ = "placement_test"
+
+    id: int | None = Field(default=None, primary_key=True)
+    tutor_id: int = Field(foreign_key="tutor.id", unique=True, index=True)
+    title: str = Field(default="Placement test", max_length=200)
+    description: str | None = Field(default=None, max_length=2000)
+    # Tutor's optional band labels for displaying a level guess to the
+    # student after they finish ("80%+ → B2"). Stored as JSON list of
+    # `{"min_percent": int, "label": str}` entries.
+    level_bands_json: str = Field(default="[]", max_length=8000)
+    questions_json: str = Field(default="[]", max_length=200_000)
+    is_active: bool = Field(default=True, index=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class PlacementSubmission(SQLModel, table=True):
+    """A student's submission for a tutor's placement test.
+
+    Students can re-take — each submission is a new row so the tutor sees
+    progression. Score breakdown stored as JSON for the same per-question
+    drilldown the homework system shows.
+    """
+
+    __tablename__ = "placement_submission"
+
+    id: int | None = Field(default=None, primary_key=True)
+    tutor_id: int = Field(foreign_key="tutor.id", index=True)
+    student_user_id: int = Field(foreign_key="user.id", index=True)
+    answers_json: str = Field(default="{}", max_length=200_000)
+    per_question_results_json: str = Field(default="{}", max_length=200_000)
+    auto_score: int = Field(default=0, ge=0)
+    max_score: int = Field(default=0, ge=0)
+    # Tutor's optional band label captured at submit time. The same student
+    # re-taking later gets a fresh row so the tutor can compare.
+    level_label: str | None = Field(default=None, max_length=80)
+    submitted_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
 class HomeworkQuestionType(str, Enum):
     """Question types the grading engine knows about.
 

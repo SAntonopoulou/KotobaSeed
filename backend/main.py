@@ -29,6 +29,7 @@ from .routers import (
     newsletters,
     notifications,
     onboarding,
+    placement,
     pledges,
     projects,
     ratings,
@@ -176,6 +177,7 @@ for router in (
     email_templates.router,
     newsletters.router,
     homework.router,
+    placement.router,
 ):
     app.include_router(router)
 

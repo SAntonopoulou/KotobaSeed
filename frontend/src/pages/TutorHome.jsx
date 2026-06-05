@@ -118,6 +118,12 @@ const TutorHome = () => {
             >
               Articles
             </Link>
+            <Link
+              to="/placement-test"
+              className="hidden sm:inline-block text-sm text-kotoba-text/70 hover:text-kotoba-primary px-2"
+            >
+              Placement test
+            </Link>
             {isOwner && (
               <Link
                 to="/dashboard"

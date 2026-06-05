@@ -47,6 +47,7 @@ import ArticleEditor from './pages/ArticleEditor';
 import NewsletterUnsubscribe from './pages/NewsletterUnsubscribe';
 import MyAssignments from './pages/MyAssignments';
 import TakeAssignment from './pages/TakeAssignment';
+import PlacementTest from './pages/PlacementTest';
 import { useTenant } from './hooks/useTenant';
 
 const TutorShell = () => (
@@ -59,6 +60,7 @@ const TutorShell = () => (
     <Route path="/dashboard/articles/:slug/edit" element={<ArticleEditor />} />
     <Route path="/articles" element={<ArticlesIndex />} />
     <Route path="/articles/:slug" element={<ArticleReader />} />
+    <Route path="/placement-test" element={<PlacementTest />} />
     <Route path="/newsletters/unsubscribe" element={<NewsletterUnsubscribe />} />
     <Route path="/login" element={<Login />} />
     <Route path="/booking/success" element={<BookingSuccess />} />
