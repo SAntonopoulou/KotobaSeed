@@ -12,7 +12,10 @@ from sqlmodel import Session, func, select
 from ..database import get_session
 from ..deps import get_current_user, get_current_user_optional
 from ..models import (
+    Booking,
+    BookingStatus,
     Conversation,
+    LessonPack,
     Message,
     Notification,
     Pledge,
@@ -170,6 +173,145 @@ def update_me(
     session.commit()
     session.refresh(current_user)
     return current_user
+
+
+class StudentBookingRead(BaseModel):
+    id: int
+    tutor_slug: str | None
+    tutor_display_name: str | None
+    pack_name: str | None
+    scheduled_at: datetime
+    duration_minutes: int
+    price_cents: int
+    currency: str
+    status: BookingStatus
+    paid_at: datetime | None
+    completed_at: datetime | None
+    cancelled_at: datetime | None
+    refunded_at: datetime | None
+
+
+@router.get("/me/bookings", response_model=list[StudentBookingRead])
+def list_my_bookings(
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """All bookings (across all tutors) for the current student. Newest first."""
+    rows = session.exec(
+        select(Booking)
+        .where(Booking.student_user_id == current_user.id)
+        .order_by(Booking.scheduled_at.desc())
+    ).all()
+    tutor_ids = {b.tutor_id for b in rows}
+    pack_ids = {b.lesson_pack_id for b in rows}
+    tutors = {
+        t.id: t for t in session.exec(select(Tutor).where(Tutor.id.in_(tutor_ids))).all()
+    } if tutor_ids else {}
+    packs = {
+        p.id: p for p in session.exec(select(LessonPack).where(LessonPack.id.in_(pack_ids))).all()
+    } if pack_ids else {}
+    return [
+        StudentBookingRead(
+            id=b.id,
+            tutor_slug=tutors.get(b.tutor_id).tutor_slug if tutors.get(b.tutor_id) else None,
+            tutor_display_name=tutors.get(b.tutor_id).display_name if tutors.get(b.tutor_id) else None,
+            pack_name=packs.get(b.lesson_pack_id).name if packs.get(b.lesson_pack_id) else None,
+            scheduled_at=b.scheduled_at,
+            duration_minutes=b.duration_minutes,
+            price_cents=b.price_cents,
+            currency=b.currency,
+            status=b.status,
+            paid_at=b.paid_at,
+            completed_at=b.completed_at,
+            cancelled_at=b.cancelled_at,
+            refunded_at=b.refunded_at,
+        )
+        for b in rows
+    ]
+
+
+@router.post("/me/bookings/{booking_id}/cancel", response_model=StudentBookingRead)
+def cancel_my_booking(
+    booking_id: int,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Cancel a future, confirmed booking and refund via Stripe.
+
+    Rules:
+      - Only the student who paid can cancel.
+      - Past lessons (scheduled_at <= now) cannot be cancelled — talk to
+        the tutor for an after-the-fact resolution.
+      - PENDING_PAYMENT bookings get marked CANCELLED without a refund
+        (no money moved yet).
+      - CONFIRMED bookings get refunded via Stripe with the Application
+        Fee reversed and the transfer pulled back from the Connect
+        account. The status flips to REFUNDED.
+    """
+    booking = session.get(Booking, booking_id)
+    if not booking or booking.student_user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found.")
+    now = datetime.now(UTC)
+    if booking.scheduled_at <= now:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="That lesson has already started or is in the past.",
+        )
+    if booking.status == BookingStatus.PENDING_PAYMENT:
+        booking.status = BookingStatus.CANCELLED
+        booking.cancelled_at = now
+        booking.updated_at = now
+        session.add(booking)
+        session.commit()
+        session.refresh(booking)
+    elif booking.status == BookingStatus.CONFIRMED:
+        if not booking.stripe_payment_intent_id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Booking has no payment intent on file — contact support.",
+            )
+        try:
+            stripe.Refund.create(
+                api_key=os.environ.get("STRIPE_SECRET_KEY"),
+                payment_intent=booking.stripe_payment_intent_id,
+                reverse_transfer=True,
+                refund_application_fee=True,
+            )
+        except stripe.error.StripeError:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Stripe refund failed. Try again or contact support.",
+            ) from None
+        booking.status = BookingStatus.REFUNDED
+        booking.cancelled_at = now
+        booking.refunded_at = now
+        booking.updated_at = now
+        session.add(booking)
+        session.commit()
+        session.refresh(booking)
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Booking is {booking.status.value}; cannot cancel.",
+        )
+
+    tutor = session.get(Tutor, booking.tutor_id)
+    pack = session.get(LessonPack, booking.lesson_pack_id)
+    return StudentBookingRead(
+        id=booking.id,
+        tutor_slug=tutor.tutor_slug if tutor else None,
+        tutor_display_name=tutor.display_name if tutor else None,
+        pack_name=pack.name if pack else None,
+        scheduled_at=booking.scheduled_at,
+        duration_minutes=booking.duration_minutes,
+        price_cents=booking.price_cents,
+        currency=booking.currency,
+        status=booking.status,
+        paid_at=booking.paid_at,
+        completed_at=booking.completed_at,
+        cancelled_at=booking.cancelled_at,
+        refunded_at=booking.refunded_at,
+    )
 
 
 @router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)

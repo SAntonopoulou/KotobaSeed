@@ -19,8 +19,13 @@ depends_on: str | None = None
 
 
 def upgrade() -> None:
-    op.execute("UPDATE user SET role = 'creator' WHERE role = 'teacher'")
+    # SQLAlchemy's Enum column stores enum NAMES by default (uppercase),
+    # not values. Catch both cases so we work on production data (where
+    # values were stored lowercased somewhere) AND dev data (uppercase).
+    op.execute("UPDATE user SET role = 'CREATOR' WHERE role = 'TEACHER'")
+    op.execute("UPDATE user SET role = 'CREATOR' WHERE role = 'teacher'")
 
 
 def downgrade() -> None:
-    op.execute("UPDATE user SET role = 'teacher' WHERE role = 'creator'")
+    op.execute("UPDATE user SET role = 'TEACHER' WHERE role = 'CREATOR'")
+    op.execute("UPDATE user SET role = 'TEACHER' WHERE role = 'creator'")

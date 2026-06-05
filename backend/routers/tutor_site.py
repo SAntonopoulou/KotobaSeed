@@ -453,3 +453,124 @@ def deactivate_lesson_pack(
     pack.updated_at = datetime.now(UTC)
     session.add(pack)
     session.commit()
+
+
+# --- Booking management (tutor side) -------------------------------------
+
+
+class BookingRead(BaseModel):
+    id: int
+    tutor_id: int
+    student_user_id: int
+    student_name: str | None
+    lesson_pack_id: int
+    pack_name: str | None
+    scheduled_at: datetime
+    duration_minutes: int
+    price_cents: int
+    currency: str
+    platform_fee_cents: int
+    status: BookingStatus
+    paid_at: datetime | None
+    completed_at: datetime | None
+    cancelled_at: datetime | None
+    refunded_at: datetime | None
+    created_at: datetime
+
+
+def _serialize_booking(booking: Booking, *, student: User | None, pack: LessonPack | None) -> BookingRead:
+    return BookingRead(
+        id=booking.id,
+        tutor_id=booking.tutor_id,
+        student_user_id=booking.student_user_id,
+        student_name=student.full_name if student else None,
+        lesson_pack_id=booking.lesson_pack_id,
+        pack_name=pack.name if pack else None,
+        scheduled_at=booking.scheduled_at,
+        duration_minutes=booking.duration_minutes,
+        price_cents=booking.price_cents,
+        currency=booking.currency,
+        platform_fee_cents=booking.platform_fee_cents,
+        status=booking.status,
+        paid_at=booking.paid_at,
+        completed_at=booking.completed_at,
+        cancelled_at=booking.cancelled_at,
+        refunded_at=booking.refunded_at,
+        created_at=booking.created_at,
+    )
+
+
+@router.get("/bookings", response_model=list[BookingRead])
+def list_tutor_bookings(
+    current: CurrentUser,
+    tutor: CurrentTutor,
+    session: Annotated[Session, Depends(get_session)],
+) -> list[BookingRead]:
+    """Owner-only — bookings for the current tutor, soonest first for the
+    upcoming ones, then completed/cancelled in recent-first order."""
+    _require_owner(tutor, current)
+    rows = session.exec(
+        select(Booking)
+        .where(Booking.tutor_id == tutor.id)
+        .order_by(Booking.scheduled_at.desc())
+    ).all()
+    # Bulk-load students and packs to avoid N+1.
+    student_ids = {b.student_user_id for b in rows}
+    pack_ids = {b.lesson_pack_id for b in rows}
+    students = {
+        u.id: u
+        for u in session.exec(select(User).where(User.id.in_(student_ids))).all()
+    } if student_ids else {}
+    packs = {
+        p.id: p
+        for p in session.exec(select(LessonPack).where(LessonPack.id.in_(pack_ids))).all()
+    } if pack_ids else {}
+    return [
+        _serialize_booking(b, student=students.get(b.student_user_id), pack=packs.get(b.lesson_pack_id))
+        for b in rows
+    ]
+
+
+@router.post("/bookings/{booking_id}/complete", response_model=BookingRead)
+def mark_booking_complete(
+    booking_id: int,
+    current: CurrentUser,
+    tutor: CurrentTutor,
+    session: Annotated[Session, Depends(get_session)],
+) -> BookingRead:
+    """Tutor marks a confirmed booking as completed.
+
+    Side effects: bumps `Tutor.classroom_minutes_used_this_cycle`, sets
+    `Tutor.last_completed_lesson_at` (which feeds the dormant-pause cron),
+    and stamps `Booking.completed_at`. Pending or already-completed
+    bookings can't be re-completed; cancelled ones can't either.
+    """
+    _require_owner(tutor, current)
+    booking = session.get(Booking, booking_id)
+    if not booking or booking.tutor_id != tutor.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found.")
+    if booking.status != BookingStatus.CONFIRMED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Booking is {booking.status.value}; can only complete a confirmed booking.",
+        )
+
+    now = datetime.now(UTC)
+    booking.status = BookingStatus.COMPLETED
+    booking.completed_at = now
+    booking.updated_at = now
+
+    tutor.classroom_minutes_used_this_cycle = (
+        tutor.classroom_minutes_used_this_cycle or 0
+    ) + booking.duration_minutes
+    tutor.last_completed_lesson_at = now
+    tutor.updated_at = now
+
+    session.add(booking)
+    session.add(tutor)
+    session.commit()
+    session.refresh(booking)
+
+    student = session.get(User, booking.student_user_id)
+    pack = session.get(LessonPack, booking.lesson_pack_id)
+    return _serialize_booking(booking, student=student, pack=pack)
