@@ -18,6 +18,7 @@ import StudentDashboard from './pages/student/Dashboard';
 import Profile from './pages/Profile';
 import Settings from './pages/Settings';
 import Landing from './pages/Landing';
+import Library from './pages/Library';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminAuditLog from './pages/admin/AdminAuditLog';
 import ProjectManagement from './pages/admin/ProjectManagement';
@@ -70,6 +71,7 @@ const ApexShell = () => {
           <Route path="/archive" element={<Archive />} />
           <Route path="/groups" element={<Groups />} />
           <Route path="/pricing" element={<Pricing />} />
+          <Route path="/library" element={<Library />} />
           <Route path="/onboarding/tutor" element={<TutorSignup />} />
           <Route path="/verify-email" element={<VerifyEmail />} />
 

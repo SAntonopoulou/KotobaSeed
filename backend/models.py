@@ -819,6 +819,12 @@ class Tutor(SQLModel, table=True):
     # Per-student lifetime cap on trial bookings with this tutor.
     free_trial_limit_per_student: int = Field(default=1, ge=1, le=10)
 
+    # ----- Marketplace listing -----
+    # Show this tutor on the apex /library directory. Default True so new
+    # tutors get discovery automatically — they can opt out from the
+    # dashboard if they only want direct-link traffic to their subdomain.
+    list_in_marketplace: bool = Field(default=True, index=True)
+
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 

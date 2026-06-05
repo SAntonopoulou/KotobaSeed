@@ -22,6 +22,7 @@ from .routers import (
     auth,
     conversations,
     groups,
+    marketplace,
     notifications,
     onboarding,
     pledges,
@@ -164,6 +165,7 @@ for router in (
     subscriptions.router,
     tutor_site.router,
     onboarding.router,
+    marketplace.router,
 ):
     app.include_router(router)
 

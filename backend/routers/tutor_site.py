@@ -59,6 +59,7 @@ class TutorRead(BaseModel):
     account_status: TutorAccountStatus
     custom_domain: str | None
     stripe_connect_account_id: str | None
+    list_in_marketplace: bool
     created_at: datetime
 
 
@@ -78,6 +79,7 @@ def _serialize_tutor(tutor: Tutor) -> TutorRead:
         account_status=tutor.account_status,
         custom_domain=tutor.custom_domain,
         stripe_connect_account_id=tutor.stripe_connect_account_id,
+        list_in_marketplace=tutor.list_in_marketplace,
         created_at=tutor.created_at,
     )
 
@@ -93,6 +95,7 @@ class TutorUpdate(BaseModel):
     # Tutor-side
     display_name: str | None = Field(default=None, min_length=1, max_length=120)
     public_reply_email: EmailStr | None = None
+    list_in_marketplace: bool | None = None
     # User-side (single identity source)
     bio: str | None = Field(default=None, max_length=4000)
     photo_url: str | None = Field(default=None, max_length=2048)
@@ -182,6 +185,9 @@ def update_current_tutor(
         tutor_dirty = True
     if "public_reply_email" in changes:
         tutor.public_reply_email = changes["public_reply_email"]
+        tutor_dirty = True
+    if "list_in_marketplace" in changes:
+        tutor.list_in_marketplace = bool(changes["list_in_marketplace"])
         tutor_dirty = True
 
     # User-side identity fields (single source — shared with marketplace profile)
