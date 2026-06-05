@@ -825,6 +825,17 @@ class Tutor(SQLModel, table=True):
     # dashboard if they only want direct-link traffic to their subdomain.
     list_in_marketplace: bool = Field(default=True, index=True)
 
+    # ----- Cancellation policy -----
+    # Hours before a lesson at which the student can still cancel + refund.
+    # Platform floor is 48 — enforced via the `ge=48` validator — so a
+    # tutor can be stricter (96, 168 = one week) but never weaker. Sophia's
+    # call: prevents last-minute cancellations that leave tutors with a
+    # held slot and no income, while still letting students out with
+    # plenty of notice. Bookings made INSIDE this window get a "no refund
+    # if you no-show" warning at checkout and the cancel button stays
+    # disabled afterwards.
+    cancellation_cutoff_hours: int = Field(default=48, ge=48, le=720)
+
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 

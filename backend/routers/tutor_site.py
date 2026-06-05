@@ -60,6 +60,7 @@ class TutorRead(BaseModel):
     custom_domain: str | None
     stripe_connect_account_id: str | None
     list_in_marketplace: bool
+    cancellation_cutoff_hours: int
     created_at: datetime
 
 
@@ -80,6 +81,7 @@ def _serialize_tutor(tutor: Tutor) -> TutorRead:
         custom_domain=tutor.custom_domain,
         stripe_connect_account_id=tutor.stripe_connect_account_id,
         list_in_marketplace=tutor.list_in_marketplace,
+        cancellation_cutoff_hours=tutor.cancellation_cutoff_hours,
         created_at=tutor.created_at,
     )
 
@@ -96,6 +98,7 @@ class TutorUpdate(BaseModel):
     display_name: str | None = Field(default=None, min_length=1, max_length=120)
     public_reply_email: EmailStr | None = None
     list_in_marketplace: bool | None = None
+    cancellation_cutoff_hours: int | None = Field(default=None, ge=48, le=720)
     # User-side (single identity source)
     bio: str | None = Field(default=None, max_length=4000)
     photo_url: str | None = Field(default=None, max_length=2048)
@@ -188,6 +191,9 @@ def update_current_tutor(
         tutor_dirty = True
     if "list_in_marketplace" in changes:
         tutor.list_in_marketplace = bool(changes["list_in_marketplace"])
+        tutor_dirty = True
+    if "cancellation_cutoff_hours" in changes:
+        tutor.cancellation_cutoff_hours = int(changes["cancellation_cutoff_hours"])
         tutor_dirty = True
 
     # User-side identity fields (single source — shared with marketplace profile)
@@ -425,6 +431,24 @@ def deactivate_single_lesson(
     pack.updated_at = datetime.now(UTC)
     session.add(pack)
     session.commit()
+
+
+# --- Booking policy (public) --------------------------------------------
+
+
+class BookingPolicyRead(BaseModel):
+    """Public — what the student needs to know about cancellation before
+    they book. Used by BookingDialog to render the 'within-cutoff' warning
+    when a slot lands inside the no-cancel window."""
+
+    cancellation_cutoff_hours: int
+
+
+@router.get("/policy", response_model=BookingPolicyRead)
+def read_booking_policy(tutor: CurrentTutor) -> BookingPolicyRead:
+    return BookingPolicyRead(
+        cancellation_cutoff_hours=tutor.cancellation_cutoff_hours,
+    )
 
 
 # --- Custom domain (Pro+ feature) ---------------------------------------

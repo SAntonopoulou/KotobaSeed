@@ -42,11 +42,31 @@ const STATUS_LABELS = {
   refunded: { label: 'Refunded', tone: 'bg-orange-100 text-orange-800' },
 };
 
+const withinCancellationCutoff = (booking) => {
+  const cutoff = booking.cancellation_cutoff_hours ?? 48;
+  const msUntil = new Date(booking.scheduled_at).getTime() - Date.now();
+  return msUntil < cutoff * 3600 * 1000;
+};
+
+// Pre-fill the datetime-local input with `scheduled_at + 1 week` as a
+// reasonable starting point. The user edits before submitting.
+const toDatetimeLocal = (date) => {
+  const pad = (n) => String(n).padStart(2, '0');
+  return (
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
+    `T${pad(date.getHours())}:${pad(date.getMinutes())}`
+  );
+};
+
 const MyBookings = () => {
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [cancelling, setCancelling] = useState(null);
+  // { bookingId: localDatetimeString } for the open reschedule form.
+  const [reschedulingFor, setReschedulingFor] = useState(null);
+  const [rescheduleAt, setRescheduleAt] = useState('');
+  const [submittingReschedule, setSubmittingReschedule] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -71,6 +91,7 @@ const MyBookings = () => {
       : 'Cancel this booking?';
     if (!window.confirm(msg)) return;
     setCancelling(booking.id);
+    setError('');
     try {
       await client.post(`/users/me/bookings/${booking.id}/cancel`);
       await load();
@@ -81,9 +102,49 @@ const MyBookings = () => {
     }
   };
 
+  const openReschedule = (booking) => {
+    setError('');
+    setReschedulingFor(booking.id);
+    // Pre-fill with one week from current scheduled_at to nudge them outside
+    // the cutoff window.
+    const candidate = new Date(new Date(booking.scheduled_at).getTime() + 7 * 24 * 3600 * 1000);
+    setRescheduleAt(toDatetimeLocal(candidate));
+  };
+
+  const cancelReschedule = () => {
+    setReschedulingFor(null);
+    setRescheduleAt('');
+  };
+
+  const submitReschedule = async (booking) => {
+    if (!rescheduleAt) {
+      setError('Pick a new time first.');
+      return;
+    }
+    setSubmittingReschedule(true);
+    setError('');
+    try {
+      const iso = new Date(rescheduleAt).toISOString();
+      await client.post(`/users/me/bookings/${booking.id}/reschedule`, {
+        scheduled_at: iso,
+      });
+      cancelReschedule();
+      await load();
+    } catch (err) {
+      setError(err?.response?.data?.detail || 'Could not reschedule.');
+    } finally {
+      setSubmittingReschedule(false);
+    }
+  };
+
   const canCancel = (b) =>
     ['pending_payment', 'confirmed'].includes(b.status) &&
-    new Date(b.scheduled_at).getTime() > Date.now();
+    new Date(b.scheduled_at).getTime() > Date.now() &&
+    // Pending payment bypasses the cutoff (no money on the line yet).
+    (b.status === 'pending_payment' || !withinCancellationCutoff(b));
+
+  const canReschedule = (b) =>
+    b.status === 'confirmed' && !withinCancellationCutoff(b);
 
   if (loading) return <p className="text-sm text-gray-500">Loading…</p>;
 
@@ -103,45 +164,96 @@ const MyBookings = () => {
         <ul className="border border-gray-200 rounded-lg divide-y divide-gray-200">
           {bookings.map((b) => {
             const meta = STATUS_LABELS[b.status] || { label: b.status, tone: 'bg-gray-100 text-gray-700' };
+            const cutoff = b.cancellation_cutoff_hours ?? 48;
+            const tooLate = b.status === 'confirmed' && withinCancellationCutoff(b);
             return (
-              <li key={b.id} className="px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
-                <div>
-                  <div className="font-medium text-gray-900">
-                    {b.tutor_display_name || 'Tutor'} · {b.pack_name || 'Lesson pack'}
+              <li key={b.id} className="px-4 py-3 flex flex-col gap-2">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <div>
+                    <div className="font-medium text-gray-900">
+                      {b.tutor_display_name || 'Tutor'} · {b.pack_name || 'Lesson pack'}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {formatDate(b.scheduled_at)} · {b.duration_minutes} min · {formatPrice(b.price_cents, b.currency)}
+                    </div>
+                    {b.tutor_slug && (
+                      <a
+                        href={tutorSiteUrl(b.tutor_slug, '/')}
+                        className="text-xs text-indigo-600 hover:underline"
+                      >
+                        Visit {b.tutor_slug}.kotobaseed.net
+                      </a>
+                    )}
                   </div>
-                  <div className="text-xs text-gray-500">
-                    {formatDate(b.scheduled_at)} · {b.duration_minutes} min · {formatPrice(b.price_cents, b.currency)}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${meta.tone}`}>{meta.label}</span>
+                    {canJoinClassroom(b) && (
+                      <Link
+                        to={`/classroom/${b.id}`}
+                        className="text-sm px-3 py-1 rounded-md bg-emerald-600 text-white font-medium hover:bg-emerald-700"
+                      >
+                        Join
+                      </Link>
+                    )}
+                    {canReschedule(b) && reschedulingFor !== b.id && (
+                      <button
+                        type="button"
+                        onClick={() => openReschedule(b)}
+                        className="text-sm text-indigo-700 hover:underline"
+                      >
+                        Reschedule
+                      </button>
+                    )}
+                    {canCancel(b) && (
+                      <button
+                        type="button"
+                        onClick={() => handleCancel(b)}
+                        disabled={cancelling === b.id}
+                        className="text-sm text-red-700 hover:underline disabled:opacity-60"
+                      >
+                        {cancelling === b.id ? 'Cancelling…' : 'Cancel'}
+                      </button>
+                    )}
+                    {tooLate && (
+                      <span className="text-xs text-gray-500" title={`Within the ${cutoff}h cancellation window`}>
+                        Locked in (within {cutoff}h)
+                      </span>
+                    )}
                   </div>
-                  {b.tutor_slug && (
-                    <a
-                      href={tutorSiteUrl(b.tutor_slug, '/')}
-                      className="text-xs text-indigo-600 hover:underline"
-                    >
-                      Visit {b.tutor_slug}.kotobaseed.net
-                    </a>
-                  )}
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${meta.tone}`}>{meta.label}</span>
-                  {canJoinClassroom(b) && (
-                    <Link
-                      to={`/classroom/${b.id}`}
-                      className="text-sm px-3 py-1 rounded-md bg-emerald-600 text-white font-medium hover:bg-emerald-700"
-                    >
-                      Join
-                    </Link>
-                  )}
-                  {canCancel(b) && (
-                    <button
-                      type="button"
-                      onClick={() => handleCancel(b)}
-                      disabled={cancelling === b.id}
-                      className="text-sm text-red-700 hover:underline disabled:opacity-60"
-                    >
-                      {cancelling === b.id ? 'Cancelling…' : 'Cancel'}
-                    </button>
-                  )}
-                </div>
+
+                {reschedulingFor === b.id && (
+                  <div className="bg-gray-50 border border-gray-200 rounded-md p-3 text-sm">
+                    <p className="text-gray-700 mb-2">
+                      Pick a new time at least {cutoff} hours from now. The tutor must be available at the new slot.
+                    </p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <input
+                        type="datetime-local"
+                        value={rescheduleAt}
+                        onChange={(e) => setRescheduleAt(e.target.value)}
+                        disabled={submittingReschedule}
+                        className="px-3 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => submitReschedule(b)}
+                        disabled={submittingReschedule || !rescheduleAt}
+                        className="text-sm px-3 py-1.5 rounded-md bg-indigo-600 text-white font-medium hover:bg-indigo-700 disabled:opacity-60"
+                      >
+                        {submittingReschedule ? 'Saving…' : 'Confirm reschedule'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={cancelReschedule}
+                        disabled={submittingReschedule}
+                        className="text-sm text-gray-600 hover:underline"
+                      >
+                        Never mind
+                      </button>
+                    </div>
+                  </div>
+                )}
               </li>
             );
           })}

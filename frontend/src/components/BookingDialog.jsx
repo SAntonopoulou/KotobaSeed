@@ -21,6 +21,8 @@ const BookingDialog = ({ pack, tutorDisplayName, onClose }) => {
   const [pickedSlot, setPickedSlot] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [cutoffHours, setCutoffHours] = useState(48);
+  const [acknowledgedCutoff, setAcknowledgedCutoff] = useState(false);
 
   useEffect(() => {
     const original = document.body.style.overflow;
@@ -56,6 +58,23 @@ const BookingDialog = ({ pack, tutorDisplayName, onClose }) => {
       cancelled = true;
     };
   }, [pack.id, pack.isTrial]);
+
+  // Tutor's booking policy — drives the no-cancel warning when the
+  // picked slot lands inside the cancellation cutoff. We fetch this in
+  // parallel with the slots; failure falls back to the platform floor
+  // (48h) so the warning still shows even if the policy fetch fails.
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await client.get('/tutor/policy');
+        if (res.data?.cancellation_cutoff_hours) {
+          setCutoffHours(res.data.cancellation_cutoff_hours);
+        }
+      } catch {
+        // Falls back to default 48 — safer to warn even if we missed.
+      }
+    })();
+  }, []);
 
   const groupedByDay = useMemo(() => {
     const groups = new Map();
@@ -205,6 +224,32 @@ const BookingDialog = ({ pack, tutorDisplayName, onClose }) => {
           </div>
         )}
 
+        {/* Cancellation-cutoff warning: if the picked slot is too close to
+            now, the student can't cancel or get a refund. They have to
+            acknowledge it before booking. */}
+        {pickedSlot && (() => {
+          const msUntil = new Date(pickedSlot.scheduled_at).getTime() - Date.now();
+          const withinCutoff = msUntil < cutoffHours * 3600 * 1000;
+          if (!withinCutoff) return null;
+          return (
+            <div className="mt-4 bg-kotoba-secondary/30 border border-kotoba-secondary text-kotoba-text px-4 py-3 rounded-md text-sm">
+              <p className="font-semibold mb-1">Heads up: this lesson is soon.</p>
+              <p className="mb-2">
+                It's within the {cutoffHours}-hour cancellation window, so once you book it you can't cancel or get a refund. If you no-show, you lose the lesson.
+              </p>
+              <label className="inline-flex items-start gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={acknowledgedCutoff}
+                  onChange={(e) => setAcknowledgedCutoff(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 text-kotoba-primary border-kotoba-text/30 rounded focus:ring-kotoba-primary"
+                />
+                <span className="text-sm">I understand — book it anyway.</span>
+              </label>
+            </div>
+          );
+        })()}
+
         {!token && (
           <p className="mt-3 text-xs text-kotoba-text/60">
             {pack.isTrial
@@ -216,7 +261,12 @@ const BookingDialog = ({ pack, tutorDisplayName, onClose }) => {
         <button
           type="button"
           onClick={handleConfirm}
-          disabled={submitting || !pickedSlot}
+          disabled={(() => {
+            if (submitting || !pickedSlot) return true;
+            const msUntil = new Date(pickedSlot.scheduled_at).getTime() - Date.now();
+            const withinCutoff = msUntil < cutoffHours * 3600 * 1000;
+            return withinCutoff && !acknowledgedCutoff;
+          })()}
           className="mt-4 w-full py-2.5 rounded-lg bg-kotoba-secondary text-kotoba-text font-semibold hover:bg-kotoba-secondary-dark disabled:opacity-60"
         >
           {submitting
@@ -227,8 +277,8 @@ const BookingDialog = ({ pack, tutorDisplayName, onClose }) => {
         </button>
         <p className="mt-2 text-xs text-center text-kotoba-text/60">
           {pack.isTrial
-            ? 'You can cancel any time before the lesson.'
-            : 'Card details handled by Stripe. You can cancel any time before the lesson.'}
+            ? `You can cancel up to ${cutoffHours} hours before the lesson.`
+            : `Card details handled by Stripe. You can cancel up to ${cutoffHours} hours before the lesson.`}
         </p>
       </div>
     </div>

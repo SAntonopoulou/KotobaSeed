@@ -1,6 +1,6 @@
 import os
 from collections import defaultdict
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import stripe
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -219,6 +219,9 @@ class StudentBookingRead(BaseModel):
     completed_at: datetime | None
     cancelled_at: datetime | None
     refunded_at: datetime | None
+    # Tutor's cancellation cutoff at read time — frontend uses this to
+    # disable the Cancel button when the lesson is too close.
+    cancellation_cutoff_hours: int | None = None
 
 
 @router.get("/me/bookings", response_model=list[StudentBookingRead])
@@ -255,6 +258,11 @@ def list_my_bookings(
             completed_at=b.completed_at,
             cancelled_at=b.cancelled_at,
             refunded_at=b.refunded_at,
+            cancellation_cutoff_hours=(
+                tutors.get(b.tutor_id).cancellation_cutoff_hours
+                if tutors.get(b.tutor_id)
+                else None
+            ),
         )
         for b in rows
     ]
@@ -282,11 +290,29 @@ def cancel_my_booking(
     if not booking or booking.student_user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found.")
     now = datetime.now(UTC)
-    if booking.scheduled_at <= now:
+    sched = booking.scheduled_at
+    if sched.tzinfo is None:
+        sched = sched.replace(tzinfo=UTC)
+    if sched <= now:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="That lesson has already started or is in the past.",
         )
+    # Cancellation cutoff — the platform's 48h floor or whatever stricter
+    # window the tutor has set. PENDING_PAYMENT slips through the cutoff:
+    # if the student bailed at the Stripe screen there's no money to
+    # refund and no reason to penalise them for closing the tab.
+    if booking.status == BookingStatus.CONFIRMED:
+        tutor = session.get(Tutor, booking.tutor_id)
+        cutoff_hours = tutor.cancellation_cutoff_hours if tutor else 48
+        if sched - now < timedelta(hours=cutoff_hours):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    f"This lesson is within the {cutoff_hours}-hour cancellation "
+                    "window. Message the tutor directly if something has come up."
+                ),
+            )
     if booking.status == BookingStatus.PENDING_PAYMENT:
         booking.status = BookingStatus.CANCELLED
         booking.cancelled_at = now
@@ -341,6 +367,146 @@ def cancel_my_booking(
         completed_at=booking.completed_at,
         cancelled_at=booking.cancelled_at,
         refunded_at=booking.refunded_at,
+        cancellation_cutoff_hours=tutor.cancellation_cutoff_hours if tutor else None,
+    )
+
+
+class StudentRescheduleRequest(BaseModel):
+    scheduled_at: datetime
+
+
+@router.post(
+    "/me/bookings/{booking_id}/reschedule",
+    response_model=StudentBookingRead,
+)
+def reschedule_my_booking(
+    booking_id: int,
+    payload: StudentRescheduleRequest,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Student reschedules a CONFIRMED booking to a new slot.
+
+    Same cutoff rule as cancellation — the student can't reschedule a
+    lesson that's already within the no-cancel window (otherwise reschedule
+    becomes a backdoor cancellation, pushing the lesson far enough out that
+    it lands outside the window). The new slot must also be outside the
+    cutoff so the lesson doesn't get rescheduled INTO a window the student
+    can't cancel out of accidentally.
+
+    Trial bookings: also rescheduleable. Same window check; no money to
+    move so just updates scheduled_at.
+    """
+    booking = session.get(Booking, booking_id)
+    if not booking or booking.student_user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found.")
+    if booking.status != BookingStatus.CONFIRMED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only confirmed bookings can be rescheduled.",
+        )
+
+    now = datetime.now(UTC)
+    tutor = session.get(Tutor, booking.tutor_id)
+    if tutor is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tutor not found.")
+    cutoff_hours = tutor.cancellation_cutoff_hours
+
+    sched = booking.scheduled_at
+    if sched.tzinfo is None:
+        sched = sched.replace(tzinfo=UTC)
+    new_at = payload.scheduled_at
+    if new_at.tzinfo is None:
+        new_at = new_at.replace(tzinfo=UTC)
+
+    if sched - now < timedelta(hours=cutoff_hours):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                f"This lesson is within the {cutoff_hours}-hour cancellation "
+                "window. Message the tutor directly to reschedule."
+            ),
+        )
+    if new_at - now < timedelta(hours=cutoff_hours):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Pick a new time at least {cutoff_hours} hours from now — "
+                "otherwise you wouldn't be able to cancel the rescheduled lesson "
+                "if something came up."
+            ),
+        )
+    if new_at <= now:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Pick a new time in the future.",
+        )
+
+    # Verify the new slot fits an availability window for the right kind
+    # of booking. Trials must land in allow_trial=True windows; paid
+    # bookings can land anywhere the tutor's available.
+    from ..routers.tutor_site import _slot_conflicts, _slot_fits_window
+
+    pack = session.get(LessonPack, booking.lesson_pack_id)
+    if pack is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pack not found.")
+    if not _slot_fits_window(
+        tutor=tutor,
+        scheduled_at=new_at,
+        duration_minutes=booking.duration_minutes,
+        session=session,
+        trial_only=pack.is_trial,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The tutor isn't available at that time.",
+        )
+
+    # Check the new slot doesn't collide with another booking (excluding
+    # the one we're moving). Pull all the tutor's nearby bookings then
+    # filter out this booking's row.
+    nearby = list(
+        session.exec(
+            select(Booking)
+            .where(Booking.tutor_id == tutor.id)
+            .where(Booking.id != booking.id)
+            .where(Booking.scheduled_at >= new_at - timedelta(hours=4))
+            .where(Booking.scheduled_at <= new_at + timedelta(hours=4))
+        ).all()
+    )
+    if _slot_conflicts(new_at, booking.duration_minutes, nearby):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="That slot is already booked. Pick another.",
+        )
+
+    booking.scheduled_at = new_at
+    booking.updated_at = now
+    # Reset reminder so the rescheduled lesson gets a fresh reminder sweep.
+    booking.reminder_sent_at = None
+    # The classroom room (Daily.co) becomes stale once the time moves; the
+    # lazy room creation will mint a new one on next join.
+    booking.daily_room_name = None
+    booking.daily_room_url = None
+    session.add(booking)
+    session.commit()
+    session.refresh(booking)
+
+    return StudentBookingRead(
+        id=booking.id,
+        tutor_slug=tutor.tutor_slug,
+        tutor_display_name=tutor.display_name,
+        pack_name=pack.name,
+        scheduled_at=booking.scheduled_at,
+        duration_minutes=booking.duration_minutes,
+        price_cents=booking.price_cents,
+        currency=booking.currency,
+        status=booking.status,
+        paid_at=booking.paid_at,
+        completed_at=booking.completed_at,
+        cancelled_at=booking.cancelled_at,
+        refunded_at=booking.refunded_at,
+        cancellation_cutoff_hours=tutor.cancellation_cutoff_hours if tutor else None,
     )
 
 
