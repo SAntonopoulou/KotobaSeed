@@ -41,6 +41,9 @@ import VerifyEmail from './pages/VerifyEmail';
 import BookingSuccess from './pages/BookingSuccess';
 import BookingCancelled from './pages/BookingCancelled';
 import Classroom from './pages/Classroom';
+import ArticlesIndex from './pages/ArticlesIndex';
+import ArticleReader from './pages/ArticleReader';
+import ArticleEditor from './pages/ArticleEditor';
 import { useTenant } from './hooks/useTenant';
 
 const TutorShell = () => (
@@ -49,6 +52,10 @@ const TutorShell = () => (
   <Routes>
     <Route path="/" element={<TutorHome />} />
     <Route path="/dashboard" element={<TutorDashboard />} />
+    <Route path="/dashboard/articles/new" element={<ArticleEditor />} />
+    <Route path="/dashboard/articles/:slug/edit" element={<ArticleEditor />} />
+    <Route path="/articles" element={<ArticlesIndex />} />
+    <Route path="/articles/:slug" element={<ArticleReader />} />
     <Route path="/login" element={<Login />} />
     <Route path="/booking/success" element={<BookingSuccess />} />
     <Route path="/booking/cancelled" element={<BookingCancelled />} />

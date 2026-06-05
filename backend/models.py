@@ -2,6 +2,7 @@ from datetime import UTC, datetime, timedelta
 from enum import Enum
 from typing import Optional
 
+from sqlalchemy import UniqueConstraint
 from sqlmodel import Field, Relationship, SQLModel
 
 
@@ -685,6 +686,47 @@ class LessonPack(SQLModel, table=True):
     # common case simple. Public site renders this pack (and any other
     # num_lessons=1 packs) inline above the multi-lesson packs.
     is_default_single: bool = Field(default=False, index=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class Article(SQLModel, table=True):
+    """A per-tutor markdown article — blog posts, free resources, lesson notes.
+
+    The same model serves all three use-cases (the tutor's choice) so we
+    don't have to fork CRUD for "lessons" vs "articles" vs "freebies". The
+    public list at /articles/ on the tutor's subdomain shows whatever is
+    `is_published=True`; the reader at /articles/<slug>/ renders one row.
+
+    Slugs are unique per tutor so two tutors can both have an article at
+    `welcome` without colliding. Globally-unique would force tutors to
+    pick increasingly cryptic slugs as the platform grows.
+    """
+
+    __tablename__ = "article"
+    __table_args__ = (
+        UniqueConstraint("tutor_id", "slug", name="uq_article_tutor_slug"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    tutor_id: int = Field(foreign_key="tutor.id", index=True)
+    slug: str = Field(max_length=120, index=True)
+    title: str = Field(max_length=200)
+    # Short blurb shown on the article list cards. Optional — falls back to
+    # the first ~200 chars of the body if not set when rendering.
+    summary: str | None = Field(default=None, max_length=500)
+    # Round-trippable markdown source — what the editor opens, what the
+    # public reader falls back to if lexical_json is absent. Custom blocks
+    # (`:::vocab`, `:::translate`) survive markdown round-trips because
+    # the editor's serializer preserves them as shortcodes.
+    body_markdown: str = Field(default="")
+    # Lexical editor state as JSON. Used by the reader for richer rendering
+    # (clickable vocab tooltips, embedded media) without re-parsing
+    # markdown. May be empty for articles created before Lexical landed
+    # or saved by an older client — the reader falls back to body_markdown.
+    lexical_json: str | None = Field(default=None)
+    is_published: bool = Field(default=False, index=True)
+    published_at: datetime | None = Field(default=None)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 

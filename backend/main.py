@@ -19,6 +19,7 @@ from .database import create_db_and_tables
 from .models import LanguageGroup, Project, User, UserRole
 from .routers import (
     admin,
+    articles,
     auth,
     conversations,
     groups,
@@ -166,6 +167,7 @@ for router in (
     tutor_site.router,
     onboarding.router,
     marketplace.router,
+    articles.router,
 ):
     app.include_router(router)
 

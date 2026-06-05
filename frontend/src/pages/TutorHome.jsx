@@ -109,6 +109,12 @@ const TutorHome = () => {
             <span className="text-xl font-semibold text-kotoba-primary">{tutor.display_name}</span>
           </div>
           <div className="flex items-center gap-2">
+            <Link
+              to="/articles"
+              className="hidden sm:inline-block text-sm text-kotoba-text/70 hover:text-kotoba-primary px-2"
+            >
+              Articles
+            </Link>
             {isOwner && (
               <Link
                 to="/dashboard"
