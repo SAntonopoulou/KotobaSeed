@@ -132,12 +132,14 @@ def test_patch_tutor_me_requires_auth(client, vasso_tutor):
 
 
 def test_patch_tutor_me_updates_profile(client, db_session: Session, vasso_tutor, teacher_user):
+    """Update writes Tutor.display_name AND User.bio/avatar_url/languages."""
     r = client.patch(
         "/tutor/me",
         json={
             "display_name": "Vasso (updated)",
             "bio": "Greek tutor based in Athens.",
             "languages_taught": "el,en",
+            "photo_url": "https://cdn.example.com/vasso.jpg",
         },
         headers={
             "Host": "vasso.kotobaseed.net",
@@ -149,15 +151,21 @@ def test_patch_tutor_me_updates_profile(client, db_session: Session, vasso_tutor
     assert body["display_name"] == "Vasso (updated)"
     assert body["bio"] == "Greek tutor based in Athens."
     assert body["languages_taught"] == "el,en"
+    assert body["photo_url"] == "https://cdn.example.com/vasso.jpg"
 
     db_session.refresh(vasso_tutor)
+    db_session.refresh(teacher_user)
     assert vasso_tutor.display_name == "Vasso (updated)"
+    # Identity fields landed on the User row, not the Tutor.
+    assert teacher_user.bio == "Greek tutor based in Athens."
+    assert teacher_user.languages == "el,en"
+    assert teacher_user.avatar_url == "https://cdn.example.com/vasso.jpg"
 
 
 def test_patch_tutor_me_ignores_unsent_fields(client, db_session: Session, vasso_tutor, teacher_user):
-    """Partial update — `bio` stays untouched if the request only sends display_name."""
-    vasso_tutor.bio = "original bio"
-    db_session.add(vasso_tutor)
+    """Partial update — User.bio stays untouched if the request only sends display_name."""
+    teacher_user.bio = "original bio"
+    db_session.add(teacher_user)
     db_session.commit()
 
     r = client.patch(
@@ -170,5 +178,22 @@ def test_patch_tutor_me_ignores_unsent_fields(client, db_session: Session, vasso
     )
     assert r.status_code == 200
     db_session.refresh(vasso_tutor)
+    db_session.refresh(teacher_user)
     assert vasso_tutor.display_name == "New Name"
-    assert vasso_tutor.bio == "original bio"
+    assert teacher_user.bio == "original bio"
+
+
+def test_get_tutor_me_pulls_bio_from_user(client, db_session: Session, vasso_tutor, teacher_user):
+    """The single-identity rule: editing User.bio shows up on the tutor site."""
+    teacher_user.bio = "Edited via marketplace profile."
+    teacher_user.avatar_url = "https://cdn.example.com/avatar.jpg"
+    teacher_user.languages = "el, en"
+    db_session.add(teacher_user)
+    db_session.commit()
+
+    r = client.get("/tutor/me", headers={"Host": "vasso.kotobaseed.net"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["bio"] == "Edited via marketplace profile."
+    assert body["photo_url"] == "https://cdn.example.com/avatar.jpg"
+    assert body["languages_taught"] == "el, en"

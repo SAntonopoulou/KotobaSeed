@@ -543,6 +543,9 @@ class Tutor(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="user.id", unique=True, index=True)
 
+    # Identity (bio, avatar, languages) lives on the User row this points to.
+    user: "User" = Relationship()
+
     # ----- Public-facing profile -----
     tutor_slug: str = Field(
         unique=True,
@@ -550,17 +553,13 @@ class Tutor(SQLModel, table=True):
         max_length=80,
         description="URL slug, used as `{slug}.kotobaseed.net` subdomain",
     )
-    display_name: str = Field(max_length=120)
-    bio: str | None = None
-    photo_url: str | None = None
-    languages_taught: str | None = Field(
-        default=None,
-        description="JSON-encoded list of language codes the tutor teaches",
+    display_name: str = Field(
+        max_length=120,
+        description="Stage name shown on the tutor's site. May differ from User.full_name (legal name).",
     )
-    languages_spoken: str | None = Field(
-        default=None,
-        description="JSON-encoded list of languages the tutor speaks fluently",
-    )
+    # bio, photo, and languages now live on User — single identity source so
+    # editing on the marketplace profile updates the tutor site and vice versa.
+    # Reach them via `tutor.user.bio`, `tutor.user.avatar_url`, `tutor.user.languages`.
     cefr_level_lowest: str | None = Field(default=None, max_length=8)
     cefr_level_highest: str | None = Field(default=None, max_length=8)
 
