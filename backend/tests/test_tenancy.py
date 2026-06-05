@@ -12,7 +12,7 @@ from sqlmodel import Session
 from backend.config import settings
 from backend.models import Tutor, TutorAccountStatus, TutorPlan
 
-from .conftest import make_tutor
+from .conftest import auth_headers_for, make_tutor
 
 
 def test_apex_host_has_no_tenant(client, vasso_tutor):
@@ -107,3 +107,68 @@ def test_paused_tutor_still_resolves(client, db_session: Session, teacher_user):
     r = client.get("/tutor/me", headers={"Host": "paused.kotobaseed.net"})
     assert r.status_code == 200
     assert r.json()["account_status"] == "paused_dormant"
+
+
+def test_patch_tutor_me_requires_owner(client, db_session: Session, vasso_tutor, student_user):
+    """A logged-in non-owner can't edit the tutor profile."""
+    r = client.patch(
+        "/tutor/me",
+        json={"bio": "hacked"},
+        headers={
+            "Host": "vasso.kotobaseed.net",
+            **auth_headers_for(student_user),
+        },
+    )
+    assert r.status_code == 403
+
+
+def test_patch_tutor_me_requires_auth(client, vasso_tutor):
+    r = client.patch(
+        "/tutor/me",
+        json={"bio": "anything"},
+        headers={"Host": "vasso.kotobaseed.net"},
+    )
+    assert r.status_code in (401, 403)
+
+
+def test_patch_tutor_me_updates_profile(client, db_session: Session, vasso_tutor, teacher_user):
+    r = client.patch(
+        "/tutor/me",
+        json={
+            "display_name": "Vasso (updated)",
+            "bio": "Greek tutor based in Athens.",
+            "languages_taught": "el,en",
+        },
+        headers={
+            "Host": "vasso.kotobaseed.net",
+            **auth_headers_for(teacher_user),
+        },
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["display_name"] == "Vasso (updated)"
+    assert body["bio"] == "Greek tutor based in Athens."
+    assert body["languages_taught"] == "el,en"
+
+    db_session.refresh(vasso_tutor)
+    assert vasso_tutor.display_name == "Vasso (updated)"
+
+
+def test_patch_tutor_me_ignores_unsent_fields(client, db_session: Session, vasso_tutor, teacher_user):
+    """Partial update — `bio` stays untouched if the request only sends display_name."""
+    vasso_tutor.bio = "original bio"
+    db_session.add(vasso_tutor)
+    db_session.commit()
+
+    r = client.patch(
+        "/tutor/me",
+        json={"display_name": "New Name"},
+        headers={
+            "Host": "vasso.kotobaseed.net",
+            **auth_headers_for(teacher_user),
+        },
+    )
+    assert r.status_code == 200
+    db_session.refresh(vasso_tutor)
+    assert vasso_tutor.display_name == "New Name"
+    assert vasso_tutor.bio == "original bio"

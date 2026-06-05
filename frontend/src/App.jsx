@@ -34,13 +34,15 @@ import TutorSignup from './pages/TutorSignup';
 import OnboardingReturn from './pages/OnboardingReturn';
 import OnboardingRefresh from './pages/OnboardingRefresh';
 import TutorHome from './pages/TutorHome';
+import TutorDashboard from './pages/TutorDashboard';
 import { useTenant } from './hooks/useTenant';
 
 const TutorShell = () => (
   // Tutor subdomains get their own minimal shell — no apex Kotobaseed nav,
-  // no apex Footer. The tutor page renders its own header + footer below.
+  // no apex Footer. Each page renders its own header below.
   <Routes>
     <Route path="/" element={<TutorHome />} />
+    <Route path="/dashboard" element={<TutorDashboard />} />
     <Route path="*" element={<Navigate to="/" replace />} />
   </Routes>
 );

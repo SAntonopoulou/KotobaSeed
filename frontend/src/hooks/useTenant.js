@@ -49,3 +49,26 @@ export function getTenant() {
 export function useTenant() {
   return useMemo(getTenant, []);
 }
+
+/**
+ * Build a URL on a specific tutor's subdomain, mirroring our current host.
+ *
+ * Dev (localhost): keeps the port and uses `<slug>.localhost:5173`.
+ * Prod (kotobaseed.net or any other apex): uses `<slug>.<apex>`.
+ *
+ * Used for handing off from the apex (signup, onboarding return) to the
+ * tutor's own subdomain — typically with a `#token=...` fragment so the
+ * dashboard can pick up the JWT.
+ */
+export function tutorSiteUrl(slug, path = '/', fragment = '') {
+  if (typeof window === 'undefined') return path;
+  const { protocol, hostname, port } = window.location;
+  const portPart = port ? `:${port}` : '';
+  // Apex hosts: drop any subdomain by treating the apex as `hostname`.
+  // For localhost/127.0.0.1 we still treat as apex (no existing subdomain).
+  let apex = hostname;
+  if (apex.endsWith('.localhost')) apex = 'localhost';
+  if (apex.endsWith('.kotobaseed.net')) apex = 'kotobaseed.net';
+  const frag = fragment ? `#${fragment}` : '';
+  return `${protocol}//${slug}.${apex}${portPart}${path}${frag}`;
+}
