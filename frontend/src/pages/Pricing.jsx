@@ -1,84 +1,144 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import client from '../api/client';
+import { useAuth } from '../context/AuthContext';
 
 const tiers = [
   {
-    name: 'Starter',
-    id: 'starter',
+    id: 'free',
+    name: 'Free',
     price: '€0',
-    cadence: '/month',
-    description: 'For tutors getting set up. Pay only when you teach.',
+    cadence: '',
+    blurb: 'Browse, message, and pledge. Tutors get a free site with 5% lesson fee + 300 classroom min/mo.',
     features: [
-      'Your own site at yourname.kotobaseed.net',
-      'Bookings + built-in classroom video',
-      'Up to 300 classroom minutes / month',
-      '5% platform fee on each lesson you sell',
-      'Optional listing in the marketplace (15% on those)',
+      'Full marketplace access',
+      'Direct messaging with teachers',
+      'Crowdfund and pledge projects',
+      'Tutors: your own yourname.kotobaseed.net site',
+      'Tutors: 5% platform fee on lessons + 300 min/mo',
     ],
-    cta: 'Start free',
-    href: '/onboarding/tutor',
-    highlight: false,
+    cta: { label: 'Already free', disabled: true },
   },
   {
-    name: 'Pro',
-    id: 'pro',
-    price: '€35',
+    id: 'plus',
+    name: 'Plus',
+    price: '€5',
     cadence: '/month',
-    description: 'For full-time tutors and small schools.',
+    blurb: 'For active learners. Monthly priority credits + premium content access.',
     features: [
-      'Everything in Starter',
-      '0% platform fee on lessons you sell',
-      '1,000 classroom minutes / month',
-      'Custom domain (yourbusiness.com)',
-      'Full landing-page builder + theme picker',
-      'Optional marketplace listings (15% on those)',
+      'Everything in Free',
+      'One Priority Credit per month (jump request queues)',
+      'Access to premium projects + videos',
+      'Plus badge on your profile',
     ],
-    cta: 'Start free, switch to Pro any time',
-    href: '/onboarding/tutor',
+    cta: { label: 'Get Plus', planId: 'plus' },
+  },
+  {
+    id: 'pro',
+    name: 'Pro',
+    price: '€15',
+    cadence: '/month',
+    blurb: 'For teachers + individual tutors. Verifications, analytics, and (if you tutor) zero lesson fees.',
+    features: [
+      'Everything in Plus',
+      'Language verification submission',
+      'Advanced project + lesson analytics',
+      'Pro badge on your profile',
+      'Tutors: 0% lesson fee (was 5%)',
+      'Tutors: 1000 classroom min/mo',
+      'Tutors: custom domain + landing-page builder',
+    ],
+    cta: { label: 'Get Pro', planId: 'pro' },
     highlight: true,
+  },
+  {
+    id: 'business',
+    name: 'Business',
+    price: '€49',
+    cadence: '/month',
+    blurb: 'For language schools and full-time pros. Everything in Pro plus seats, support, and no Kotobaseed branding.',
+    features: [
+      'Everything in Pro',
+      'Up to 5 Tutor accounts under one billing',
+      'Unlimited classroom minutes (fair use)',
+      'No "Powered by Kotobaseed" footer on your sites',
+      'Priority email support (24h SLA)',
+    ],
+    cta: { label: 'Get Business', planId: 'business' },
   },
 ];
 
+const MARKETPLACE_FEE_NOTE =
+  'Marketplace sales (crowdfunded projects + tips) have a separate 15% platform fee regardless of your subscription. It covers payments, discovery, and the 14-day refund window.';
+
 const PricingPage = () => {
+  const { token } = useAuth();
+  const navigate = useNavigate();
+  const [pending, setPending] = useState(null);
+
+  const handleChoose = async (planId) => {
+    if (!planId) return;
+    if (!token) {
+      navigate('/register');
+      return;
+    }
+    setPending(planId);
+    try {
+      const res = await client.post('/subscriptions/create-checkout-session', {
+        plan_id: planId,
+      });
+      if (res.data?.url) {
+        window.location.href = res.data.url;
+      } else {
+        setPending(null);
+      }
+    } catch (err) {
+      console.error('Could not start checkout', err);
+      setPending(null);
+    }
+  };
+
   return (
     <div className="bg-kotoba-background">
       <div className="max-w-7xl mx-auto px-4 py-16 sm:px-6 lg:px-8">
         <div className="text-center max-w-3xl mx-auto">
           <h1 className="text-4xl font-extrabold text-kotoba-primary sm:text-5xl">
-            Honest pricing for tutors.
+            Pricing that fits where you are.
           </h1>
           <p className="mt-4 text-lg text-kotoba-text">
-            Start on Starter — it's free until you earn. Switch to Pro when the lesson volume makes the maths flip in your favour. Both plans include the same tutoring tools; Pro just removes the per-lesson fee and unlocks customisation.
+            Start free — use the marketplace, message teachers, sign up as a tutor. Upgrade when the perks earn their keep. Cancel any time.
           </p>
         </div>
 
-        <div className="mt-12 grid gap-8 lg:grid-cols-2 max-w-5xl mx-auto">
+        <div className="mt-12 grid gap-6 md:grid-cols-2 lg:grid-cols-4 max-w-7xl mx-auto">
           {tiers.map((tier) => (
             <div
               key={tier.id}
-              className={`bg-white rounded-2xl p-8 flex flex-col shadow-md ${
+              className={`bg-white rounded-2xl p-6 flex flex-col shadow-md ${
                 tier.highlight ? 'ring-2 ring-kotoba-secondary' : 'ring-1 ring-kotoba-text/10'
               }`}
             >
               <div className="flex items-baseline justify-between">
                 <h2 className="text-2xl font-bold text-kotoba-primary">{tier.name}</h2>
                 {tier.highlight && (
-                  <span className="text-xs font-semibold uppercase tracking-wide bg-kotoba-secondary text-kotoba-text px-3 py-1 rounded-full">
-                    Most growth
+                  <span className="text-xs font-semibold uppercase tracking-wide bg-kotoba-secondary text-kotoba-text px-2 py-1 rounded-full">
+                    Most picked
                   </span>
                 )}
               </div>
-              <p className="mt-4">
-                <span className="text-5xl font-extrabold text-kotoba-primary">{tier.price}</span>
-                <span className="text-lg font-medium text-kotoba-text/70">{tier.cadence}</span>
+              <p className="mt-3">
+                <span className="text-4xl font-extrabold text-kotoba-primary">{tier.price}</span>
+                {tier.cadence && (
+                  <span className="text-base font-medium text-kotoba-text/70">{tier.cadence}</span>
+                )}
               </p>
-              <p className="mt-3 text-kotoba-text">{tier.description}</p>
+              <p className="mt-3 text-kotoba-text text-sm">{tier.blurb}</p>
 
-              <ul className="mt-6 space-y-3 text-kotoba-text flex-grow">
+              <ul className="mt-5 space-y-2 text-sm text-kotoba-text flex-grow">
                 {tier.features.map((feature, idx) => (
                   <li key={idx} className="flex items-start">
                     <svg
-                      className="w-5 h-5 text-kotoba-primary mr-3 mt-0.5 flex-shrink-0"
+                      className="w-4 h-4 text-kotoba-primary mr-2 mt-1 flex-shrink-0"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -90,25 +150,34 @@ const PricingPage = () => {
                 ))}
               </ul>
 
-              <Link
-                to={tier.href}
-                className={`mt-8 w-full text-center font-semibold py-3 rounded-lg transition-colors ${
-                  tier.highlight
-                    ? 'bg-kotoba-secondary text-kotoba-text hover:bg-kotoba-secondary-dark'
-                    : 'bg-kotoba-primary text-white hover:bg-green-800'
-                }`}
-              >
-                {tier.cta}
-              </Link>
+              {tier.cta.disabled ? (
+                <Link
+                  to={token ? '/' : '/register'}
+                  className="mt-6 w-full text-center font-semibold py-2.5 rounded-lg bg-white border-2 border-kotoba-primary text-kotoba-primary hover:bg-kotoba-primary hover:text-white transition-colors text-sm"
+                >
+                  {token ? 'You already have this' : 'Sign up'}
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => handleChoose(tier.cta.planId)}
+                  disabled={pending === tier.cta.planId}
+                  className={`mt-6 w-full font-semibold py-2.5 rounded-lg transition-colors text-sm ${
+                    tier.highlight
+                      ? 'bg-kotoba-secondary text-kotoba-text hover:bg-kotoba-secondary-dark'
+                      : 'bg-kotoba-primary text-white hover:bg-green-800'
+                  } disabled:opacity-60 disabled:cursor-not-allowed`}
+                >
+                  {pending === tier.cta.planId ? 'Loading…' : tier.cta.label}
+                </button>
+              )}
             </div>
           ))}
         </div>
 
         <div className="mt-16 max-w-3xl mx-auto bg-white/60 rounded-2xl p-8 text-kotoba-text">
-          <h3 className="text-xl font-bold text-kotoba-primary mb-3">A note on the marketplace</h3>
-          <p className="text-base leading-relaxed">
-            The Kotobaseed marketplace is a separate place where tutors crowdfund comprehensible-input videos and sell access to learners outside their own student list. Listing on the marketplace is always optional. When you sell through it, the platform fee is 15% (covering payments, discovery, and refund coverage), regardless of whether you're on Starter or Pro.
-          </p>
+          <h3 className="text-xl font-bold text-kotoba-primary mb-3">A note on the marketplace fee</h3>
+          <p className="text-base leading-relaxed">{MARKETPLACE_FEE_NOTE}</p>
         </div>
       </div>
     </div>

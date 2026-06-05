@@ -14,10 +14,17 @@ class UserRole(str, Enum):
 
 
 class SubscriptionTier(str, Enum):
-    NONE = "none"
-    PLUS = "plus"
-    PREMIUM = "premium"
-    PRO = "pro"
+    """Single subscription tier on User. Gates platform features for everyone.
+
+    Tutors who go PRO or BUSINESS additionally get tutor-side perks (0% lesson
+    fee, higher classroom minute quota, custom domain) — those derive from the
+    user's tier, not from Tutor.plan, so a tutor never needs to upgrade twice.
+    """
+
+    FREE = "free"
+    PLUS = "plus"  # student-side perks: priority credits, premium content
+    PRO = "pro"  # teacher + tutor perks (verifications, analytics, 0% lesson fee, etc.)
+    BUSINESS = "business"  # schools: 5 seats, no Kotobaseed branding, priority support
 
 
 class ProjectStatus(str, Enum):
@@ -181,7 +188,7 @@ class User(SQLModel, table=True):
     charges_enabled: bool = Field(default=False)
     payouts_enabled: bool = Field(default=False)
 
-    subscription_tier: SubscriptionTier = Field(default=SubscriptionTier.NONE)
+    subscription_tier: SubscriptionTier = Field(default=SubscriptionTier.FREE)
     subscription_expires_at: datetime | None = None
 
     # GDPR consent — captured at signup; required to create an account.
@@ -250,7 +257,10 @@ class User(SQLModel, table=True):
 
     @property
     def is_pro_subscriber(self) -> bool:
-        return self.role == UserRole.TEACHER and self.subscription_tier == SubscriptionTier.PRO
+        return self.role == UserRole.TEACHER and self.subscription_tier in (
+            SubscriptionTier.PRO,
+            SubscriptionTier.BUSINESS,
+        )
 
 
 class TeacherVerification(SQLModel, table=True):

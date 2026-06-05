@@ -63,7 +63,7 @@ def create_request(
     request = Request(**request_data, user_id=current_user.id, status=RequestStatus.OPEN)
 
     # Handle priority credit usage
-    if use_priority_credit and current_user.subscription_tier == SubscriptionTier.PREMIUM:
+    if use_priority_credit and current_user.subscription_tier == SubscriptionTier.PLUS:
         # Find an available priority credit for the user
         priority_credit = session.exec(
             select(PriorityCredit)

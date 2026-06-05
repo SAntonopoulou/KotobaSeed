@@ -41,8 +41,8 @@ async def create_checkout_session(
     try:
         price_ids = {
             "plus": os.environ.get("STRIPE_PLUS_PRICE_ID"),
-            "premium": os.environ.get("STRIPE_PREMIUM_PRICE_ID"),
             "pro": os.environ.get("STRIPE_PRO_PRICE_ID"),
+            "business": os.environ.get("STRIPE_BUSINESS_PRICE_ID"),
         }
         price_id = price_ids.get(plan_data.plan_id)
 
@@ -174,15 +174,16 @@ async def stripe_webhook(request: Request, session: Session = Depends(get_sessio
 
                     if plan_id == os.environ.get("STRIPE_PLUS_PRICE_ID"):
                         user.subscription_tier = SubscriptionTier.PLUS
-                    elif plan_id == os.environ.get("STRIPE_PREMIUM_PRICE_ID"):
-                        user.subscription_tier = SubscriptionTier.PREMIUM
+                        # Plus now owns the monthly priority credit grant.
                         credit = PriorityCredit(user_id=user.id)
                         session.add(credit)
                         logger.info(
-                            f"User {user.id}: Added PriorityCredit for Premium subscription."
+                            f"User {user.id}: Added PriorityCredit for Plus subscription."
                         )
                     elif plan_id == os.environ.get("STRIPE_PRO_PRICE_ID"):
                         user.subscription_tier = SubscriptionTier.PRO
+                    elif plan_id == os.environ.get("STRIPE_BUSINESS_PRICE_ID"):
+                        user.subscription_tier = SubscriptionTier.BUSINESS
 
                     current_period_end = None
                     if subscription.get("items") and subscription.get("items").get("data"):
@@ -222,7 +223,7 @@ async def stripe_webhook(request: Request, session: Session = Depends(get_sessio
                 select(User).where(User.stripe_customer_id == subscription["customer"])
             ).first()
             if user:
-                user.subscription_tier = SubscriptionTier.NONE
+                user.subscription_tier = SubscriptionTier.FREE
                 user.subscription_expires_at = None
                 session.add(user)
                 session.commit()

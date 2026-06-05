@@ -39,12 +39,17 @@ class Settings(BaseSettings):
     # ----- Stripe ---------------------------------------------------------
     stripe_secret_key: str = Field(..., description="Stripe secret key. Required.")
     stripe_webhook_secret: str = Field(..., description="Stripe webhook signing secret. Required.")
+    # Stripe price IDs for the platform subscription tiers (Plus / Pro /
+    # Business). Free is the default — no Stripe product needed. Prices are
+    # immutable in Stripe; to change a price create a new one and rotate the
+    # env var.
     stripe_plus_price_id: str | None = None
-    stripe_premium_price_id: str | None = None
-    # Kotobaseed Pro plan — €35/mo flat, the only platform-level subscription.
-    # Starter (€0/mo + 5% rev share) needs no Stripe product; the 5% comes
-    # from Application Fees on tutor-to-student transactions.
     stripe_pro_price_id: str | None = None
+    stripe_business_price_id: str | None = None
+    # Legacy: kept for the old CompInput Premium tier. Not used in the unified
+    # pricing model; safe to remove after we're confident no stale env values
+    # are referencing it.
+    stripe_premium_price_id: str | None = None
     platform_fee_percent: float = 0.15
 
     # ----- Frontend -------------------------------------------------------

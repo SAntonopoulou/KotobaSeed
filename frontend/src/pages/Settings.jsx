@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import client from '../api/client';
 import ConfirmationModal from '../components/ConfirmationModal';
 import { useToast } from '../context/ToastContext';
@@ -109,7 +109,12 @@ const Settings = () => {
   if (loading) return <div>Loading...</div>;
   if (!currentUser) return <div>Please log in to view your settings.</div>;
 
-  const isProTeacher = currentUser.role === 'teacher' && currentUser.subscription_tier === 'pro';
+  const isProTeacher =
+    currentUser.role === 'teacher' &&
+    (currentUser.subscription_tier === 'pro' || currentUser.subscription_tier === 'business');
+  const tier = currentUser.subscription_tier || 'free';
+  const tierLabel = tier === 'free' || tier === 'none' ? 'Free' : tier.charAt(0).toUpperCase() + tier.slice(1);
+  const onPaidTier = tier !== 'free' && tier !== 'none';
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
@@ -120,21 +125,34 @@ const Settings = () => {
           <h3 className="text-lg leading-6 font-medium text-gray-900">Subscription</h3>
           <div className="mt-2 max-w-xl text-sm text-gray-500">
             <p>
-              You are on the{' '}
-              <span className="font-semibold capitalize">
-                {currentUser.subscription_tier === 'none' ? 'Free' : currentUser.subscription_tier}
-              </span>{' '}
-              plan.
+              You're on the <span className="font-semibold">{tierLabel}</span> plan.
+              {onPaidTier && currentUser.subscription_expires_at && (
+                <>
+                  {' '}Renews on{' '}
+                  <span className="font-medium">
+                    {new Date(currentUser.subscription_expires_at).toLocaleDateString()}
+                  </span>.
+                </>
+              )}
             </p>
           </div>
-          <div className="mt-5">
-            <button
-              type="button"
-              onClick={handleManageSubscription}
-              className="inline-flex items-center justify-center px-4 py-2 border border-transparent font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:text-sm"
-            >
-              Manage Subscription
-            </button>
+          <div className="mt-5 flex flex-wrap gap-2">
+            {onPaidTier ? (
+              <button
+                type="button"
+                onClick={handleManageSubscription}
+                className="inline-flex items-center justify-center px-4 py-2 border border-transparent font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 sm:text-sm"
+              >
+                Manage subscription
+              </button>
+            ) : (
+              <Link
+                to="/pricing"
+                className="inline-flex items-center justify-center px-4 py-2 border border-transparent font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 sm:text-sm"
+              >
+                See upgrade options
+              </Link>
+            )}
           </div>
         </div>
       </div>
