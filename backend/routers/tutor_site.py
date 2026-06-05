@@ -96,9 +96,52 @@ class TutorUpdate(BaseModel):
     languages_taught: str | None = Field(default=None, max_length=255)
 
 
+def _maybe_sync_kyc_status(tutor: Tutor, session: Session) -> Tutor:
+    """Self-heal the tutor's KYC state from live Stripe data.
+
+    Called on every public + auth'd Tutor read. No-op once the tutor is past
+    PAUSED_KYC (no Stripe round trip), and swallows Stripe errors so a
+    transient API blip can't break the public site. This is the mechanism
+    that makes the "onboarding loop" impossible: whether the webhook reached
+    us or not, the next page load resolves the truth.
+    """
+    if tutor.account_status != TutorAccountStatus.PAUSED_KYC:
+        return tutor
+    if not tutor.stripe_connect_account_id:
+        return tutor
+    try:
+        # Local import to dodge the circular onboarding.py → tutor_site.py path.
+        from ..services.stripe_connect import fetch_account
+
+        account = fetch_account(account_id=tutor.stripe_connect_account_id)
+    except Exception:
+        log.exception(
+            "Could not refresh Stripe state for tutor %s (acct %s)",
+            tutor.tutor_slug,
+            tutor.stripe_connect_account_id,
+        )
+        return tutor
+
+    if account.get("charges_enabled") and account.get("payouts_enabled"):
+        tutor.account_status = TutorAccountStatus.ACTIVE
+        tutor.updated_at = datetime.now(UTC)
+        session.add(tutor)
+        session.commit()
+        session.refresh(tutor)
+    return tutor
+
+
 @router.get("/me", response_model=TutorRead)
-def read_current_tutor(tutor: CurrentTutor) -> TutorRead:
-    """Public — anything a student or visitor sees on the tutor's site."""
+def read_current_tutor(
+    tutor: CurrentTutor,
+    session: Annotated[Session, Depends(get_session)],
+) -> TutorRead:
+    """Public — anything a student or visitor sees on the tutor's site.
+
+    Self-heals KYC status from Stripe on every read when the tutor is still
+    PAUSED_KYC. Once active, no Stripe call is made (free).
+    """
+    tutor = _maybe_sync_kyc_status(tutor, session)
     return _serialize_tutor(tutor)
 
 

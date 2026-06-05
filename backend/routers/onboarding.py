@@ -347,6 +347,29 @@ def _sync_tutor_from_stripe(tutor: Tutor, session: Session) -> Tutor:
     return tutor
 
 
+@router.post("/tutor/sync-stripe", response_model=OnboardingStatus)
+def sync_tutor_from_stripe(
+    current: CurrentUser,
+    session: Annotated[Session, Depends(get_session)],
+) -> OnboardingStatus:
+    """Owner-pulled refresh of the Tutor's Stripe Connect state.
+
+    Same as `GET /onboarding/tutor/status` underneath, but exposed as a POST
+    so the dashboard can wire it to a button without abusing GET semantics.
+    Use when the account.updated webhook didn't reach us (e.g. dev without
+    `stripe listen`, or a brief webhook delivery outage in prod).
+    """
+    tutor = _tutor_for_user(current, session)
+    tutor = _sync_tutor_from_stripe(tutor, session)
+    return OnboardingStatus(
+        tutor_id=tutor.id,
+        tutor_slug=tutor.tutor_slug,
+        account_status=tutor.account_status,
+        stripe_connect_account_id=tutor.stripe_connect_account_id or "",
+        onboarding_complete=tutor.account_status != TutorAccountStatus.PAUSED_KYC,
+    )
+
+
 @router.get("/tutor/status", response_model=OnboardingStatus)
 def onboarding_status(
     current: CurrentUser,
