@@ -19,17 +19,21 @@ from ..config import settings
 
 log = logging.getLogger(__name__)
 
-stripe.api_key = settings.stripe_secret_key
+
+def _api_key() -> str:
+    """Pull the key from settings on every call.
+
+    Setting `stripe.api_key` at module-load is fragile under uvicorn
+    `--reload` and multi-importer scenarios (e.g. pledges.py also touches
+    the SDK), so we explicitly hand it to each call instead.
+    """
+    return settings.stripe_secret_key
 
 
 def create_express_account(*, email: str, country: str | None = None) -> str:
-    """Create a Stripe Connect Express account, return the new `acct_...` id.
-
-    Capabilities: `transfers` (receive payouts), `card_payments` (accept
-    cards via Connect Checkout). Business profile is left blank — the
-    tutor completes it during Stripe-hosted KYC.
-    """
+    """Create a Stripe Connect Express account, return the new `acct_...` id."""
     account = stripe.Account.create(
+        api_key=_api_key(),
         type="express",
         country=country or settings.default_connect_country,
         email=email,
@@ -42,12 +46,13 @@ def create_express_account(*, email: str, country: str | None = None) -> str:
 
 
 def create_onboarding_link(*, account_id: str) -> str:
-    """Return a single-use Stripe-hosted URL the tutor visits to do KYC.
+    """Return a Stripe-hosted URL the tutor visits to do KYC.
 
     Stripe-issued AccountLinks expire quickly — refresh via this same
     function each time the user clicks "continue setup".
     """
     link = stripe.AccountLink.create(
+        api_key=_api_key(),
         account=account_id,
         return_url=settings.connect_onboarding_return_url,
         refresh_url=settings.connect_onboarding_refresh_url,
