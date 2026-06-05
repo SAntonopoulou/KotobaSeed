@@ -608,6 +608,10 @@ class Booking(SQLModel, table=True):
     completed_at: datetime | None = Field(default=None)
     cancelled_at: datetime | None = Field(default=None)
     refunded_at: datetime | None = Field(default=None)
+    # Reminder dedup — the hourly sweep stamps this when it sends the 24h
+    # reminder so we don't double-send if the job runs more than once in
+    # the window.
+    reminder_sent_at: datetime | None = Field(default=None)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 

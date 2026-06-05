@@ -224,6 +224,10 @@ def _handle_booking_checkout(session: Session, data_object: dict) -> bool:
         )
         session.add(notification)
     session.commit()
+    # Email confirmations — non-blocking, failures swallowed inside.
+    from ..services import booking_emails
+
+    booking_emails.send_confirmation_emails(session, booking)
     return True
 
 

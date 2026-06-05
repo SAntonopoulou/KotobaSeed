@@ -71,10 +71,25 @@ def _sync_language_groups(session: Session) -> None:
     session.commit()
 
 
+def _run_reminder_sweep() -> None:
+    """Hourly job wrapper — opens its own session so APScheduler doesn't
+    keep one alive across the whole process lifetime."""
+    from .services import booking_emails
+
+    with Session(_database.engine) as session:
+        try:
+            n = booking_emails.sweep_due_reminders(session)
+            if n:
+                log.info("Booking reminder sweep sent %d reminder(s).", n)
+        except Exception:
+            log.exception("Booking reminder sweep failed")
+
+
 def _build_scheduler():
-    """Return a started AsyncIOScheduler with the dormant-pause job, or None
-    if scheduling is disabled. Importing APScheduler lazily so test runs
-    that don't exercise the scheduler don't pay the import cost.
+    """Return a started AsyncIOScheduler with the dormant-pause + booking-
+    reminder jobs, or None if scheduling is disabled. Importing APScheduler
+    lazily so test runs that don't exercise the scheduler don't pay the
+    import cost.
     """
     if not settings.scheduler_enabled:
         log.info("scheduler_enabled=false; skipping APScheduler setup")
@@ -90,9 +105,16 @@ def _build_scheduler():
         replace_existing=True,
         misfire_grace_time=3600,
     )
+    scheduler.add_job(
+        _run_reminder_sweep,
+        trigger=CronTrigger(minute=5, timezone="UTC"),
+        id="booking_reminders",
+        replace_existing=True,
+        misfire_grace_time=1800,
+    )
     scheduler.start()
     log.info(
-        "Scheduler started — dormant_pause job at %02d:00 UTC daily",
+        "Scheduler started — dormant_pause at %02d:00 UTC daily, booking reminders hourly at :05",
         settings.dormant_check_hour_utc,
     )
     return scheduler

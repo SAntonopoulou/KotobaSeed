@@ -661,6 +661,11 @@ def book_trial(
     )
     session.commit()
 
+    # Email confirmations — failures swallowed inside the helper.
+    from ..services import booking_emails
+
+    booking_emails.send_confirmation_emails(session, booking)
+
     return TrialBookResponse(
         booking_id=booking.id,
         scheduled_at=booking.scheduled_at,

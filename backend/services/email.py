@@ -104,3 +104,159 @@ def send_verification_code(
         "you can ignore this email.</p>"
     )
     return send_email(to=to_email, subject=subject, html=_wrap(subject, body))
+
+
+def _first_name(full_name: str | None) -> str:
+    if not full_name:
+        return "there"
+    return full_name.split()[0]
+
+
+def _format_when(scheduled_at, tz_name: str | None) -> str:
+    """Render a booking time in the recipient's timezone if known, else UTC.
+
+    Resend doesn't do per-recipient locales, so we just pick the most
+    intuitive single string — the tutor's timezone is a fine default
+    because the tutor is the one who scheduled their availability there,
+    and most students booking will be in the same general region.
+    """
+    from datetime import UTC
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+    when = scheduled_at
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=UTC)
+    tz = None
+    if tz_name:
+        try:
+            tz = ZoneInfo(tz_name)
+        except ZoneInfoNotFoundError:
+            tz = None
+    if tz is not None:
+        when = when.astimezone(tz)
+        return when.strftime("%A %d %B at %H:%M") + f" ({tz_name})"
+    return when.strftime("%A %d %B at %H:%M UTC")
+
+
+def send_booking_confirmation_student(
+    *,
+    to_email: str,
+    student_name: str,
+    tutor_display_name: str,
+    pack_name: str,
+    scheduled_at,
+    duration_minutes: int,
+    classroom_url: str,
+    tutor_timezone: str | None = None,
+    is_trial: bool = False,
+    reply_to: str | None = None,
+) -> bool:
+    when = _format_when(scheduled_at, tutor_timezone)
+    headline = (
+        "Your free trial is booked"
+        if is_trial
+        else f"Your lesson with {tutor_display_name} is confirmed"
+    )
+    subject = headline
+    body = (
+        f"<p>Hi {_first_name(student_name)},</p>"
+        f"<p>{headline} for <strong>{when}</strong> "
+        f"({duration_minutes} minutes).</p>"
+        f"<p><strong>Pack:</strong> {pack_name}</p>"
+        f'<p style="margin:24px 0;"><a href="{classroom_url}" '
+        'style="display:inline-block;background:#2a6e3f;color:#ffffff;'
+        'padding:12px 24px;border-radius:6px;text-decoration:none;'
+        'font-weight:600;">Join the classroom</a></p>'
+        "<p>The classroom opens 15 minutes before your lesson. We'll send a "
+        "reminder roughly a day before too.</p>"
+    )
+    return send_email(
+        to=to_email,
+        subject=subject,
+        html=_wrap(subject, body),
+        reply_to=reply_to,
+    )
+
+
+def send_booking_confirmation_tutor(
+    *,
+    to_email: str,
+    tutor_name: str,
+    student_display_name: str,
+    pack_name: str,
+    scheduled_at,
+    duration_minutes: int,
+    dashboard_url: str,
+    tutor_timezone: str | None = None,
+    is_trial: bool = False,
+) -> bool:
+    when = _format_when(scheduled_at, tutor_timezone)
+    kind = "free trial" if is_trial else "lesson"
+    subject = f"New {kind} booked: {student_display_name}, {when.split(' at ')[0]}"
+    body = (
+        f"<p>Hi {_first_name(tutor_name)},</p>"
+        f"<p><strong>{student_display_name}</strong> booked a {kind} with you "
+        f"for <strong>{when}</strong> ({duration_minutes} minutes).</p>"
+        f"<p><strong>Pack:</strong> {pack_name}</p>"
+        f'<p style="margin:24px 0;"><a href="{dashboard_url}" '
+        'style="display:inline-block;background:#2a6e3f;color:#ffffff;'
+        'padding:12px 24px;border-radius:6px;text-decoration:none;'
+        'font-weight:600;">Open your dashboard</a></p>'
+    )
+    return send_email(to=to_email, subject=subject, html=_wrap(subject, body))
+
+
+def send_booking_reminder_student(
+    *,
+    to_email: str,
+    student_name: str,
+    tutor_display_name: str,
+    scheduled_at,
+    duration_minutes: int,
+    classroom_url: str,
+    tutor_timezone: str | None = None,
+    reply_to: str | None = None,
+) -> bool:
+    when = _format_when(scheduled_at, tutor_timezone)
+    subject = f"Tomorrow: your lesson with {tutor_display_name}"
+    body = (
+        f"<p>Hi {_first_name(student_name)},</p>"
+        f"<p>Quick reminder — you have a lesson with "
+        f"<strong>{tutor_display_name}</strong> at <strong>{when}</strong> "
+        f"({duration_minutes} minutes).</p>"
+        f'<p style="margin:24px 0;"><a href="{classroom_url}" '
+        'style="display:inline-block;background:#2a6e3f;color:#ffffff;'
+        'padding:12px 24px;border-radius:6px;text-decoration:none;'
+        'font-weight:600;">Join the classroom</a></p>'
+        "<p>The classroom opens 15 minutes before the lesson starts.</p>"
+    )
+    return send_email(
+        to=to_email,
+        subject=subject,
+        html=_wrap(subject, body),
+        reply_to=reply_to,
+    )
+
+
+def send_booking_reminder_tutor(
+    *,
+    to_email: str,
+    tutor_name: str,
+    student_display_name: str,
+    scheduled_at,
+    duration_minutes: int,
+    dashboard_url: str,
+    tutor_timezone: str | None = None,
+) -> bool:
+    when = _format_when(scheduled_at, tutor_timezone)
+    subject = f"Tomorrow: lesson with {student_display_name}"
+    body = (
+        f"<p>Hi {_first_name(tutor_name)},</p>"
+        f"<p>You have a lesson with <strong>{student_display_name}</strong> "
+        f"at <strong>{when}</strong> ({duration_minutes} minutes).</p>"
+        f'<p style="margin:24px 0;"><a href="{dashboard_url}" '
+        'style="display:inline-block;background:#2a6e3f;color:#ffffff;'
+        'padding:12px 24px;border-radius:6px;text-decoration:none;'
+        'font-weight:600;">Open your dashboard</a></p>'
+    )
+    return send_email(to=to_email, subject=subject, html=_wrap(subject, body))
