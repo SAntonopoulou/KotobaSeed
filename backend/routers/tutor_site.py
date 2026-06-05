@@ -433,6 +433,232 @@ def deactivate_single_lesson(
     session.commit()
 
 
+# --- Analytics (owner only) ---------------------------------------------
+
+
+class AnalyticsCurrentMonth(BaseModel):
+    month_label: str  # e.g. "June 2026"
+    revenue_cents: int
+    currency: str  # snapshot from latest booking; "eur" default
+    lessons_completed: int
+    hours_taught: float
+    new_students: int
+
+
+class AnalyticsLifetime(BaseModel):
+    total_students: int  # distinct paying students, ever
+    repeat_students: int  # those with 2+ paid bookings
+    trial_to_paid_conversion_rate: float | None  # null when no trials yet
+
+
+class AnalyticsUpcoming(BaseModel):
+    confirmed_count: int  # all confirmed future bookings
+    next_7_days: int  # subset within the next week
+
+
+class AnalyticsTrendPoint(BaseModel):
+    month: str  # ISO `YYYY-MM`
+    revenue_cents: int
+    lessons: int
+
+
+class TutorAnalytics(BaseModel):
+    current_month: AnalyticsCurrentMonth
+    lifetime: AnalyticsLifetime
+    upcoming: AnalyticsUpcoming
+    monthly_trend: list[AnalyticsTrendPoint]  # last 6 months chronological
+
+
+def _month_start(dt: datetime) -> datetime:
+    return dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+
+def _month_label(dt: datetime) -> str:
+    return dt.strftime("%B %Y")
+
+
+@router.get("/analytics", response_model=TutorAnalytics)
+def read_analytics(
+    current: CurrentUser,
+    tutor: CurrentTutor,
+    session: Annotated[Session, Depends(get_session)],
+) -> TutorAnalytics:
+    """Owner-only — business summary metrics for the dashboard.
+
+    Revenue counts COMPLETED bookings only (REFUNDED and CANCELLED never
+    earn the tutor anything; CONFIRMED-but-not-yet-completed is pipeline,
+    not revenue). The tutor's take is `price_cents - platform_fee_cents`
+    so the displayed number reflects what actually lands in their Stripe
+    Connect account, not the gross.
+    """
+    _require_owner(tutor, current)
+    now = datetime.now(UTC)
+    month_start = _month_start(now)
+
+    # Pull every booking once + every pack once. Per-tutor volumes are
+    # modest enough that in-memory aggregation beats five GROUP BY queries.
+    bookings = list(
+        session.exec(
+            select(Booking).where(Booking.tutor_id == tutor.id)
+        ).all()
+    )
+    pack_ids = {b.lesson_pack_id for b in bookings}
+    packs_by_id = (
+        {
+            p.id: p
+            for p in session.exec(
+                select(LessonPack).where(LessonPack.id.in_(pack_ids))
+            ).all()
+        }
+        if pack_ids
+        else {}
+    )
+
+    def _completed_in_month(b: Booking) -> bool:
+        if b.status != BookingStatus.COMPLETED:
+            return False
+        when = b.completed_at
+        if when is None:
+            return False
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=UTC)
+        return when >= month_start
+
+    def _first_paid_booking_per_student(rows: list[Booking]) -> dict[int, datetime]:
+        """Map student_user_id → datetime of their FIRST non-trial booking."""
+        firsts: dict[int, datetime] = {}
+        for b in rows:
+            pack = packs_by_id.get(b.lesson_pack_id)
+            if pack is None or pack.is_trial:
+                continue
+            if b.status in (BookingStatus.CANCELLED,):
+                continue
+            when = b.created_at
+            if when.tzinfo is None:
+                when = when.replace(tzinfo=UTC)
+            prev = firsts.get(b.student_user_id)
+            if prev is None or when < prev:
+                firsts[b.student_user_id] = when
+        return firsts
+
+    # ----- This month -----
+    revenue_cents = 0
+    lessons_completed = 0
+    minutes_taught = 0
+    currency = "eur"
+    for b in bookings:
+        if _completed_in_month(b):
+            revenue_cents += max(0, b.price_cents - b.platform_fee_cents)
+            lessons_completed += 1
+            minutes_taught += b.duration_minutes
+            currency = b.currency or currency
+
+    firsts = _first_paid_booking_per_student(bookings)
+    new_students_this_month = sum(
+        1 for first_at in firsts.values() if first_at >= month_start
+    )
+
+    current_month = AnalyticsCurrentMonth(
+        month_label=_month_label(now),
+        revenue_cents=revenue_cents,
+        currency=currency,
+        lessons_completed=lessons_completed,
+        hours_taught=round(minutes_taught / 60, 1),
+        new_students=new_students_this_month,
+    )
+
+    # ----- Lifetime -----
+    paid_booking_count_per_student: dict[int, int] = {}
+    trial_student_ids: set[int] = set()
+    paid_student_ids: set[int] = set()
+    for b in bookings:
+        if b.status == BookingStatus.CANCELLED:
+            continue
+        pack = packs_by_id.get(b.lesson_pack_id)
+        if pack is None:
+            continue
+        if pack.is_trial:
+            trial_student_ids.add(b.student_user_id)
+        else:
+            paid_student_ids.add(b.student_user_id)
+            paid_booking_count_per_student[b.student_user_id] = (
+                paid_booking_count_per_student.get(b.student_user_id, 0) + 1
+            )
+
+    total_students = len(paid_student_ids)
+    repeat_students = sum(1 for n in paid_booking_count_per_student.values() if n >= 2)
+    conversion = None
+    if trial_student_ids:
+        trials_who_converted = len(trial_student_ids & paid_student_ids)
+        conversion = round(trials_who_converted / len(trial_student_ids), 3)
+
+    lifetime = AnalyticsLifetime(
+        total_students=total_students,
+        repeat_students=repeat_students,
+        trial_to_paid_conversion_rate=conversion,
+    )
+
+    # ----- Upcoming -----
+    week_ahead = now + timedelta(days=7)
+    confirmed_future = []
+    for b in bookings:
+        if b.status != BookingStatus.CONFIRMED:
+            continue
+        when = b.scheduled_at
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=UTC)
+        if when > now:
+            confirmed_future.append(when)
+    upcoming = AnalyticsUpcoming(
+        confirmed_count=len(confirmed_future),
+        next_7_days=sum(1 for w in confirmed_future if w <= week_ahead),
+    )
+
+    # ----- Monthly trend (last 6 months including current) -----
+    # Build a fixed list of month buckets so empty months show as zero
+    # rather than disappearing — Sophia gets to see the gap visually.
+    trend_buckets: dict[str, dict[str, int]] = {}
+    cursor = month_start
+    for _ in range(6):
+        trend_buckets[cursor.strftime("%Y-%m")] = {"revenue_cents": 0, "lessons": 0}
+        # Roll back one month — handle Jan → previous Dec.
+        if cursor.month == 1:
+            cursor = cursor.replace(year=cursor.year - 1, month=12)
+        else:
+            cursor = cursor.replace(month=cursor.month - 1)
+    cutoff = cursor  # one month before the last included month — exclusive
+    for b in bookings:
+        if b.status != BookingStatus.COMPLETED or b.completed_at is None:
+            continue
+        when = b.completed_at
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=UTC)
+        if when <= cutoff:
+            continue
+        key = when.strftime("%Y-%m")
+        bucket = trend_buckets.get(key)
+        if bucket is None:
+            continue
+        bucket["revenue_cents"] += max(0, b.price_cents - b.platform_fee_cents)
+        bucket["lessons"] += 1
+
+    monthly_trend = [
+        AnalyticsTrendPoint(
+            month=key,
+            revenue_cents=trend_buckets[key]["revenue_cents"],
+            lessons=trend_buckets[key]["lessons"],
+        )
+        for key in sorted(trend_buckets.keys())
+    ]
+
+    return TutorAnalytics(
+        current_month=current_month,
+        lifetime=lifetime,
+        upcoming=upcoming,
+        monthly_trend=monthly_trend,
+    )
+
+
 # --- Booking policy (public) --------------------------------------------
 
 
