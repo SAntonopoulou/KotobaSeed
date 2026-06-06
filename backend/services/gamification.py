@@ -39,11 +39,19 @@ def award_achievement(user: User, achievement_key: str, session: Session) -> Non
     session.add(user_achievement)
 
     # Create a notification for the user
+    message = f"You've unlocked a new achievement: {achievement.name}!"
+    link = "/profile/me?tab=achievements"
     notification = Notification(
         user_id=user.id,
-        message=f"You've unlocked a new achievement: {achievement.name}!",
-        link="/profile/me?tab=achievements",
+        message=message,
+        link=link,
     )
     session.add(notification)
+
+    # WS push so the user's bell icon updates without waiting for the
+    # 5-min poll. Best-effort; failures are swallowed inside the helper.
+    from . import realtime
+
+    realtime.push_notification_event(user.id, message=message, link=link)
 
     # The calling function is responsible for session.commit()

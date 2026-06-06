@@ -355,6 +355,31 @@ def reset_password(
     session.add(user)
     session.commit()
 
+    # Confirmation email — security best practice.
+    try:
+        from ..services import email as _email
+        from ..services import email_templates as _templates
+        from ..services import platform_settings as _platform
+
+        support_email = (
+            _platform.get_setting(session, _platform.SETTING_SUPPORT_EMAIL)
+            or "support@kotobaseed.net"
+        )
+        subject, html = _templates.render(
+            "password_changed",
+            {
+                "user_name": user.full_name or "there",
+                "support_email": support_email,
+            },
+            session=session,
+            tutor=None,
+        )
+        _email.send_email(
+            to=user.email, subject=subject, html=_email._wrap(subject, html)
+        )
+    except Exception:
+        log.exception("Could not send password-changed email to %s", user.email)
+
     access_token = create_access_token(
         subject=user.id,
         expires_delta=timedelta(minutes=settings.access_token_expire_minutes),

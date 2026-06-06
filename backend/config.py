@@ -65,6 +65,11 @@ class Settings(BaseSettings):
     # set this per-account during onboarding — handled when we add country
     # selection to the signup form.
     default_connect_country: str = "GR"
+    # Rolling reserve: how many days Stripe holds a payment before paying
+    # the tutor out. 14 days is industry-standard for new marketplaces — it
+    # gives us a buffer against chargebacks and refunds. Set to 0 to disable
+    # the delay (legacy behaviour).
+    connect_payout_delay_days: int = 14
 
     # ----- Scheduled jobs -------------------------------------------------
     # Disable in test/dev if needed by setting `scheduler_enabled=false`.

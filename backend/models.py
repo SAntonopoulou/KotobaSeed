@@ -99,6 +99,7 @@ class OfferStatus(str, Enum):
 class PriorityCreditStatus(str, Enum):
     AVAILABLE = "available"
     USED = "used"
+    EXPIRED = "expired"
 
 
 # ---------------------------------------------------------------------------
@@ -1456,30 +1457,11 @@ class Tutor(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
-class TutorMarketplaceProfile(SQLModel, table=True):
-    """Opt-in marketplace settings for a tutor.
-
-    A tutor isn't visible in the marketplace by default. Toggling
-    `marketplace_enabled` surfaces them in browse + search, lets them
-    publish projects, and lets students follow them.
-    """
-
-    __tablename__ = "tutor_marketplace_profile"
-
-    id: int | None = Field(default=None, primary_key=True)
-    tutor_id: int = Field(foreign_key="tutor.id", unique=True, index=True)
-    marketplace_enabled: bool = Field(default=False, index=True)
-
-    intro_video_url: str | None = None
-    sample_videos_json: str | None = Field(
-        default=None,
-        description="JSON-encoded list of {url, title, language, level}",
-    )
-
-    follower_count: int = Field(default=0, ge=0)
-
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+# TutorMarketplaceProfile was scaffolded for an opt-in marketplace listing
+# feature but never wired into a router. The functionality it modelled is
+# now served by Tutor.list_in_marketplace (boolean flag) + User's existing
+# intro_video_url + sample_video_url fields. The model + table are dropped
+# in migration 20260607_drop_tutor_marketplace_profile to avoid drift.
 
 
 class StudentEnrollment(SQLModel, table=True):

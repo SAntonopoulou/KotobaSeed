@@ -2011,4 +2011,36 @@ def mark_booking_complete(
 
     student = session.get(User, booking.student_user_id)
     pack = session.get(LessonPack, booking.lesson_pack_id)
+
+    # "Lesson complete" email to the student — best-effort.
+    if student is not None:
+        try:
+            from ..services import (
+                booking_emails,
+                email as _email,
+                email_templates as _templates,
+            )
+
+            tutor_site_url = booking_emails._tutor_site_url(tutor.tutor_slug)
+            subject, html = _templates.render(
+                "lesson_completed_student",
+                {
+                    "student_name": student.full_name or student.username or "there",
+                    "tutor_name": tutor.display_name,
+                    "tutor_site_url": tutor_site_url,
+                },
+                session=session,
+                tutor=tutor,
+            )
+            _email.send_email(
+                to=student.email,
+                subject=subject,
+                html=_email._wrap(subject, html),
+                reply_to=tutor.public_reply_email,
+            )
+        except Exception:
+            log.exception(
+                "Could not send lesson-completed email for booking %s", booking.id
+            )
+
     return _serialize_booking(booking, student=student, pack=pack)

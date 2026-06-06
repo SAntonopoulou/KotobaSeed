@@ -9,6 +9,10 @@ export function useInbox() {
 
 export const InboxProvider = ({ children }) => {
   const [unreadCount, setUnreadCount] = useState(0);
+  // Ticker that increments every time a server NOTIFICATION_NEW event
+  // arrives. Components that want to react to fresh notifications
+  // subscribe by depending on `notificationTick` in a useEffect.
+  const [notificationTick, setNotificationTick] = useState(0);
   const ws = useRef(null); // Ref for the global WebSocket
   const token = localStorage.getItem('token');
 
@@ -56,9 +60,13 @@ export const InboxProvider = ({ children }) => {
     };
 
     ws.current.onmessage = (event) => {
-      const notification = JSON.parse(event.data);
-      if (notification.type === "UNREAD_COUNT_UPDATE") {
-        setUnreadCount(notification.unread_count);
+      const msg = JSON.parse(event.data);
+      if (msg.type === "UNREAD_COUNT_UPDATE") {
+        setUnreadCount(msg.unread_count);
+      } else if (msg.type === "NOTIFICATION_NEW") {
+        // Bump the tick so any subscriber (e.g. Notifications dropdown)
+        // re-fetches without us coupling them via a callback.
+        setNotificationTick((t) => t + 1);
       }
     };
 
@@ -94,6 +102,7 @@ export const InboxProvider = ({ children }) => {
   const value = {
     unreadCount,
     fetchUnreadCount,
+    notificationTick,
   };
 
   return (

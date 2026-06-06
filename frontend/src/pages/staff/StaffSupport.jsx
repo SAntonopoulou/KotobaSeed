@@ -87,11 +87,10 @@ const StaffTicketDetail = ({ id, currentUser }) => {
     if (!canManage) return;
     (async () => {
       try {
-        const res = await client.get('/admin/staff');
+        const res = await client.get('/staff/support/staff-list');
         setStaffList(res.data || []);
       } catch {
-        // Non-admin manager won't have access to /admin/staff; silently
-        // degrade to unassign-only.
+        // Network blip or 403 — degrade to unassign-only.
       }
     })();
   }, [canManage]);

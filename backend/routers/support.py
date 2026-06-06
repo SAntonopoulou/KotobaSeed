@@ -305,6 +305,29 @@ def reply_to_ticket(
     # email the staff inbox so it bumps to the top of someone's queue.
     if is_staff(current):
         support_emails.send_reply_to_user(session, ticket, payload.body)
+        # Also push a bell-icon notification + WS event so the user sees
+        # the new reply without polling.
+        if ticket.submitted_by_user_id:
+            from ..models import Notification
+            from ..services import realtime
+
+            note_message = (
+                f"Reply on your support ticket #{ticket.id}: {ticket.subject}"
+            )
+            note_link = f"/support/{ticket.id}"
+            session.add(
+                Notification(
+                    user_id=ticket.submitted_by_user_id,
+                    message=note_message,
+                    link=note_link,
+                )
+            )
+            session.commit()
+            realtime.push_notification_event(
+                ticket.submitted_by_user_id,
+                message=note_message,
+                link=note_link,
+            )
     elif is_author:
         support_emails.send_new_ticket_to_staff(session, ticket)
     messages = _load_messages(session, ticket.id)
@@ -584,6 +607,50 @@ def change_priority(
     )
     messages = _load_messages(session, ticket.id)
     return _serialize_ticket(ticket, messages, include_internal=True)
+
+
+class StaffListEntry(BaseModel):
+    id: int
+    email: str
+    full_name: str | None
+    role: str
+
+
+@staff_router.get("/staff-list", response_model=list[StaffListEntry])
+def list_staff_for_assignment(
+    current: Annotated[User, Depends(get_current_manager)],
+    session: Annotated[Session, Depends(get_session)],
+) -> list[StaffListEntry]:
+    """Manager+ — slim staff roster, used by the ticket-detail assign
+    dropdown. Distinct from `/admin/staff` which is admin-only and returns
+    the full editable user row."""
+    from ..models import UserRole
+
+    rows = session.exec(
+        select(User)
+        .where(
+            User.role.in_(
+                [
+                    UserRole.SUPPORT,
+                    UserRole.MANAGER,
+                    UserRole.ADMIN,
+                    UserRole.MODERATOR,
+                ]
+            ),
+            User.deleted_at.is_(None),
+            User.is_active,
+        )
+        .order_by(User.role, User.email)
+    ).all()
+    return [
+        StaffListEntry(
+            id=u.id,
+            email=u.email,
+            full_name=u.full_name,
+            role=u.role.value,
+        )
+        for u in rows
+    ]
 
 
 # Admin-only deletion — exists for GDPR right-to-erasure side cases. Soft

@@ -20,6 +20,8 @@ from ..models import (
     Notification,
     Pledge,
     PledgeStatus,
+    PriorityCredit,
+    PriorityCreditStatus,
     Project,
     ProjectRating,
     ProjectStatus,
@@ -511,6 +513,68 @@ def reschedule_my_booking(
         cancelled_at=booking.cancelled_at,
         refunded_at=booking.refunded_at,
         cancellation_cutoff_hours=tutor.cancellation_cutoff_hours if tutor else None,
+    )
+
+
+class PriorityCreditRead(BaseModel):
+    id: int
+    created_at: datetime
+    expires_at: datetime
+    status: PriorityCreditStatus
+
+
+class PriorityCreditSummary(BaseModel):
+    available: int
+    used: int
+    expired: int
+    credits: list[PriorityCreditRead]
+
+
+@router.get("/me/priority-credits", response_model=PriorityCreditSummary)
+def list_my_priority_credits(
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Student's priority credit ledger — used by the credits widget so
+    they can see what they have and how long it lasts. Auto-expires
+    credits whose expires_at has passed; idempotent so it's safe to call
+    on every page load."""
+    now = datetime.now(UTC)
+    rows = list(
+        session.exec(
+            select(PriorityCredit)
+            .where(PriorityCredit.user_id == current_user.id)
+            .order_by(PriorityCredit.created_at.desc())
+        ).all()
+    )
+    dirty = False
+    for c in rows:
+        if c.status == PriorityCreditStatus.AVAILABLE:
+            expires = c.expires_at
+            if expires.tzinfo is None:
+                expires = expires.replace(tzinfo=UTC)
+            if expires < now:
+                c.status = PriorityCreditStatus.EXPIRED
+                session.add(c)
+                dirty = True
+    if dirty:
+        session.commit()
+    available = sum(1 for c in rows if c.status == PriorityCreditStatus.AVAILABLE)
+    used = sum(1 for c in rows if c.status == PriorityCreditStatus.USED)
+    expired = sum(1 for c in rows if c.status == PriorityCreditStatus.EXPIRED)
+    return PriorityCreditSummary(
+        available=available,
+        used=used,
+        expired=expired,
+        credits=[
+            PriorityCreditRead(
+                id=c.id,
+                created_at=c.created_at,
+                expires_at=c.expires_at,
+                status=c.status,
+            )
+            for c in rows
+        ],
     )
 
 

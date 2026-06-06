@@ -573,6 +573,48 @@ def grade_submission_endpoint(
     session.commit()
     session.refresh(assignment)
     student = session.get(User, assignment.student_user_id)
+
+    # Email the student so they know feedback is waiting.
+    if student is not None:
+        try:
+            from ..services import (
+                booking_emails,
+                email as _email,
+                email_templates as _templates,
+            )
+
+            assignment_url = booking_emails._tutor_site_url(
+                tutor.tutor_slug, f"/student/assignments/{assignment.id}"
+            )
+            feedback = payload.feedback or ""
+            feedback_block = (
+                f"**Tutor's note:** {feedback}" if feedback.strip() else ""
+            )
+            subject, html = _templates.render(
+                "homework_graded_student",
+                {
+                    "student_name": student.full_name or student.username or "there",
+                    "tutor_name": tutor.display_name,
+                    "assignment_title": assignment.title,
+                    "score": payload.manual_score,
+                    "max_score": sub.max_score,
+                    "feedback_block": feedback_block,
+                    "assignment_url": assignment_url,
+                },
+                session=session,
+                tutor=tutor,
+            )
+            _email.send_email(
+                to=student.email,
+                subject=subject,
+                html=_email._wrap(subject, html),
+                reply_to=tutor.public_reply_email,
+            )
+        except Exception:
+            log.exception(
+                "Could not send homework-graded email for submission %s", sub.id
+            )
+
     return _assignment_to_read(assignment, student=student, submission=sub)
 
 

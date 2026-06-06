@@ -31,18 +31,60 @@ def _api_key() -> str:
 
 
 def create_express_account(*, email: str, country: str | None = None) -> str:
-    """Create a Stripe Connect Express account, return the new `acct_...` id."""
-    account = stripe.Account.create(
-        api_key=_api_key(),
-        type="express",
-        country=country or settings.default_connect_country,
-        email=email,
-        capabilities={
+    """Create a Stripe Connect Express account, return the new `acct_...` id.
+
+    Payout schedule is set to a rolling 14-day delay so we have a buffer
+    against chargebacks before money leaves the platform. Tutors see this
+    in their Stripe dashboard; we set it on creation so they can't
+    accidentally switch it back. The value is read from
+    `settings.connect_payout_delay_days` so we can tune it without a deploy.
+    """
+    delay = settings.connect_payout_delay_days
+    payout_schedule: dict | None = None
+    if delay > 0:
+        payout_schedule = {
+            "interval": "daily",
+            "delay_days": delay,
+        }
+    create_kwargs: dict = {
+        "api_key": _api_key(),
+        "type": "express",
+        "country": country or settings.default_connect_country,
+        "email": email,
+        "capabilities": {
             "transfers": {"requested": True},
             "card_payments": {"requested": True},
         },
-    )
+    }
+    if payout_schedule is not None:
+        create_kwargs["settings"] = {"payouts": {"schedule": payout_schedule}}
+    account = stripe.Account.create(**create_kwargs)
     return account["id"]
+
+
+def apply_payout_schedule(*, account_id: str) -> None:
+    """Re-apply the configured payout delay to an existing Connect account.
+
+    Useful for legacy accounts created before the platform-default delay
+    was introduced. Safe to call repeatedly — Stripe accepts idempotent
+    schedule updates."""
+    delay = settings.connect_payout_delay_days
+    if delay <= 0:
+        return
+    try:
+        stripe.Account.modify(
+            account_id,
+            api_key=_api_key(),
+            settings={
+                "payouts": {
+                    "schedule": {"interval": "daily", "delay_days": delay}
+                }
+            },
+        )
+    except Exception:
+        log.exception(
+            "Failed to apply payout schedule to Connect account %s", account_id
+        )
 
 
 def fetch_account(*, account_id: str) -> dict:

@@ -173,13 +173,33 @@ const AcceptedAnswersEditor = ({ question, onChange }) => {
           </button>
         </div>
       ))}
-      <button
-        type="button"
-        onClick={addAccepted}
-        className="text-sm text-kotoba-primary hover:underline"
-      >
-        + Add accepted answer
-      </button>
+      <div className="flex flex-wrap gap-3 items-center">
+        <button
+          type="button"
+          onClick={addAccepted}
+          className="text-sm text-kotoba-primary hover:underline"
+        >
+          + Add accepted answer
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            const raw = window.prompt(
+              'Paste accepted answers — one per line, or comma-separated. They replace the current list.'
+            );
+            if (raw === null) return;
+            const parts = raw
+              .split(/[\n,;]/)
+              .map((s) => s.trim())
+              .filter((s) => s.length > 0);
+            if (parts.length === 0) return;
+            onChange({ ...question, accepted_answers: parts });
+          }}
+          className="text-sm text-kotoba-text/60 hover:text-kotoba-primary"
+        >
+          Paste a list
+        </button>
+      </div>
       <div className="flex gap-4 mt-2 text-xs">
         <label className="inline-flex items-center gap-1">
           <input

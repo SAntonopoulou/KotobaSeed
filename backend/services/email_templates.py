@@ -131,6 +131,93 @@ DEFAULTS: dict[str, TemplateDefinition] = {
         ),
         placeholders=_TUTOR_SIDE_PLACEHOLDERS,
     ),
+    "lesson_completed_student": TemplateDefinition(
+        key="lesson_completed_student",
+        label="Lesson completed (student)",
+        description=(
+            "Sent after the tutor marks a lesson complete — good place to "
+            "thank the student and prompt them to leave a testimonial."
+        ),
+        default_subject="Thanks for the lesson — see you next time",
+        default_body_markdown=(
+            "Hi {student_name},\n\n"
+            "Thanks for the lesson today with **{tutor_name}**! Hope it was "
+            "useful.\n\n"
+            "If you'd like to leave a testimonial — even a sentence helps "
+            "future students decide if I'm the right fit for them.\n\n"
+            "[Book another lesson]({tutor_site_url})"
+        ),
+        placeholders=(
+            "student_name",
+            "tutor_name",
+            "tutor_site_url",
+        ),
+    ),
+    "homework_graded_student": TemplateDefinition(
+        key="homework_graded_student",
+        label="Homework graded (student)",
+        description="Sent when the tutor finishes grading a submitted homework.",
+        default_subject="Your homework is graded",
+        default_body_markdown=(
+            "Hi {student_name},\n\n"
+            "**{tutor_name}** has graded your homework "
+            "**\"{assignment_title}\"** — you scored **{score} / {max_score}**.\n\n"
+            "{feedback_block}\n\n"
+            "[See the full feedback]({assignment_url})"
+        ),
+        placeholders=(
+            "student_name",
+            "tutor_name",
+            "assignment_title",
+            "score",
+            "max_score",
+            "feedback_block",
+            "assignment_url",
+        ),
+    ),
+    "subscription_renewed_student": TemplateDefinition(
+        key="subscription_renewed_student",
+        label="Subscription renewed (student)",
+        description=(
+            "Sent after a successful monthly content-subscription payment so "
+            "the student has a receipt + reminder of what they get."
+        ),
+        default_subject="Your subscription with {tutor_name} renewed",
+        default_body_markdown=(
+            "Hi {student_name},\n\n"
+            "Your monthly subscription with **{tutor_name}** renewed. "
+            "You've got access to every premium module + homework for "
+            "another month.\n\n"
+            "**Amount:** {amount}\n\n"
+            "[Open your account]({account_url}) to manage or cancel any time."
+        ),
+        placeholders=(
+            "student_name",
+            "tutor_name",
+            "amount",
+            "account_url",
+        ),
+    ),
+    "password_changed": TemplateDefinition(
+        key="password_changed",
+        label="Password changed (user)",
+        description=(
+            "Platform-level alert when a password is reset or changed — "
+            "security best practice."
+        ),
+        default_subject="Your Kotobaseed password was changed",
+        default_body_markdown=(
+            "Hi {user_name},\n\n"
+            "Your Kotobaseed password was just changed. If this was you, "
+            "no action needed.\n\n"
+            "**If this wasn't you**, reset it again immediately and contact "
+            "support: [{support_email}](mailto:{support_email})."
+        ),
+        placeholders=(
+            "user_name",
+            "support_email",
+        ),
+    ),
     "booking_cancelled_student": TemplateDefinition(
         key="booking_cancelled_student",
         label="Cancellation confirmation (student)",

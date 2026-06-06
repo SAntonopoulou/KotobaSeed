@@ -2,11 +2,15 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import client from '../api/client';
 import { FaBell, FaTimes } from 'react-icons/fa';
+import { useInbox } from '../context/InboxContext';
 
 const Notifications = () => {
   const [notifications, setNotifications] = useState([]);
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
+  // WS-driven freshness — the InboxContext WS pushes NOTIFICATION_NEW
+  // events; the counter bumps on each, triggering a re-fetch here.
+  const { notificationTick } = useInbox();
 
   const fetchNotifications = useCallback(async () => {
     try {
@@ -19,9 +23,17 @@ const Notifications = () => {
 
   useEffect(() => {
     fetchNotifications();
-    const interval = setInterval(fetchNotifications, 60000);
+    // Long-interval poll only as a fallback in case the WS is wedged.
+    const interval = setInterval(fetchNotifications, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, [fetchNotifications]);
+
+  useEffect(() => {
+    // Skip the very first tick (initial state 0); only refetch on bumps.
+    if (notificationTick > 0) {
+      fetchNotifications();
+    }
+  }, [notificationTick, fetchNotifications]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
