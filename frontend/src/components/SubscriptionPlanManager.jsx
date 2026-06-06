@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import client from '../api/client';
+import { useConfirm } from '../context/ModalContext';
 
 // Single per-tutor recurring content subscription. The price field is
 // in euros for the UI; we convert to cents at save time. Existing
@@ -18,6 +19,7 @@ const formatPrice = (cents, currency = 'eur') => {
 };
 
 const SubscriptionPlanManager = () => {
+  const confirm = useConfirm();
   const [plan, setPlan] = useState(null);
   const [draftEuros, setDraftEuros] = useState('');
   const [draftCredits, setDraftCredits] = useState(0);
@@ -70,7 +72,11 @@ const SubscriptionPlanManager = () => {
   };
 
   const deactivate = async () => {
-    if (!window.confirm('Pause new sign-ups? Existing subscribers keep access until their next renewal fails.')) return;
+    if (!(await confirm({
+      title: 'Pause subscription plan',
+      message: 'Pause new sign-ups? Existing subscribers keep access until their next renewal fails.',
+      confirmText: 'Pause',
+    }))) return;
     setBusy(true);
     try {
       await client.delete('/tutor/subscription-plan');

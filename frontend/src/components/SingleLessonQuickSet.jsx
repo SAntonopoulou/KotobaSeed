@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import client from '../api/client';
+import { useConfirm } from '../context/ModalContext';
 
 // Headline single-lesson price editor — most tutors have one rate
 // (e.g. €25 / 60 min) and don't need the full lesson-pack editor for it.
@@ -32,6 +33,7 @@ const formatPrice = (cents, currency) => {
 };
 
 const SingleLessonQuickSet = () => {
+  const confirm = useConfirm();
   const [form, setForm] = useState(blank);
   const [existing, setExisting] = useState(null); // { price_cents, duration_minutes, currency, is_active } or null
   const [loading, setLoading] = useState(true);
@@ -96,7 +98,12 @@ const SingleLessonQuickSet = () => {
   };
 
   const handleRemove = async () => {
-    if (!window.confirm('Remove your single-lesson offering? Students won\'t see it on your site anymore.')) {
+    if (!(await confirm({
+      title: 'Remove single-lesson offering',
+      message: "Remove your single-lesson offering? Students won't see it on your site anymore.",
+      confirmText: 'Remove',
+      destructive: true,
+    }))) {
       return;
     }
     setSaving(true);

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import client from '../api/client';
 import { tutorSiteUrl } from '../hooks/useTenant';
+import { useConfirm } from '../context/ModalContext';
 
 const CLASSROOM_LEAD_MIN = 15;
 const CLASSROOM_GRACE_MIN = 30;
@@ -59,6 +60,7 @@ const toDatetimeLocal = (date) => {
 };
 
 const MyBookings = () => {
+  const confirm = useConfirm();
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -89,7 +91,12 @@ const MyBookings = () => {
     const msg = booking.status === 'confirmed'
       ? `Cancel this booking and refund ${formatPrice(booking.price_cents, booking.currency)}?`
       : 'Cancel this booking?';
-    if (!window.confirm(msg)) return;
+    if (!(await confirm({
+      title: 'Cancel booking',
+      message: msg,
+      confirmText: 'Cancel booking',
+      destructive: true,
+    }))) return;
     setCancelling(booking.id);
     setError('');
     try {

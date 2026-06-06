@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import client from '../api/client';
+import { useConfirm } from '../context/ModalContext';
 
 // Per-tutor newsletter compose + history. Two panes: top is the compose
 // form (drafts + editing one); below is a list of past sends + current
@@ -16,6 +17,7 @@ const formatDate = (iso) => {
 };
 
 const NewslettersManager = () => {
+  const confirm = useConfirm();
   const [items, setItems] = useState([]);
   const [audienceCount, setAudienceCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -143,8 +145,11 @@ const NewslettersManager = () => {
       setError('Save the draft first.');
       return;
     }
-    const msg = `Send this newsletter to ${audienceCount} ${audienceCount === 1 ? 'student' : 'students'}? This can't be undone.`;
-    if (!window.confirm(msg)) return;
+    if (!(await confirm({
+      title: 'Send newsletter',
+      message: `Send this newsletter to ${audienceCount} ${audienceCount === 1 ? 'student' : 'students'}? This can't be undone.`,
+      confirmText: 'Send now',
+    }))) return;
     setBusy(true);
     setError('');
     try {
@@ -160,7 +165,12 @@ const NewslettersManager = () => {
   };
 
   const handleDelete = async (item) => {
-    if (!window.confirm(`Delete the draft "${item.subject}"?`)) return;
+    if (!(await confirm({
+      title: 'Delete draft',
+      message: `Delete the draft "${item.subject}"?`,
+      confirmText: 'Delete',
+      destructive: true,
+    }))) return;
     setBusy(true);
     setError('');
     try {

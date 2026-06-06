@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import client from '../api/client';
+import { useConfirm } from '../context/ModalContext';
 import MarkdownEditor from '../components/editor/MarkdownEditor';
 
 // Full-page article editor used for both `/dashboard/articles/new` and
@@ -10,6 +11,7 @@ import MarkdownEditor from '../components/editor/MarkdownEditor';
 
 const ArticleEditor = () => {
   const navigate = useNavigate();
+  const confirm = useConfirm();
   const { slug } = useParams();
   const isNew = !slug;
 
@@ -109,7 +111,12 @@ const ArticleEditor = () => {
 
   const handleDelete = async () => {
     if (!articleId) return;
-    if (!window.confirm('Delete this article? This can\'t be undone.')) return;
+    if (!(await confirm({
+      title: 'Delete article',
+      message: "Delete this article? This can't be undone.",
+      confirmText: 'Delete',
+      destructive: true,
+    }))) return;
     setSaving(true);
     try {
       await client.delete(`/articles/${articleId}`);

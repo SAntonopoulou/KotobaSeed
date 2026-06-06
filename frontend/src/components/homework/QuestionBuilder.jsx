@@ -1,4 +1,5 @@
 import React from 'react';
+import { usePrompt } from '../../context/ModalContext';
 
 // Reusable question editor — handles all four supported types. Each
 // question has stable id (string), type, prompt, points, plus type-
@@ -137,6 +138,7 @@ const OptionsEditor = ({ question, onChange, multi }) => {
 };
 
 const AcceptedAnswersEditor = ({ question, onChange }) => {
+  const prompt = usePrompt();
   const setAccepted = (idx, value) => {
     const next = [...question.accepted_answers];
     next[idx] = value;
@@ -183,10 +185,13 @@ const AcceptedAnswersEditor = ({ question, onChange }) => {
         </button>
         <button
           type="button"
-          onClick={() => {
-            const raw = window.prompt(
-              'Paste accepted answers — one per line, or comma-separated. They replace the current list.'
-            );
+          onClick={async () => {
+            const raw = await prompt({
+              title: 'Paste accepted answers',
+              message: 'One per line, or comma-separated. The list replaces what you have now.',
+              multiline: true,
+              confirmText: 'Replace list',
+            });
             if (raw === null) return;
             const parts = raw
               .split(/[\n,;]/)

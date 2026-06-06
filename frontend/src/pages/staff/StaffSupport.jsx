@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import client from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { useConfirm } from '../../context/ModalContext';
 
 const STATUS_LABEL = {
   open: 'Open',
@@ -73,6 +74,7 @@ const TicketRow = ({ t }) => (
 const StaffTicketDetail = ({ id, currentUser }) => {
   const { addToast } = useToast();
   const navigate = useNavigate();
+  const confirm = useConfirm();
   const [ticket, setTicket] = useState(null);
   const [loading, setLoading] = useState(true);
   const [reply, setReply] = useState('');
@@ -164,7 +166,11 @@ const StaffTicketDetail = ({ id, currentUser }) => {
   };
 
   const escalate = async () => {
-    if (!window.confirm('Escalate this ticket to the next tier?')) return;
+    if (!(await confirm({
+      title: 'Escalate ticket',
+      message: 'Escalate this ticket to the next tier?',
+      confirmText: 'Escalate',
+    }))) return;
     setBusy(true);
     try {
       const res = await client.post(`/staff/support/tickets/${ticket.id}/escalate`);

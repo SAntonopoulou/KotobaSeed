@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import client from '../api/client';
+import { useConfirm } from '../context/ModalContext';
 import {
   ALL_SECTION_TYPES,
   SECTION_DESCRIPTIONS,
@@ -13,6 +14,7 @@ import PageSectionEditor from './page_builder/PageSectionEditor';
 // just to see the panel.
 
 const PageBuilder = () => {
+  const confirm = useConfirm();
   const [sections, setSections] = useState([]);
   const [tier, setTier] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -76,7 +78,12 @@ const PageBuilder = () => {
   };
 
   const resetToDefault = async () => {
-    if (!window.confirm('Reset your page to the default layout? Your customisations will be removed.')) return;
+    if (!(await confirm({
+      title: 'Reset layout',
+      message: 'Reset your page to the default layout? Your customisations will be removed.',
+      confirmText: 'Reset',
+      destructive: true,
+    }))) return;
     setSaving(true);
     setError('');
     setInfo('');
@@ -107,8 +114,13 @@ const PageBuilder = () => {
     setDirty(true);
   };
 
-  const remove = (idx) => {
-    if (!window.confirm(`Remove the "${SECTION_LABELS[sections[idx].section_type]}" section?`)) return;
+  const remove = async (idx) => {
+    if (!(await confirm({
+      title: 'Remove section',
+      message: `Remove the "${SECTION_LABELS[sections[idx].section_type]}" section?`,
+      confirmText: 'Remove',
+      destructive: true,
+    }))) return;
     const copy = sections.filter((_, i) => i !== idx);
     setSections(copy);
     setDirty(true);

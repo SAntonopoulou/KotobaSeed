@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import client from '../api/client';
+import { useConfirm } from '../context/ModalContext';
 
 // Tutor's lesson modules — curriculum bundles of articles + homework
 // sold as one-time purchases. Inline editor for v1; if Sophia wants a
@@ -25,6 +26,7 @@ const FEE_BY_TIER = {
 };
 
 const ModulesManager = () => {
+  const confirm = useConfirm();
   const [modules, setModules] = useState([]);
   const [articles, setArticles] = useState([]);
   const [templates, setTemplates] = useState([]);
@@ -161,7 +163,12 @@ const ModulesManager = () => {
   };
 
   const remove = async (m) => {
-    if (!window.confirm(`Unpublish "${m.title}"? Students who already paid keep their access.`)) return;
+    if (!(await confirm({
+      title: 'Unpublish module',
+      message: `Unpublish "${m.title}"? Students who already paid keep their access.`,
+      confirmText: 'Unpublish',
+      destructive: true,
+    }))) return;
     setBusy(true);
     try {
       await client.delete(`/tutor/modules/${m.id}`);

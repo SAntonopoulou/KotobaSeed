@@ -42,25 +42,65 @@ def _headers() -> dict[str, str]:
     return {"Authorization": f"Bearer {_require_key()}", "Content-Type": "application/json"}
 
 
-def create_room(*, name: str, expires_at: datetime, enable_chat: bool = True) -> dict[str, Any]:
+def create_room(
+    *,
+    name: str,
+    expires_at: datetime,
+    enable_chat: bool = True,
+    enable_recording: bool = False,
+) -> dict[str, Any]:
     """Create a Daily room. `name` is the slug; URL is daily_domain + name.
 
     Auto-expires at `expires_at` so we don't accumulate stale rooms.
+    `enable_recording=True` adds the cloud-recording option so the tutor
+    can press the record button mid-lesson — Daily uploads to their own
+    recordings bucket.
     """
+    properties: dict[str, Any] = {
+        "exp": int(expires_at.timestamp()),
+        "enable_chat": enable_chat,
+        "enable_screenshare": True,
+        "start_video_off": False,
+        "start_audio_off": False,
+    }
+    if enable_recording:
+        # cloud recording, default 720p — Daily.co Premium needed.
+        properties["enable_recording"] = "cloud"
     payload = {
         "name": name,
         "privacy": "private",  # tokens required to join
-        "properties": {
-            "exp": int(expires_at.timestamp()),
-            "enable_chat": enable_chat,
-            "enable_screenshare": True,
-            "start_video_off": False,
-            "start_audio_off": False,
-        },
+        "properties": properties,
     }
     r = httpx.post(f"{DAILY_API_BASE}/rooms", headers=_headers(), json=payload, timeout=10)
     r.raise_for_status()
     return r.json()
+
+
+def list_recordings(*, room_name: str) -> list[dict[str, Any]]:
+    """Return Daily's recording list for a given room. Each entry contains
+    `id`, `start_ts`, `duration`, `download_link`, and `status`."""
+    r = httpx.get(
+        f"{DAILY_API_BASE}/recordings",
+        headers=_headers(),
+        params={"room_name": room_name},
+        timeout=10,
+    )
+    if r.status_code == 404:
+        return []
+    r.raise_for_status()
+    return r.json().get("data", [])
+
+
+def recording_access_link(*, recording_id: str) -> str | None:
+    """Mint a short-lived signed URL for downloading a single recording."""
+    r = httpx.get(
+        f"{DAILY_API_BASE}/recordings/{recording_id}/access-link",
+        headers=_headers(),
+        timeout=10,
+    )
+    if r.status_code != 200:
+        return None
+    return r.json().get("download_link")
 
 
 def create_meeting_token(

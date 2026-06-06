@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import client from '../api/client';
+import { useConfirm } from '../context/ModalContext';
 import QuestionBuilder, { makeQuestion } from './homework/QuestionBuilder';
 
 // Tutor's single placement test + the optional level bands that map
@@ -14,6 +15,7 @@ const DEFAULT_BANDS = [
 ];
 
 const PlacementTestManager = () => {
+  const confirm = useConfirm();
   const [test, setTest] = useState(null);
   const [submissions, setSubmissions] = useState([]);
   const [editing, setEditing] = useState(null);
@@ -115,7 +117,11 @@ const PlacementTestManager = () => {
   };
 
   const remove = async () => {
-    if (!window.confirm('Take down the placement test? Existing submissions stay in your history.')) return;
+    if (!(await confirm({
+      title: 'Take down placement test',
+      message: 'Take down the placement test? Existing submissions stay in your history.',
+      confirmText: 'Take down',
+    }))) return;
     setBusy(true);
     try {
       await client.delete('/tutor/placement-test');

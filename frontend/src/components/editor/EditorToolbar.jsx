@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
+import { usePrompt } from '../../context/ModalContext';
 import {
   $getSelection,
   $isRangeSelection,
@@ -38,6 +39,7 @@ const Btn = ({ active, onClick, title, children, disabled }) => (
 const Sep = () => <span className="w-px h-5 bg-kotoba-text/15 mx-1" />;
 
 const EditorToolbar = () => {
+  const prompt = usePrompt();
   const [editor] = useLexicalComposerContext();
   const [isBold, setIsBold] = useState(false);
   const [isItalic, setIsItalic] = useState(false);
@@ -80,16 +82,29 @@ const EditorToolbar = () => {
   const formatText = (fmt) =>
     editor.dispatchCommand(FORMAT_TEXT_COMMAND, fmt);
 
-  const insertLink = () => {
-    const url = window.prompt('Link URL:');
+  const insertLink = async () => {
+    const url = await prompt({
+      title: 'Insert link',
+      message: 'Link URL:',
+      placeholder: 'https://',
+      confirmText: 'Insert',
+    });
     if (!url) return;
     editor.dispatchCommand(TOGGLE_LINK_COMMAND, url);
   };
 
-  const insertVocab = () => {
-    const term = window.prompt('Word in the target language:');
+  const insertVocab = async () => {
+    const term = await prompt({
+      title: 'Insert vocabulary',
+      message: 'Word in the target language:',
+      confirmText: 'Next',
+    });
     if (!term) return;
-    const gloss = window.prompt('Meaning / translation (shown on hover):');
+    const gloss = await prompt({
+      title: 'Insert vocabulary',
+      message: 'Meaning / translation (shown on hover):',
+      confirmText: 'Insert',
+    });
     if (!gloss) return;
     editor.update(() => {
       const selection = $getSelection();

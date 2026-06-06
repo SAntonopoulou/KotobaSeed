@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import client from '../api/client';
+import { useConfirm } from '../context/ModalContext';
 import QuestionBuilder, { makeQuestion } from './homework/QuestionBuilder';
 
 // Tutor-side template CRUD. Inline editor — for v1 we keep templates
 // modest enough that an inline form works better than a dedicated route.
 
 const HomeworkTemplatesManager = () => {
+  const confirm = useConfirm();
   const [templates, setTemplates] = useState([]);
   const [editing, setEditing] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -109,7 +111,12 @@ const HomeworkTemplatesManager = () => {
   };
 
   const remove = async (t) => {
-    if (!window.confirm(`Archive the template "${t.title}"? Existing assignments keep their snapshots.`)) return;
+    if (!(await confirm({
+      title: 'Archive template',
+      message: `Archive the template "${t.title}"? Existing assignments keep their snapshots.`,
+      confirmText: 'Archive',
+      destructive: true,
+    }))) return;
     setBusy(true);
     try {
       await client.delete(`/tutor/homework/templates/${t.id}`);

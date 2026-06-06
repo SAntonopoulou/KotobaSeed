@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import client from '../api/client';
+import { useConfirm } from '../context/ModalContext';
 
 // Per-tutor testimonials manager. Tutor types in their own student
 // testimonials (no public submission flow in v1). Each row has student
@@ -37,6 +38,7 @@ const StarRating = ({ value, onChange, disabled }) => (
 );
 
 const TestimonialsManager = () => {
+  const confirm = useConfirm();
   const [items, setItems] = useState([]);
   const [editingId, setEditingId] = useState(null); // null = list view, 'new' = add form, number = edit row
   const [form, setForm] = useState(blank);
@@ -116,7 +118,12 @@ const TestimonialsManager = () => {
   };
 
   const handleDelete = async (item) => {
-    if (!window.confirm(`Delete the testimonial from ${item.student_name}?`)) return;
+    if (!(await confirm({
+      title: 'Delete testimonial',
+      message: `Delete the testimonial from ${item.student_name}?`,
+      confirmText: 'Delete',
+      destructive: true,
+    }))) return;
     setSaving(true);
     setError('');
     try {

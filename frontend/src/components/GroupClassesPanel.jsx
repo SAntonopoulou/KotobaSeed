@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import client from '../api/client';
+import { useConfirm } from '../context/ModalContext';
 
 // Group lesson management — list group-flagged packs, create new group
 // packs (a different shape from 1:1 packs), schedule sessions, view
@@ -258,6 +259,7 @@ const ScheduleSessionForm = ({ packs, onCreated }) => {
 };
 
 const GroupClassesPanel = () => {
+  const confirm = useConfirm();
   const [packs, setPacks] = useState([]);
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -284,7 +286,12 @@ const GroupClassesPanel = () => {
   }, []);
 
   const cancelSession = async (s) => {
-    if (!window.confirm(`Cancel this group session? Every booked student will be refunded.`)) return;
+    if (!(await confirm({
+      title: 'Cancel group session',
+      message: 'Cancel this group session? Every booked student will be refunded.',
+      confirmText: 'Cancel session',
+      destructive: true,
+    }))) return;
     try {
       await client.delete(`/tutor/group-sessions/${s.id}`);
       await load();

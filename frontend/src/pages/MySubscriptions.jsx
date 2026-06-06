@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import client from '../api/client';
+import { useConfirm } from '../context/ModalContext';
 
 const formatPrice = (cents, currency = 'eur') => {
   try {
@@ -38,6 +39,7 @@ const STATUS_LABEL = {
 };
 
 const MySubscriptions = () => {
+  const confirm = useConfirm();
   const [subs, setSubs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(null);
@@ -59,7 +61,12 @@ const MySubscriptions = () => {
   useEffect(() => { load(); }, []);
 
   const cancel = async (sub) => {
-    if (!window.confirm(`Cancel your subscription to ${sub.tutor_display_name}? You keep access through ${formatDate(sub.current_period_end)}.`)) return;
+    if (!(await confirm({
+      title: 'Cancel subscription',
+      message: `Cancel your subscription to ${sub.tutor_display_name}? You keep access through ${formatDate(sub.current_period_end)}.`,
+      confirmText: 'Cancel subscription',
+      destructive: true,
+    }))) return;
     setBusy(sub.id);
     setError('');
     setInfo('');

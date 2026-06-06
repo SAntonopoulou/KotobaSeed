@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import client from '../api/client';
+import { useConfirm } from '../context/ModalContext';
 
 // Dashboard module for editing transactional email subjects + markdown
 // bodies. Each template shows: label + description, current subject,
@@ -19,6 +20,7 @@ const PlaceholderChip = ({ name, onClick }) => (
 );
 
 const TemplateEditor = ({ template, onChange, onSave, onRevert, onPreview }) => {
+  const confirm = useConfirm();
   const subjectRef = React.useRef(null);
   const bodyRef = React.useRef(null);
   const [busy, setBusy] = useState(false);
@@ -61,7 +63,12 @@ const TemplateEditor = ({ template, onChange, onSave, onRevert, onPreview }) => 
   };
 
   const handleRevert = async () => {
-    if (!window.confirm(`Revert "${template.label}" to the platform default? Your custom version will be discarded.`)) return;
+    if (!(await confirm({
+      title: 'Revert to default',
+      message: `Revert "${template.label}" to the platform default? Your custom version will be discarded.`,
+      confirmText: 'Revert',
+      destructive: true,
+    }))) return;
     setBusy(true);
     setError('');
     setInfo('');

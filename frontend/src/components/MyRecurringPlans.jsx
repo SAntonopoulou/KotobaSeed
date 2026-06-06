@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import client from '../api/client';
+import { useConfirm } from '../context/ModalContext';
 
 // Student's recurring lessons — list current plans + cancel.
 // Plan creation happens on the tutor's site via BookingDialog where the
@@ -25,6 +26,7 @@ const formatPrice = (cents, currency = 'eur') => {
 };
 
 const MyRecurringPlans = () => {
+  const confirm = useConfirm();
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -46,9 +48,12 @@ const MyRecurringPlans = () => {
   }, []);
 
   const cancel = async (plan) => {
-    if (!window.confirm(
-      `Cancel your recurring lesson with ${plan.tutor_display_name}? Already-scheduled lessons stay until you pay for them or they auto-cancel inside 48h of the lesson.`
-    )) return;
+    if (!(await confirm({
+      title: 'Cancel recurring plan',
+      message: `Cancel your recurring lesson with ${plan.tutor_display_name}? Already-scheduled lessons stay until you pay for them or they auto-cancel inside 48h of the lesson.`,
+      confirmText: 'Cancel plan',
+      destructive: true,
+    }))) return;
     try {
       await client.post(`/recurring/plans/${plan.id}/cancel`);
       await load();

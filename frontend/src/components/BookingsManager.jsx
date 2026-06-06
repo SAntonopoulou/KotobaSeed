@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import client from '../api/client';
+import { useConfirm } from '../context/ModalContext';
 
 const CLASSROOM_LEAD_MIN = 15;
 const CLASSROOM_GRACE_MIN = 30;
@@ -42,6 +43,7 @@ const STATUS_LABELS = {
 };
 
 const BookingsManager = () => {
+  const confirm = useConfirm();
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -64,7 +66,11 @@ const BookingsManager = () => {
   }, []);
 
   const handleComplete = async (booking) => {
-    if (!window.confirm(`Mark this lesson with ${booking.student_name || 'student'} as completed?`)) {
+    if (!(await confirm({
+      title: 'Mark as completed',
+      message: `Mark this lesson with ${booking.student_name || 'student'} as completed?`,
+      confirmText: 'Mark complete',
+    }))) {
       return;
     }
     setPendingId(booking.id);

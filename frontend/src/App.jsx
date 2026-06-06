@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
 import { InboxProvider } from './context/InboxContext';
+import { ModalProvider } from './context/ModalContext';
 
 // High-traffic, always-needed pages stay eager — auth pages, the landing,
 // shell-level layout. Everything else lazy-loads on first navigation,
@@ -217,13 +218,15 @@ const AppContent = () => {
 function App() {
   return (
     <ToastProvider>
-      <AuthProvider>
-        <InboxProvider>
-          <Router>
-            <AppContent />
-          </Router>
-        </InboxProvider>
-      </AuthProvider>
+      <ModalProvider>
+        <AuthProvider>
+          <InboxProvider>
+            <Router>
+              <AppContent />
+            </Router>
+          </InboxProvider>
+        </AuthProvider>
+      </ModalProvider>
     </ToastProvider>
   );
 }

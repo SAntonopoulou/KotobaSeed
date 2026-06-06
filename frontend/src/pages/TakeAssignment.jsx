@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import client from '../api/client';
+import { useConfirm } from '../context/ModalContext';
 
 // Student take-quiz + view-results page. Loads the assignment from the
 // student endpoint. Pre-submit the response has questions WITHOUT correct
@@ -10,6 +11,7 @@ import client from '../api/client';
 const TakeAssignment = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const confirm = useConfirm();
   const [assignment, setAssignment] = useState(null);
   const [answers, setAnswers] = useState({});
   const [loading, setLoading] = useState(true);
@@ -43,7 +45,11 @@ const TakeAssignment = () => {
   };
 
   const submit = async () => {
-    if (!window.confirm('Submit your answers? This is final — you can\'t take it again.')) return;
+    if (!(await confirm({
+      title: 'Submit answers',
+      message: "Submit your answers? This is final — you can't take it again.",
+      confirmText: 'Submit',
+    }))) return;
     setSubmitting(true);
     setError('');
     try {

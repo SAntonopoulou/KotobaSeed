@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import client from '../api/client';
+import { useConfirm } from '../context/ModalContext';
 
 // Pro+ feature: point your own domain at the platform. Backend gates the
 // PUT on user.is_pro_subscriber; this widget renders an upgrade nudge when
@@ -86,6 +87,7 @@ const VerifyResult = ({ result }) => {
 };
 
 const CustomDomainSettings = () => {
+  const confirm = useConfirm();
   const [state, setState] = useState(null);
   const [draft, setDraft] = useState('');
   const [loading, setLoading] = useState(true);
@@ -164,7 +166,12 @@ const CustomDomainSettings = () => {
   };
 
   const handleRemove = async () => {
-    if (!window.confirm('Remove your custom domain? Visitors will fall back to your Kotobaseed subdomain.')) {
+    if (!(await confirm({
+      title: 'Remove custom domain',
+      message: 'Remove your custom domain? Visitors will fall back to your Kotobaseed subdomain.',
+      confirmText: 'Remove',
+      destructive: true,
+    }))) {
       return;
     }
     setError('');
