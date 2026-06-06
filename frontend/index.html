@@ -5,6 +5,18 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>KotobaSeed</title>
+    <!--
+      Plausible analytics. Self-hosted-friendly, no cookies, GDPR-friendly.
+      Replace `kotobaseed.net` with the configured domain in the script tag
+      attributes when you wire your own Plausible account.
+      Comment out the script to disable. We only ship Plausible on the apex
+      since tutor subdomains are individual businesses we don't track.
+    -->
+    <script
+      defer
+      data-domain="kotobaseed.net"
+      src="https://plausible.io/js/script.js"
+    ></script>
   </head>
   <body>
     <div id="root"></div>

@@ -71,6 +71,16 @@ class Settings(BaseSettings):
     # the delay (legacy behaviour).
     connect_payout_delay_days: int = 14
 
+    # ----- Observability --------------------------------------------------
+    # SENTRY_DSN absent → no Sentry SDK init; SDK calls are no-ops.
+    sentry_dsn: str | None = None
+    sentry_traces_sample_rate: float = 0.1
+
+    # ----- Backups --------------------------------------------------------
+    # Directory the SQLite snapshot cron writes to. Mounted volume in prod.
+    backup_dir: str = "/data/backups"
+    backup_retention_days: int = 30
+
     # ----- Scheduled jobs -------------------------------------------------
     # Disable in test/dev if needed by setting `scheduler_enabled=false`.
     scheduler_enabled: bool = True

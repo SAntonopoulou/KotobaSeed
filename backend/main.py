@@ -113,6 +113,13 @@ def _run_group_evaluation_sweep() -> None:
             log.exception("Group lesson evaluation sweep failed")
 
 
+def _run_db_backup() -> None:
+    """Daily — snapshot SQLite + prune old backups."""
+    from .services import db_backup
+
+    db_backup.run_backup_and_prune()
+
+
 def _run_referrals_sweep() -> None:
     """Daily — re-evaluate every referral attribution to catch newly-met
     milestones (e.g. cumulative tutor revenue crossing the next threshold)."""
@@ -196,6 +203,13 @@ def _build_scheduler():
         replace_existing=True,
         misfire_grace_time=3600,
     )
+    scheduler.add_job(
+        _run_db_backup,
+        trigger=CronTrigger(hour=2, minute=0, timezone="UTC"),
+        id="db_backup",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
     scheduler.start()
     log.info(
         "Scheduler started — dormant_pause at %02d:00 UTC daily, booking reminders hourly at :05",
@@ -218,7 +232,44 @@ async def lifespan(_app: FastAPI):
             scheduler.shutdown(wait=False)
 
 
+# Optional Sentry — initialised here at module import so unhandled
+# exceptions are captured even before lifespan finishes. SENTRY_DSN env
+# absent = no-op import; SDK only sends if the DSN resolves.
+if settings.sentry_dsn:
+    import sentry_sdk
+
+    sentry_sdk.init(
+        dsn=settings.sentry_dsn,
+        traces_sample_rate=settings.sentry_traces_sample_rate,
+        environment=settings.environment,
+        send_default_pii=False,
+    )
+    log.info("Sentry initialised (env=%s)", settings.environment)
+
+
 app = FastAPI(title="Kotobaseed", lifespan=lifespan)
+
+# Rate limiter — applied to auth endpoints via a decorator. Storage is
+# in-memory by default; for multi-worker deployments use Redis (see
+# slowapi docs). Per-IP keys are enough for the auth-attack vector.
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+
+from .limiter import limiter
+
+app.state.limiter = limiter
+app.add_middleware(SlowAPIMiddleware)
+
+
+@app.exception_handler(RateLimitExceeded)
+async def _rate_limit_exceeded_handler(request, exc):
+    from fastapi.responses import JSONResponse
+
+    return JSONResponse(
+        {"detail": "Too many requests. Slow down and try again in a moment."},
+        status_code=429,
+    )
+
 
 # Starlette wraps middleware LIFO: the LAST added is outermost. CORS goes
 # last so it handles preflights before tenant resolution runs a DB query.
@@ -231,6 +282,22 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.get("/healthz", include_in_schema=False)
+def healthz() -> dict:
+    """Liveness probe — used by docker healthcheck + uptime monitors."""
+    return {"ok": True, "service": "kotobaseed"}
+
+
+@app.get("/readyz", include_in_schema=False)
+def readyz() -> dict:
+    """Readiness probe — verifies DB is reachable before accepting traffic."""
+    from sqlmodel import Session as _S, select as _sel
+
+    with _S(_database.engine) as session:
+        session.exec(_sel(1)).first()
+    return {"ok": True}
 
 for router in (
     auth.router,

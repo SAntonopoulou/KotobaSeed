@@ -21,6 +21,7 @@
     "@lexical/rich-text": "^0.45.0",
     "@lexical/selection": "^0.45.0",
     "@lexical/utils": "^0.45.0",
+    "@sentry/react": "^10.56.0",
     "@stripe/react-stripe-js": "^5.4.1",
     "@stripe/stripe-js": "^8.6.1",
     "axios": "^1.13.2",

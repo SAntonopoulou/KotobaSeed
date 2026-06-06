@@ -40,6 +40,8 @@ log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
+from ..limiter import limiter as _limiter
+
 EMAIL_CODE_TTL_MINUTES = 15
 
 
@@ -297,7 +299,9 @@ class GenericOkResponse(BaseModel):
 
 
 @router.post("/forgot-password", response_model=GenericOkResponse)
+@_limiter.limit("5/hour")
 def forgot_password(
+    request: Request,
     payload: ForgotPasswordRequest,
     session: Annotated[Session, Depends(get_session)],
 ) -> GenericOkResponse:
@@ -336,7 +340,9 @@ def forgot_password(
 
 
 @router.post("/reset-password", response_model=TokenResponse)
+@_limiter.limit("10/hour")
 def reset_password(
+    request: Request,
     payload: ResetPasswordRequest,
     session: Annotated[Session, Depends(get_session)],
 ) -> TokenResponse:
@@ -408,7 +414,9 @@ def reset_password(
 
 
 @router.post("/login", response_model=TokenResponse)
+@_limiter.limit("20/minute")
 def login(
+    request: Request,
     payload: LoginRequest,
     session: Annotated[Session, Depends(get_session)],
 ) -> TokenResponse:
@@ -416,7 +424,9 @@ def login(
 
 
 @router.post("/token", response_model=TokenResponse)
+@_limiter.limit("20/minute")
 def login_form(
+    request: Request,
     form: Annotated[OAuth2PasswordRequestForm, Depends()],
     session: Annotated[Session, Depends(get_session)],
 ) -> TokenResponse:
@@ -427,3 +437,97 @@ def login_form(
 @router.get("/me", response_model=UserPublic)
 def me(current: CurrentUser) -> UserPublic:
     return UserPublic.model_validate(current)
+
+
+# --- 2FA / device session management --------------------------------------
+
+
+import json as _json
+
+from ..security import hash_password as _hash
+from ..services import two_factor as _tf
+
+
+class TotpSetupResponse(BaseModel):
+    provisioning_uri: str
+    recovery_codes: list[str]
+
+
+class TotpVerifyRequest(BaseModel):
+    code: str = Field(min_length=6, max_length=8)
+
+
+class TotpEnabledResponse(BaseModel):
+    enabled: bool
+
+
+@router.post("/2fa/setup", response_model=TotpSetupResponse)
+def begin_2fa_setup(
+    current: CurrentUser,
+    session: Annotated[Session, Depends(get_session)],
+) -> TotpSetupResponse:
+    """Generate a secret + provisioning URI for the authenticator app.
+    Caller must POST /2fa/verify-setup with a valid code to enable 2FA."""
+    secret = _tf.generate_secret()
+    recovery = _tf.new_recovery_codes()
+    current.totp_secret = secret
+    current.totp_enabled = False  # not active until first verify
+    current.totp_recovery_codes_json = _json.dumps([_hash(c) for c in recovery])
+    current.updated_at = datetime.now(UTC)
+    session.add(current)
+    session.commit()
+    return TotpSetupResponse(
+        provisioning_uri=_tf.provisioning_uri(secret, current.email),
+        recovery_codes=recovery,
+    )
+
+
+@router.post("/2fa/verify-setup", response_model=TotpEnabledResponse)
+def verify_2fa_setup(
+    payload: TotpVerifyRequest,
+    current: CurrentUser,
+    session: Annotated[Session, Depends(get_session)],
+) -> TotpEnabledResponse:
+    if not current.totp_secret:
+        raise HTTPException(400, "Call /2fa/setup first.")
+    if not _tf.verify(current.totp_secret, payload.code):
+        raise HTTPException(400, "Code didn't match. Try the next one your app shows.")
+    current.totp_enabled = True
+    current.updated_at = datetime.now(UTC)
+    session.add(current)
+    session.commit()
+    return TotpEnabledResponse(enabled=True)
+
+
+@router.post("/2fa/disable", response_model=TotpEnabledResponse)
+def disable_2fa(
+    payload: TotpVerifyRequest,
+    current: CurrentUser,
+    session: Annotated[Session, Depends(get_session)],
+) -> TotpEnabledResponse:
+    if not current.totp_enabled:
+        return TotpEnabledResponse(enabled=False)
+    if not _tf.verify(current.totp_secret or "", payload.code):
+        raise HTTPException(400, "Code didn't match — 2FA stays on.")
+    current.totp_enabled = False
+    current.totp_secret = None
+    current.totp_recovery_codes_json = None
+    current.updated_at = datetime.now(UTC)
+    session.add(current)
+    session.commit()
+    return TotpEnabledResponse(enabled=False)
+
+
+@router.post("/sessions/logout-others", response_model=GenericOkResponse)
+def logout_other_devices(
+    current: CurrentUser,
+    session: Annotated[Session, Depends(get_session)],
+) -> GenericOkResponse:
+    """Invalidate every JWT issued before now for this user. The caller's
+    current token also gets invalidated, so the frontend must re-login
+    after this call."""
+    current.token_invalidation_at = datetime.now(UTC)
+    current.updated_at = datetime.now(UTC)
+    session.add(current)
+    session.commit()
+    return GenericOkResponse()

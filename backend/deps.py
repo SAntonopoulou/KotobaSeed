@@ -29,6 +29,7 @@ def get_current_user(
         if not token_data.sub:
             raise ValueError("No subject in token")
         user_id = int(token_data.sub)
+        iat = payload.get("iat")  # token issue time (Unix seconds)
     except (JWTError, ValueError, TypeError):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -43,6 +44,19 @@ def get_current_user(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Account is disabled.",
         )
+    # 'Log out other devices' bumps this stamp; tokens older than it are
+    # rejected even though the JWT signature is still valid.
+    if user.token_invalidation_at is not None and iat is not None:
+        from datetime import UTC, datetime as _dt
+
+        bound = user.token_invalidation_at
+        if bound.tzinfo is None:
+            bound = bound.replace(tzinfo=UTC)
+        if _dt.fromtimestamp(int(iat), tz=UTC) < bound:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Session ended on another device. Please sign in again.",
+            )
     return user
 
 

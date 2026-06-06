@@ -231,6 +231,19 @@ class User(SQLModel, table=True):
     password_reset_token_hash: str | None = Field(default=None, max_length=255)
     password_reset_expires_at: datetime | None = Field(default=None)
 
+    # Two-factor auth (TOTP). Secret is base32, stored plain because the
+    # TOTP algorithm needs it readable to verify; treat the DB as
+    # privileged. `totp_recovery_codes_json` holds Argon2 hashes of N
+    # single-use backup codes for when the authenticator is lost.
+    totp_enabled: bool = Field(default=False)
+    totp_secret: str | None = Field(default=None, max_length=64)
+    totp_recovery_codes_json: str | None = Field(default=None)
+
+    # All JWTs issued before this stamp are invalidated. Bumping logs the
+    # user out of every device — used by 'log out other devices' and on
+    # password change.
+    token_invalidation_at: datetime | None = Field(default=None)
+
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     deleted_at: datetime | None = Field(default=None)
