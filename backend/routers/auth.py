@@ -260,6 +260,111 @@ def _login(email: str, password: str, session: Session) -> TokenResponse:
     )
 
 
+# --- Password reset -----------------------------------------------------
+
+PASSWORD_RESET_TTL_MINUTES = 60
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    token: str = Field(min_length=10, max_length=128)
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class GenericOkResponse(BaseModel):
+    ok: bool = True
+
+
+@router.post("/forgot-password", response_model=GenericOkResponse)
+def forgot_password(
+    payload: ForgotPasswordRequest,
+    session: Annotated[Session, Depends(get_session)],
+) -> GenericOkResponse:
+    """Issue a password-reset token. Always returns ok=True regardless of
+    whether the email matches a user — so the endpoint can't be used to
+    enumerate registered emails. Email is sent best-effort; failures are
+    logged but never raised."""
+    email_norm = payload.email.lower().strip()
+    user = session.exec(select(User).where(User.email == email_norm)).first()
+    if user is None or user.deleted_at is not None or not user.is_active:
+        return GenericOkResponse()
+
+    # Opaque URL-safe token. The DB stores the Argon2 hash; the plaintext
+    # only ever lives in the email we send.
+    token = secrets.token_urlsafe(32)
+    user.password_reset_token_hash = hash_password(token)
+    user.password_reset_expires_at = datetime.now(UTC) + timedelta(
+        minutes=PASSWORD_RESET_TTL_MINUTES
+    )
+    user.updated_at = datetime.now(UTC)
+    session.add(user)
+    session.commit()
+
+    try:
+        from ..services.email import send_password_reset
+
+        send_password_reset(
+            to_email=user.email,
+            full_name=user.full_name,
+            token=token,
+            expires_minutes=PASSWORD_RESET_TTL_MINUTES,
+        )
+    except Exception:
+        log.exception("Could not send password reset email to %s", user.email)
+    return GenericOkResponse()
+
+
+@router.post("/reset-password", response_model=TokenResponse)
+def reset_password(
+    payload: ResetPasswordRequest,
+    session: Annotated[Session, Depends(get_session)],
+) -> TokenResponse:
+    """Consume a reset token + set a new password. On success, returns a
+    fresh JWT so the user is logged in immediately."""
+    email_norm = payload.email.lower().strip()
+    user = session.exec(select(User).where(User.email == email_norm)).first()
+    bad = HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Invalid or expired reset link. Request a new one.",
+    )
+    if (
+        user is None
+        or user.deleted_at is not None
+        or not user.password_reset_token_hash
+        or not user.password_reset_expires_at
+    ):
+        raise bad
+
+    expires = user.password_reset_expires_at
+    if expires.tzinfo is None:
+        expires = expires.replace(tzinfo=UTC)
+    if expires < datetime.now(UTC):
+        raise bad
+
+    if not verify_password(payload.token, user.password_reset_token_hash):
+        raise bad
+
+    user.hashed_password = hash_password(payload.new_password)
+    user.password_reset_token_hash = None
+    user.password_reset_expires_at = None
+    user.updated_at = datetime.now(UTC)
+    session.add(user)
+    session.commit()
+
+    access_token = create_access_token(
+        subject=user.id,
+        expires_delta=timedelta(minutes=settings.access_token_expire_minutes),
+    )
+    return TokenResponse(
+        access_token=access_token,
+        expires_in_minutes=settings.access_token_expire_minutes,
+    )
+
+
 @router.post("/login", response_model=TokenResponse)
 def login(
     payload: LoginRequest,

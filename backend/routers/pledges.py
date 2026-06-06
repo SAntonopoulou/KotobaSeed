@@ -544,11 +544,47 @@ def handle_checkout_session_completed(session: Session, data_object: dict):
             teacher_id = int(metadata["teacher_id"])
             project_id = int(metadata["project_id"])
             amount = data_object.get("amount_total", 0)
+            checkout_session_id = data_object.get("id")
+
+            # Idempotency: if a tip with this checkout session id is already
+            # recorded as a Pledge, we already credited it — skip. Reuses
+            # the existing UNIQUE constraint on Pledge.checkout_session_id.
+            if checkout_session_id:
+                existing = session.exec(
+                    select(Pledge).where(
+                        Pledge.checkout_session_id == checkout_session_id
+                    )
+                ).first()
+                if existing is not None:
+                    logger.info(
+                        "Tip webhook for session %s already processed; skipping.",
+                        checkout_session_id,
+                    )
+                    return
 
             project = session.get(Project, project_id)
             if project:
                 project.total_tipped_amount += amount
                 session.add(project)
+
+                # Record the tip as a Pledge — the UNIQUE index on
+                # checkout_session_id is what prevents the double-count on
+                # a webhook retry. We use status=CAPTURED so the row
+                # doesn't get treated like a pending pledge elsewhere.
+                if checkout_session_id:
+                    # Sentinel Pledge — exists only for the UNIQUE
+                    # constraint on checkout_session_id. user_id points at
+                    # the teacher who received the tip (the recipient
+                    # half of the transaction).
+                    session.add(
+                        Pledge(
+                            project_id=project_id,
+                            user_id=teacher_id,
+                            amount=amount,
+                            status=PledgeStatus.CAPTURED,
+                            checkout_session_id=checkout_session_id,
+                        )
+                    )
 
                 notification = Notification(
                     user_id=teacher_id,

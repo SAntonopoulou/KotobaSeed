@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import client from '../api/client';
 import { useAuth } from '../context/AuthContext';
 
@@ -124,7 +124,7 @@ const Register = () => {
                     key={value}
                     className={`flex items-start gap-3 p-3 rounded-md border cursor-pointer text-sm ${
                       form.role === value
-                        ? 'border-indigo-500 bg-indigo-50'
+                        ? 'border-kotoba-primary bg-kotoba-primary/5'
                         : 'border-gray-200 hover:bg-gray-50'
                     }`}
                   >
@@ -134,7 +134,7 @@ const Register = () => {
                       value={value}
                       checked={form.role === value}
                       onChange={handleChange}
-                      className="mt-0.5 h-4 w-4 text-indigo-600 border-gray-300 focus:ring-indigo-500"
+                      className="mt-0.5 h-4 w-4 text-kotoba-primary border-gray-300 focus:ring-kotoba-primary"
                     />
                     <span className="text-gray-700">{label}</span>
                   </label>
@@ -153,7 +153,7 @@ const Register = () => {
                 required
                 value={form.full_name}
                 onChange={handleChange}
-                className="mt-1 appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                className="mt-1 appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm"
               />
             </div>
 
@@ -169,7 +169,7 @@ const Register = () => {
                 required
                 value={form.email}
                 onChange={handleChange}
-                className="mt-1 appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                className="mt-1 appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm"
               />
             </div>
 
@@ -186,7 +186,7 @@ const Register = () => {
                 minLength={8}
                 value={form.password}
                 onChange={handleChange}
-                className="mt-1 appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                className="mt-1 appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm"
               />
             </div>
 
@@ -206,7 +206,7 @@ const Register = () => {
                     value={form.display_name}
                     onChange={handleChange}
                     placeholder="Vasso"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm"
                   />
                 </div>
 
@@ -214,7 +214,7 @@ const Register = () => {
                   <label htmlFor="tutor_slug" className="block text-xs font-medium text-gray-500 mb-1">
                     Slug
                   </label>
-                  <div className="flex rounded-md overflow-hidden border border-gray-300 focus-within:ring-2 focus-within:ring-indigo-500">
+                  <div className="flex rounded-md overflow-hidden border border-gray-300 focus-within:ring-2 focus-within:ring-kotoba-primary">
                     <input
                       id="tutor_slug"
                       name="tutor_slug"
@@ -231,7 +231,7 @@ const Register = () => {
                     </span>
                   </div>
                   <p className="mt-1 text-xs text-gray-500">
-                    Site URL: <span className="font-medium text-indigo-600">{slugPreview}</span>
+                    Site URL: <span className="font-medium text-kotoba-primary">{slugPreview}</span>
                   </p>
                 </div>
 
@@ -246,7 +246,7 @@ const Register = () => {
                     value={form.languages_taught}
                     onChange={handleChange}
                     placeholder="Greek, English"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm"
                   />
                 </div>
 
@@ -262,7 +262,7 @@ const Register = () => {
                 name="gdpr_consent"
                 checked={form.gdpr_consent}
                 onChange={handleChange}
-                className="mt-1 h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                className="mt-1 h-4 w-4 text-kotoba-primary border-gray-300 rounded focus:ring-kotoba-primary"
               />
               <span>
                 I agree to Kotobaseed processing my data to provide the platform, per the Privacy Policy. I can delete my account any time.
@@ -271,10 +271,17 @@ const Register = () => {
 
             <button
               type="submit"
-              className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+              className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-kotoba-primary hover:bg-kotoba-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-kotoba-primary"
             >
               {form.role === 'tutor' ? 'Continue to Stripe Connect' : 'Register'}
             </button>
+
+            <p className="text-sm text-center text-kotoba-text/70">
+              Already have an account?{' '}
+              <Link to="/login" className="text-kotoba-primary font-medium hover:underline">
+                Sign in
+              </Link>
+            </p>
           </form>
         </div>
       </div>

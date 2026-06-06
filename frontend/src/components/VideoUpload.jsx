@@ -55,7 +55,7 @@ const LinkVideoModal = ({ projectId, onClose, onSuccess }) => {
             <div className="items-center px-4 py-3">
               <button
                 type="submit"
-                className="px-4 py-2 bg-indigo-600 text-white text-base font-medium rounded-md w-full shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="px-4 py-2 bg-kotoba-primary text-white text-base font-medium rounded-md w-full shadow-sm hover:bg-kotoba-primary/90 focus:outline-none focus:ring-2 focus:ring-kotoba-primary"
               >
                 Link Video
               </button>

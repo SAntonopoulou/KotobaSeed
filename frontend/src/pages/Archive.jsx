@@ -87,13 +87,13 @@ const Archive = () => {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Search by keyword, tag, teacher..."
-            className="p-2 border border-gray-300 rounded-md md:col-span-1 focus:ring-indigo-500 focus:border-indigo-500"
+            className="p-2 border border-gray-300 rounded-md md:col-span-1 focus:ring-kotoba-primary focus:border-kotoba-primary"
           />
-          <select value={language} onChange={handleLanguageChange} className="p-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500">
+          <select value={language} onChange={handleLanguageChange} className="p-2 border border-gray-300 rounded-md focus:ring-kotoba-primary focus:border-kotoba-primary">
             <option value="">All Languages</option>
             {availableFilters.languages.map(lang => <option key={lang.language} value={lang.language}>{lang.language}</option>)}
           </select>
-          <select value={level} onChange={(e) => setLevel(e.target.value)} className="p-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500" disabled={!language}>
+          <select value={level} onChange={(e) => setLevel(e.target.value)} className="p-2 border border-gray-300 rounded-md focus:ring-kotoba-primary focus:border-kotoba-primary" disabled={!language}>
             <option value="">All Levels</option>
             {currentLevels.map(lvl => <option key={lvl} value={lvl}>{lvl}</option>)}
           </select>

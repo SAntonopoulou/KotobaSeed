@@ -40,7 +40,7 @@ const RespondToReview = ({ ratingId, onResponseSuccess }) => {
       />
       <button
         type="submit"
-        className="mt-2 px-3 py-1 bg-indigo-500 text-white text-sm rounded-md hover:bg-indigo-600 disabled:bg-gray-400"
+        className="mt-2 px-3 py-1 bg-kotoba-primary text-white text-sm rounded-md hover:bg-kotoba-primary/90 disabled:bg-gray-400"
         disabled={isSubmitting}
       >
         {isSubmitting ? 'Posting...' : 'Post Response'}

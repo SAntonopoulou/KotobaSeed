@@ -68,7 +68,7 @@ const Notifications = () => {
           <div className="flex justify-between items-center px-4 py-2 border-b">
             <div className="text-sm text-gray-700 font-bold">Notifications</div>
             {unreadCount > 0 && (
-              <button onClick={handleMarkAllAsRead} className="text-xs text-indigo-600 hover:underline">Mark all as read</button>
+              <button onClick={handleMarkAllAsRead} className="text-xs text-kotoba-primary hover:underline">Mark all as read</button>
             )}
           </div>
           <div className="py-1 max-h-96 overflow-y-auto">
@@ -76,7 +76,7 @@ const Notifications = () => {
               <div className="px-4 py-3 text-sm text-gray-500">No new notifications.</div>
             ) : (
               unreadNotifications.map(notif => (
-                <div key={notif.id} className="group px-4 py-3 border-b hover:bg-gray-50 bg-blue-50">
+                <div key={notif.id} className="group px-4 py-3 border-b hover:bg-gray-50 bg-kotoba-primary/5">
                   <div className="flex justify-between items-start">
                     <Link to={notif.link || '#'} onClick={() => { setIsOpen(false); handleMarkAsRead(notif.id); }} className="text-sm text-gray-800 pr-2">
                       {notif.message}

@@ -12,4 +12,32 @@ export default defineConfig({
     host: true,
     allowedHosts: true,
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // Manual chunking via path matching — keeps the initial bundle
+        // lean by splitting the heaviest modules into their own files
+        // that only load on routes that use them.
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('/lexical') || id.includes('/@lexical')) {
+              return 'editor';
+            }
+            if (
+              id.includes('/react/') ||
+              id.includes('/react-dom/') ||
+              id.includes('/react-router-dom/') ||
+              id.includes('/react-router/')
+            ) {
+              return 'react';
+            }
+            if (id.includes('/react-icons/')) {
+              return 'icons';
+            }
+          }
+        },
+      },
+    },
+    chunkSizeWarningLimit: 600,
+  },
 })

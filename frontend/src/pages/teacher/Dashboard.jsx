@@ -122,7 +122,7 @@ const Dashboard = () => {
         <h1 className="text-3xl font-bold text-gray-900">Teacher Dashboard</h1>
         <Link
           to="/teacher/create-project"
-          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none"
+          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-kotoba-primary hover:bg-kotoba-primary/90 focus:outline-none"
         >
           Create New Project
         </Link>
@@ -208,7 +208,7 @@ const Dashboard = () => {
                   <div className="px-4 py-4 sm:px-6">
                     <div className="flex items-center justify-between">
                       <div className="flex flex-col">
-                          <Link to={`/projects/${project.id}`} className="text-sm font-medium text-indigo-600 hover:text-indigo-800 truncate">
+                          <Link to={`/projects/${project.id}`} className="text-sm font-medium text-kotoba-primary hover:text-kotoba-primary truncate">
                             {project.title}
                           </Link>
                           <p className="text-xs text-gray-500">Status: {project.status}</p>
@@ -231,7 +231,7 @@ const Dashboard = () => {
                             {canLinkVideo && (
                               <button
                                 onClick={() => handleLinkVideo(project.id)}
-                                className="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800 hover:bg-blue-200"
+                                className="px-2 py-1 text-xs font-semibold rounded-full bg-kotoba-secondary/20 text-kotoba-text hover:bg-kotoba-primary/90"
                               >
                                 Link Video
                               </button>

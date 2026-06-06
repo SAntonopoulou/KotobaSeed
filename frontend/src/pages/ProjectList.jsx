@@ -125,13 +125,13 @@ const ProjectList = () => {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Search by keyword, tag, teacher..."
-            className="p-2 border border-gray-300 rounded-md md:col-span-1 focus:ring-indigo-500 focus:border-indigo-500"
+            className="p-2 border border-gray-300 rounded-md md:col-span-1 focus:ring-kotoba-primary focus:border-kotoba-primary"
           />
-          <select value={language} onChange={handleLanguageChange} className="p-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500">
+          <select value={language} onChange={handleLanguageChange} className="p-2 border border-gray-300 rounded-md focus:ring-kotoba-primary focus:border-kotoba-primary">
             <option value="">All Languages</option>
             {availableFilters.languages.map(lang => <option key={lang.language} value={lang.language}>{lang.language}</option>)}
           </select>
-          <select value={level} onChange={(e) => setLevel(e.target.value)} className="p-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500" disabled={!language}>
+          <select value={level} onChange={(e) => setLevel(e.target.value)} className="p-2 border border-gray-300 rounded-md focus:ring-kotoba-primary focus:border-kotoba-primary" disabled={!language}>
             <option value="">All Levels</option>
             {currentLevels.map(lvl => <option key={lvl} value={lvl}>{lvl}</option>)}
           </select>
@@ -145,7 +145,7 @@ const ProjectList = () => {
           <p className="text-gray-500 text-lg mb-4">No projects found matching your criteria.</p>
           <Link
             to="/requests"
-            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none"
+            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-kotoba-primary hover:bg-kotoba-primary/90 focus:outline-none"
           >
             Request a video instead!
           </Link>

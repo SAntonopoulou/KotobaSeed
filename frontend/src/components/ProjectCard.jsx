@@ -36,13 +36,13 @@ const ProjectCard = ({ project, currentUser, onFollow, onUnfollow }) => {
       </Link>
       <div className="p-6 flex flex-col flex-grow">
         <h3 className="text-lg font-semibold text-gray-900 mb-2">
-          <Link to={`/projects/${project.id}`} className="hover:text-indigo-600">{project.title}</Link>
+          <Link to={`/projects/${project.id}`} className="hover:text-kotoba-primary">{project.title}</Link>
         </h3>
         <p className="text-sm text-gray-600 mb-4 flex-grow">{project.description.substring(0, 100)}...</p>
         
         <div className="mb-4">
           <div className="flex justify-between items-center mb-1">
-            <span className="text-sm font-bold text-indigo-600">
+            <span className="text-sm font-bold text-kotoba-primary">
               €{(project.current_funding / 100).toFixed(2)}
             </span>
             <span className="text-sm text-gray-500">
@@ -51,7 +51,7 @@ const ProjectCard = ({ project, currentUser, onFollow, onUnfollow }) => {
           </div>
           <div className="w-full bg-gray-200 rounded-full h-2.5">
             <div 
-              className="bg-indigo-600 h-2.5 rounded-full" 
+              className="bg-kotoba-primary h-2.5 rounded-full" 
               style={{ width: `${percentage > 100 ? 100 : percentage}%` }}
             ></div>
           </div>
@@ -71,7 +71,7 @@ const ProjectCard = ({ project, currentUser, onFollow, onUnfollow }) => {
             </Link>
             <div className="flex-grow">
               <div className="flex items-center">
-                <Link to={`/profile/${project.teacher_id}`} className="text-sm font-medium text-gray-900 hover:text-indigo-600">{project.teacher_name}</Link>
+                <Link to={`/profile/${project.teacher_id}`} className="text-sm font-medium text-gray-900 hover:text-kotoba-primary">{project.teacher_name}</Link>
                 <VerifiedBadge languages={project.teacher_verified_languages} />
               </div>
               <p className="text-sm text-gray-500">{project.language} - {project.level}</p>
@@ -80,7 +80,7 @@ const ProjectCard = ({ project, currentUser, onFollow, onUnfollow }) => {
               isFollowing ? (
                 <button onClick={handleUnfollowClick} className="bg-gray-200 text-gray-700 px-3 py-1 rounded-md text-sm font-medium">Unfollow</button>
               ) : (
-                <button onClick={handleFollowClick} className="bg-indigo-600 text-white px-3 py-1 rounded-md text-sm font-medium">Follow</button>
+                <button onClick={handleFollowClick} className="bg-kotoba-primary text-white px-3 py-1 rounded-md text-sm font-medium">Follow</button>
               )
             )}
           </div>

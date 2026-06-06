@@ -91,7 +91,7 @@ const RateVideo = ({ videoId, onRatingSuccess }) => {
         ></textarea>
         <button
           type="submit"
-          className="mt-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-400"
+          className="mt-2 px-4 py-2 bg-kotoba-primary text-white rounded hover:bg-kotoba-primary/90 disabled:bg-gray-400"
           disabled={rating === 0 || isSubmitting}
         >
           {isSubmitting ? 'Submitting...' : 'Submit Rating'}

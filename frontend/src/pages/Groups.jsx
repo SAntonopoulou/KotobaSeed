@@ -50,7 +50,7 @@ const Groups = () => {
             <button
               onClick={() => handleJoin(group.id)}
               disabled={myGroups.has(group.id)}
-              className="mt-4 w-full inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400"
+              className="mt-4 w-full inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-kotoba-primary hover:bg-kotoba-primary/90 disabled:bg-gray-400"
             >
               {myGroups.has(group.id) ? 'Joined' : 'Join'}
             </button>

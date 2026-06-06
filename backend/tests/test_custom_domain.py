@@ -189,6 +189,8 @@ def test_verify_success_when_dns_matches(
 def test_verify_fails_when_dns_mismatches(
     client, vasso_tutor, pro_teacher, server_ip_set, dns_resolves_to
 ):
+    # Verify endpoint now returns 200 with `last_check.success=false` and
+    # a diagnostic message so the dashboard can show the exact mismatch.
     client.put(
         "/tutor/custom-domain",
         json={"domain": "my-site.com"},
@@ -199,7 +201,13 @@ def test_verify_fails_when_dns_mismatches(
         "/tutor/custom-domain/verify",
         headers={"Host": "vasso.kotobaseed.net", **auth_headers_for(pro_teacher)},
     )
-    assert r.status_code == 400
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "pending"
+    assert body["last_check"]["success"] is False
+    assert body["last_check"]["resolved_ip"] == "1.2.3.4"
+    assert body["last_check"]["expected_ip"] == "5.75.149.59"
+    assert "1.2.3.4" in body["last_check"]["message"]
 
 
 def test_verify_fails_when_dns_lookup_errors(
@@ -215,7 +223,12 @@ def test_verify_fails_when_dns_lookup_errors(
         "/tutor/custom-domain/verify",
         headers={"Host": "vasso.kotobaseed.net", **auth_headers_for(pro_teacher)},
     )
-    assert r.status_code == 400
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "pending"
+    assert body["last_check"]["success"] is False
+    assert body["last_check"]["resolved_ip"] is None
+    assert "couldn't resolve" in body["last_check"]["message"].lower()
 
 
 def test_auto_verify_short_circuits_dns(

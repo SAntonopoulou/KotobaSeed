@@ -156,7 +156,7 @@ const CreateProject = () => {
               name="is_series"
               checked={formData.is_series}
               onChange={handleChange}
-              className="h-4 w-4 text-indigo-600 border-gray-300 rounded"
+              className="h-4 w-4 text-kotoba-primary border-gray-300 rounded"
             />
             <span className="ml-2 text-gray-700 text-sm font-bold">Is this a series of videos?</span>
           </label>
@@ -242,7 +242,7 @@ const CreateProject = () => {
         </div>
         <div className="flex items-center justify-between">
           <button
-            className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline disabled:bg-indigo-300"
+            className="bg-kotoba-primary hover:bg-kotoba-primary/90 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline disabled:bg-kotoba-primary/40"
             type="submit"
             disabled={loading}
           >

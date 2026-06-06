@@ -5,10 +5,84 @@ import client from '../api/client';
 // PUT on user.is_pro_subscriber; this widget renders an upgrade nudge when
 // the API returns 402 so the dashboard stays informative for Free/Plus.
 
-const STATUS_LABEL = {
-  not_set: 'Not set up',
-  pending: 'Awaiting DNS verification',
-  verified: 'Verified and live',
+const formatVerifiedAt = (iso) => {
+  if (!iso) return null;
+  try {
+    return new Date(iso).toLocaleString();
+  } catch {
+    return iso;
+  }
+};
+
+// Big top-level status banner. Always visible so tutors can see at a glance
+// where they are in the setup process.
+const StatusBanner = ({ state }) => {
+  if (state.status === 'verified') {
+    return (
+      <div className="rounded-lg bg-kotoba-primary/10 border border-kotoba-primary/30 px-4 py-3 mb-4 flex items-start gap-3">
+        <span className="text-kotoba-primary text-2xl leading-none mt-0.5">✓</span>
+        <div className="flex-grow">
+          <p className="font-semibold text-kotoba-primary">
+            {state.domain} is verified and live
+          </p>
+          <p className="text-xs text-kotoba-text/70 mt-1">
+            Verified {formatVerifiedAt(state.verified_at)}. Visitors hitting your domain land on your tutor site.
+          </p>
+        </div>
+      </div>
+    );
+  }
+  if (state.status === 'pending') {
+    return (
+      <div className="rounded-lg bg-kotoba-secondary/20 border border-kotoba-secondary/50 px-4 py-3 mb-4 flex items-start gap-3">
+        <span className="text-kotoba-secondary-dark text-2xl leading-none mt-0.5">○</span>
+        <div className="flex-grow">
+          <p className="font-semibold text-kotoba-text">
+            {state.domain} — awaiting DNS verification
+          </p>
+          <p className="text-xs text-kotoba-text/70 mt-1">
+            Add the A record below at your registrar, then click "Verify now".
+          </p>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-lg bg-kotoba-text/5 border border-kotoba-text/15 px-4 py-3 mb-4 flex items-start gap-3">
+      <span className="text-kotoba-text/40 text-2xl leading-none mt-0.5">○</span>
+      <div className="flex-grow">
+        <p className="font-semibold text-kotoba-text">No custom domain set up</p>
+        <p className="text-xs text-kotoba-text/70 mt-1">
+          Enter a domain below to get started — you'll add a DNS record and verify it in a moment.
+        </p>
+      </div>
+    </div>
+  );
+};
+
+// Diagnostic panel rendered after every verify attempt. Shows exactly what
+// we saw on the network so tutors can fix DNS themselves rather than guess.
+const VerifyResult = ({ result }) => {
+  if (!result) return null;
+  const bg = result.success
+    ? 'bg-kotoba-primary/10 border-kotoba-primary/30 text-kotoba-text'
+    : 'bg-red-50 border-red-200 text-red-800';
+  return (
+    <div className={`mt-3 rounded-md border px-4 py-3 text-sm ${bg}`}>
+      <p className={`font-semibold ${result.success ? 'text-kotoba-primary' : 'text-red-800'} mb-1`}>
+        {result.success ? 'DNS check passed' : 'DNS check failed'}
+      </p>
+      <p className="leading-relaxed">{result.message}</p>
+      {(result.expected_ip || result.resolved_ip) && (
+        <dl className="mt-2 grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-xs font-mono">
+          <dt className="text-kotoba-text/60">Expected IP:</dt>
+          <dd>{result.expected_ip || '— not configured —'}</dd>
+          <dt className="text-kotoba-text/60">Resolved IP:</dt>
+          <dd>{result.resolved_ip || '— no answer —'}</dd>
+        </dl>
+      )}
+    </div>
+  );
 };
 
 const CustomDomainSettings = () => {
@@ -20,6 +94,7 @@ const CustomDomainSettings = () => {
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
   const [upgradeNudge, setUpgradeNudge] = useState(false);
+  const [verifyResult, setVerifyResult] = useState(null);
 
   const load = async () => {
     setLoading(true);
@@ -43,6 +118,7 @@ const CustomDomainSettings = () => {
     setError('');
     setInfo('');
     setUpgradeNudge(false);
+    setVerifyResult(null);
     if (!draft.trim()) {
       setError('Enter a domain to save.');
       return;
@@ -51,7 +127,7 @@ const CustomDomainSettings = () => {
     try {
       const res = await client.put('/tutor/custom-domain', { domain: draft.trim() });
       setState(res.data);
-      setInfo('Domain saved. Add the DNS record below, then verify.');
+      setInfo('Domain saved. Add the DNS record below, then click "Verify now".');
     } catch (err) {
       const code = err?.response?.status;
       const detail = err?.response?.data?.detail;
@@ -69,13 +145,19 @@ const CustomDomainSettings = () => {
   const handleVerify = async () => {
     setError('');
     setInfo('');
+    setVerifyResult(null);
     setVerifying(true);
     try {
       const res = await client.post('/tutor/custom-domain/verify');
       setState(res.data);
-      setInfo("Verified — your domain is live now. Visitors hitting it land on your tutor site.");
+      // Backend now returns last_check whether it succeeded or failed —
+      // both cases land here. Status changes drive the top banner; the
+      // VerifyResult panel gives the gory details.
+      setVerifyResult(res.data.last_check);
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not verify yet.');
+      // Genuine error (e.g. 400 "Save your domain first") rather than a
+      // soft DNS-mismatch result.
+      setError(err?.response?.data?.detail || 'Verify request failed. Try again.');
     } finally {
       setVerifying(false);
     }
@@ -87,6 +169,7 @@ const CustomDomainSettings = () => {
     }
     setError('');
     setInfo('');
+    setVerifyResult(null);
     setSaving(true);
     try {
       await client.delete('/tutor/custom-domain');
@@ -108,25 +191,16 @@ const CustomDomainSettings = () => {
     );
   }
 
-  const statusBadge = {
-    not_set: 'bg-kotoba-text/10 text-kotoba-text/70',
-    pending: 'bg-kotoba-secondary/30 text-kotoba-text',
-    verified: 'bg-kotoba-primary/15 text-kotoba-primary',
-  }[state.status];
-
   return (
     <section className="bg-white rounded-2xl shadow-sm p-6">
-      <div className="flex items-start justify-between gap-3 flex-wrap mb-3">
-        <div>
-          <h2 className="text-lg font-bold text-kotoba-primary">Custom domain</h2>
-          <p className="text-sm text-kotoba-text/70 mt-1">
-            Point your own domain at your tutor site (e.g. <code className="font-mono text-xs">mygreeksite.com</code>). Pro and Business plans only — your <code className="font-mono text-xs">.kotobaseed.net</code> subdomain stays live no matter what.
-          </p>
-        </div>
-        <span className={`px-3 py-1 rounded-md text-xs font-medium ${statusBadge}`}>
-          {STATUS_LABEL[state.status]}
-        </span>
+      <div className="mb-4">
+        <h2 className="text-lg font-bold text-kotoba-primary">Custom domain</h2>
+        <p className="text-sm text-kotoba-text/70 mt-1">
+          Point your own domain at your tutor site (e.g. <code className="font-mono text-xs">mygreeksite.com</code>). Pro and Business plans only — your <code className="font-mono text-xs">.kotobaseed.net</code> subdomain stays live no matter what.
+        </p>
       </div>
+
+      <StatusBanner state={state} />
 
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded-md text-sm mb-3">
@@ -180,7 +254,7 @@ const CustomDomainSettings = () => {
             <div><span className="text-kotoba-text/60">Name:</span> {state.domain}</div>
             <div>
               <span className="text-kotoba-text/60">Value:</span>{' '}
-              {state.target_ip ? state.target_ip : <em className="text-kotoba-text/60">Platform IP not configured yet — try again later</em>}
+              {state.target_ip || <em className="text-kotoba-text/60">— platform IP not configured —</em>}
             </div>
             <div><span className="text-kotoba-text/60">TTL:</span> 300 (5 min)</div>
           </div>
@@ -188,7 +262,7 @@ const CustomDomainSettings = () => {
             <button
               type="button"
               onClick={handleVerify}
-              disabled={verifying || !state.target_ip}
+              disabled={verifying}
               className="px-4 py-2 rounded-md border-2 border-kotoba-primary text-kotoba-primary font-medium hover:bg-kotoba-primary hover:text-white disabled:opacity-50 transition-colors"
             >
               {verifying ? 'Checking DNS…' : state.status === 'verified' ? 'Re-verify' : 'Verify now'}
@@ -202,6 +276,7 @@ const CustomDomainSettings = () => {
               Remove domain
             </button>
           </div>
+          <VerifyResult result={verifyResult} />
           <p className="mt-3 text-xs text-kotoba-text/60">
             DNS changes usually take a few minutes — if verification fails, wait 5 minutes and try again.
           </p>

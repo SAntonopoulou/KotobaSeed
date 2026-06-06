@@ -101,8 +101,23 @@ const AdminDashboard = () => {
               Audit log
             </button>
           </Link>
+          <Link to="/admin/settings">
+            <button className="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-medium py-2 px-4 rounded">
+              Platform settings
+            </button>
+          </Link>
+          <Link to="/admin/staff">
+            <button className="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-medium py-2 px-4 rounded">
+              Staff
+            </button>
+          </Link>
+          <Link to="/staff/support">
+            <button className="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-medium py-2 px-4 rounded">
+              Support queue
+            </button>
+          </Link>
           <Link to="/admin/projects">
-            <button className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded">
+            <button className="bg-kotoba-primary hover:bg-kotoba-primary/90 text-white font-bold py-2 px-4 rounded">
               Project Management
             </button>
           </Link>
@@ -135,7 +150,7 @@ const AdminDashboard = () => {
                   <tr key={v.id}>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{v.teacher_name}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{v.language}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><a href={v.document_url} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">View Document</a></td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><a href={v.document_url} target="_blank" rel="noopener noreferrer" className="text-kotoba-primary hover:underline">View Document</a></td>
                     <td className="px-6 py-4 whitespace-nowrap"><span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${v.status === 'approved' ? 'bg-green-100 text-green-800' : v.status === 'rejected' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'}`}>{v.status}</span></td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       {v.status === 'pending' && (
@@ -155,7 +170,7 @@ const AdminDashboard = () => {
 
       <div className="mb-8">
         <h2 className="text-xl font-bold text-gray-900 mb-4">Users</h2>
-        <div className="bg-white shadow overflow-hidden sm:rounded-lg"><ul className="divide-y divide-gray-200 max-h-96 overflow-y-auto">{users.map((user) => (<li key={user.id} className="px-4 py-4 flex items-center justify-between hover:bg-gray-50"><div><p className="text-sm font-medium text-indigo-600 truncate">{user.full_name}</p><p className="text-sm text-gray-500">{user.email} - <span className="capitalize">{user.role}</span></p></div>{user.role !== 'admin' && (<button onClick={() => confirmDeleteUser(user.id)} className="text-red-600 hover:text-red-900 text-sm font-medium">Delete</button>)}</li>))}</ul></div>
+        <div className="bg-white shadow overflow-hidden sm:rounded-lg"><ul className="divide-y divide-gray-200 max-h-96 overflow-y-auto">{users.map((user) => (<li key={user.id} className="px-4 py-4 flex items-center justify-between hover:bg-gray-50"><div><p className="text-sm font-medium text-kotoba-primary truncate">{user.full_name}</p><p className="text-sm text-gray-500">{user.email} - <span className="capitalize">{user.role}</span></p></div>{user.role !== 'admin' && (<button onClick={() => confirmDeleteUser(user.id)} className="text-red-600 hover:text-red-900 text-sm font-medium">Delete</button>)}</li>))}</ul></div>
       </div>
 
       <ConfirmationModal isOpen={modalOpen} onClose={() => setModalOpen(false)} onConfirm={modalConfig.onConfirm} title={modalConfig.title} message={modalConfig.message} confirmText={modalConfig.confirmText} isDanger={modalConfig.isDanger} />

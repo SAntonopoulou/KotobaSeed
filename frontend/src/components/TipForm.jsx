@@ -39,7 +39,7 @@ const TipForm = ({ projectId }) => {
             type="number"
             name="amount"
             id="amount"
-            className="focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-7 pr-12 sm:text-sm border-gray-300 rounded-md"
+            className="focus:ring-kotoba-primary focus:border-kotoba-primary block w-full pl-7 pr-12 sm:text-sm border-gray-300 rounded-md"
             placeholder="5.00"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
@@ -50,7 +50,7 @@ const TipForm = ({ projectId }) => {
         <button
           type="submit"
           disabled={isSubmitting}
-          className="ml-3 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300"
+          className="ml-3 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-kotoba-primary hover:bg-kotoba-primary/90 disabled:bg-kotoba-primary/40"
         >
           {isSubmitting ? 'Sending...' : 'Send Tip'}
         </button>

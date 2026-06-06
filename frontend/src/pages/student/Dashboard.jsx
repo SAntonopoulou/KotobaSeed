@@ -79,7 +79,7 @@ const StudentDashboard = () => {
       {pledges.length === 0 ? (
         <div className="bg-white shadow rounded-lg p-6 text-center">
           <p className="text-gray-500 mb-4">You haven't backed any projects yet.</p>
-          <Link to="/" className="text-indigo-600 hover:text-indigo-800 font-medium">
+          <Link to="/" className="text-kotoba-primary hover:text-kotoba-primary font-medium">
             Browse Projects
           </Link>
         </div>
@@ -109,7 +109,7 @@ const StudentDashboard = () => {
               {pledges.map((pledge) => (
                 <tr key={pledge.id}>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <Link to={`/projects/${pledge.project_id}`} className="text-indigo-600 hover:text-indigo-900 font-medium">
+                    <Link to={`/projects/${pledge.project_id}`} className="text-kotoba-primary hover:text-kotoba-primary font-medium">
                       {pledge.project_title}
                     </Link>
                   </td>
@@ -135,13 +135,13 @@ const StudentDashboard = () => {
                     {pledge.project_status === 'pending_confirmation' && (
                       <button
                         onClick={() => handleConfirmCompletion(pledge.project_id)}
-                        className="text-indigo-600 hover:text-indigo-900"
+                        className="text-kotoba-primary hover:text-kotoba-primary"
                       >
                         Confirm Completion
                       </button>
                     )}
                     {pledge.project_status === 'completed' && !pledge.has_rated && (
-                      <Link to={`/projects/${pledge.project_id}`} className="text-indigo-600 hover:text-indigo-900">
+                      <Link to={`/projects/${pledge.project_id}`} className="text-kotoba-primary hover:text-kotoba-primary">
                         Rate Project
                       </Link>
                     )}

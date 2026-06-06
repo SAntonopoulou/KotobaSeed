@@ -1,4 +1,9 @@
 /** @type {import('tailwindcss').Config} */
+// Colours are CSS-variable-backed so tutor themes can re-skin the public
+// site at runtime. The values are set in src/themes.css (one block per
+// theme-* class). The :root block holds the platform default, so any
+// surface not inside a theme- container looks identical to the previous
+// hard-coded palette.
 export default {
   content: [
     "./index.html",
@@ -7,12 +12,12 @@ export default {
   theme: {
     extend: {
       colors: {
-        'kotoba-primary': '#16561D',
-        'kotoba-secondary': '#D6A42F',
-        'kotoba-secondary-dark': '#B58C27',
-        'kotoba-accent': '#F89973',
-        'kotoba-background': '#F4F1E9',
-        'kotoba-text': '#2B463C',
+        'kotoba-primary': 'rgb(var(--kotoba-primary-rgb) / <alpha-value>)',
+        'kotoba-secondary': 'rgb(var(--kotoba-secondary-rgb) / <alpha-value>)',
+        'kotoba-secondary-dark': 'rgb(var(--kotoba-secondary-dark-rgb) / <alpha-value>)',
+        'kotoba-accent': 'rgb(var(--kotoba-accent-rgb) / <alpha-value>)',
+        'kotoba-background': 'rgb(var(--kotoba-background-rgb) / <alpha-value>)',
+        'kotoba-text': 'rgb(var(--kotoba-text-rgb) / <alpha-value>)',
       },
     },
   },

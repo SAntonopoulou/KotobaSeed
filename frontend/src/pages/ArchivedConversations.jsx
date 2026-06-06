@@ -103,13 +103,13 @@ const ArchivedConversations = () => {
               <div
                 key={conv.id}
                 onClick={() => navigate(`/messages/archive/${conv.id}`)}
-                className={`flex items-center p-4 border-b border-gray-200 cursor-pointer hover:bg-gray-50 ${conversationId == conv.id ? 'bg-indigo-50 border-l-4 border-indigo-500' : ''}`}
+                className={`flex items-center p-4 border-b border-gray-200 cursor-pointer hover:bg-gray-50 ${conversationId == conv.id ? 'bg-kotoba-primary/5 border-l-4 border-kotoba-primary' : ''}`}
               >
                 <div className="flex-shrink-0 mr-3">
                   {conv.other_participant.avatar_url ? (
                     <img className="h-10 w-10 rounded-full object-cover" src={conv.other_participant.avatar_url} alt={conv.other_participant.full_name} />
                   ) : (
-                    <div className="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-sm">
+                    <div className="h-10 w-10 rounded-full bg-kotoba-primary/10 flex items-center justify-center text-kotoba-primary font-bold text-sm">
                       {conv.other_participant.full_name ? conv.other_participant.full_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) : '??'}
                     </div>
                   )}
@@ -158,7 +158,7 @@ const ArchivedConversations = () => {
                     >
                       <div
                         className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg shadow relative ${
-                          message.sender_id === user.id ? 'bg-indigo-500 text-white' : 'bg-gray-300 text-gray-800'
+                          message.sender_id === user.id ? 'bg-kotoba-primary text-white' : 'bg-gray-300 text-gray-800'
                         }`}
                       >
                         <p className="text-sm">{message.content}</p>

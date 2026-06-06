@@ -9,6 +9,8 @@ const TYPE_LABELS = {
   mc_single: 'Multiple choice (one answer)',
   mc_multi: 'Multiple choice (several answers)',
   fill_blank: 'Fill in the blank',
+  translation: 'Translation',
+  multi_blank: 'Sentence with multiple blanks',
   short_answer: 'Short answer (you grade)',
 };
 
@@ -20,6 +22,27 @@ const blankFor = (type) => {
     return {
       ...base,
       accepted_answers: [''],
+      case_sensitive: false,
+      normalize_accents: true,
+    };
+  }
+  if (type === 'translation') {
+    return {
+      ...base,
+      accepted_answers: [''],
+      case_sensitive: false,
+      normalize_accents: true,
+    };
+  }
+  if (type === 'multi_blank') {
+    return {
+      ...base,
+      points: 2,
+      sentence_template: '',
+      blanks: [
+        { accepted_answers: [''] },
+        { accepted_answers: [''] },
+      ],
       case_sensitive: false,
       normalize_accents: true,
     };
@@ -179,6 +202,127 @@ const AcceptedAnswersEditor = ({ question, onChange }) => {
   );
 };
 
+const BlanksEditor = ({ question, onChange }) => {
+  const setBlankAnswers = (blankIdx, answers) => {
+    const next = question.blanks.map((b, i) =>
+      i === blankIdx ? { ...b, accepted_answers: answers } : b
+    );
+    onChange({ ...question, blanks: next });
+  };
+  const setAcceptedAt = (blankIdx, ansIdx, value) => {
+    const blank = question.blanks[blankIdx];
+    const answers = [...(blank.accepted_answers || [''])];
+    answers[ansIdx] = value;
+    setBlankAnswers(blankIdx, answers);
+  };
+  const addAcceptedAt = (blankIdx) => {
+    const blank = question.blanks[blankIdx];
+    setBlankAnswers(blankIdx, [...(blank.accepted_answers || []), '']);
+  };
+  const removeAcceptedAt = (blankIdx, ansIdx) => {
+    const blank = question.blanks[blankIdx];
+    const answers = (blank.accepted_answers || []).filter((_, i) => i !== ansIdx);
+    if (answers.length === 0) answers.push('');
+    setBlankAnswers(blankIdx, answers);
+  };
+  const addBlank = () =>
+    onChange({ ...question, blanks: [...question.blanks, { accepted_answers: [''] }] });
+  const removeBlank = (idx) => {
+    if (question.blanks.length <= 1) return;
+    onChange({ ...question, blanks: question.blanks.filter((_, i) => i !== idx) });
+  };
+  return (
+    <div className="space-y-3">
+      <div>
+        <label className="block text-xs font-medium text-kotoba-text/70 mb-1">
+          Sentence template
+        </label>
+        <input
+          type="text"
+          value={question.sentence_template || ''}
+          onChange={(e) => onChange({ ...question, sentence_template: e.target.value })}
+          placeholder="Use ___ where each blank goes, e.g. Είμαι ___ από την ___."
+          className="w-full px-3 py-2 border border-kotoba-text/20 rounded text-sm focus:outline-none focus:ring-2 focus:ring-kotoba-primary"
+        />
+        <p className="mt-1 text-xs text-kotoba-text/60">
+          Each "___" becomes a blank in order, matched against the accepted answers below.
+        </p>
+      </div>
+      {question.blanks.map((blank, blankIdx) => (
+        <div
+          key={blankIdx}
+          className="rounded-md border border-kotoba-text/10 p-3 bg-kotoba-background/30"
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-semibold text-kotoba-primary">
+              Blank {blankIdx + 1}
+            </span>
+            <button
+              type="button"
+              onClick={() => removeBlank(blankIdx)}
+              disabled={question.blanks.length <= 1}
+              className="text-xs text-red-600 hover:underline disabled:opacity-40"
+            >
+              Remove
+            </button>
+          </div>
+          {(blank.accepted_answers || ['']).map((ans, ansIdx) => (
+            <div key={ansIdx} className="flex items-center gap-2 mb-1">
+              <input
+                type="text"
+                value={ans}
+                onChange={(e) => setAcceptedAt(blankIdx, ansIdx, e.target.value)}
+                placeholder={`Accepted answer ${ansIdx + 1}`}
+                className="flex-grow px-2 py-1 border border-kotoba-text/15 rounded text-sm focus:outline-none focus:ring-2 focus:ring-kotoba-primary"
+              />
+              <button
+                type="button"
+                onClick={() => removeAcceptedAt(blankIdx, ansIdx)}
+                className="text-kotoba-text/40 hover:text-red-600 text-lg leading-none"
+                aria-label="Remove accepted answer"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() => addAcceptedAt(blankIdx)}
+            className="text-xs text-kotoba-primary hover:underline"
+          >
+            + Add accepted answer
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={addBlank}
+        className="text-sm text-kotoba-primary hover:underline"
+      >
+        + Add blank
+      </button>
+      <div className="flex gap-4 mt-2 text-xs">
+        <label className="inline-flex items-center gap-1">
+          <input
+            type="checkbox"
+            checked={question.normalize_accents !== false}
+            onChange={(e) => onChange({ ...question, normalize_accents: e.target.checked })}
+          />
+          Ignore accents
+        </label>
+        <label className="inline-flex items-center gap-1">
+          <input
+            type="checkbox"
+            checked={question.case_sensitive === true}
+            onChange={(e) => onChange({ ...question, case_sensitive: e.target.checked })}
+          />
+          Case-sensitive
+        </label>
+      </div>
+    </div>
+  );
+};
+
 const QuestionCard = ({ question, index, onChange, onRemove, onMoveUp, onMoveDown, canMoveUp, canMoveDown }) => {
   const updateField = (field, value) => onChange({ ...question, [field]: value });
   return (
@@ -246,6 +390,24 @@ const QuestionCard = ({ question, index, onChange, onRemove, onMoveUp, onMoveDow
         <div className="mb-3">
           <label className="block text-xs font-medium text-kotoba-text/70 mb-1">Accepted answers</label>
           <AcceptedAnswersEditor question={question} onChange={onChange} />
+        </div>
+      )}
+
+      {question.type === 'translation' && (
+        <div className="mb-3">
+          <label className="block text-xs font-medium text-kotoba-text/70 mb-1">Accepted translations</label>
+          <p className="text-xs text-kotoba-text/60 mb-2">
+            Add every translation you'd accept — synonyms, phrasings, alternative
+            tenses. The student needs to match one of them.
+          </p>
+          <AcceptedAnswersEditor question={question} onChange={onChange} />
+        </div>
+      )}
+
+      {question.type === 'multi_blank' && (
+        <div className="mb-3">
+          <label className="block text-xs font-medium text-kotoba-text/70 mb-1">Blanks</label>
+          <BlanksEditor question={question} onChange={onChange} />
         </div>
       )}
 
@@ -328,6 +490,20 @@ const QuestionBuilder = ({ questions, onChange }) => {
           className="px-3 py-1.5 text-sm rounded-md border border-kotoba-text/15 hover:border-kotoba-primary hover:bg-kotoba-primary/5"
         >
           Fill in the blank
+        </button>
+        <button
+          type="button"
+          onClick={() => add('translation')}
+          className="px-3 py-1.5 text-sm rounded-md border border-kotoba-text/15 hover:border-kotoba-primary hover:bg-kotoba-primary/5"
+        >
+          Translation
+        </button>
+        <button
+          type="button"
+          onClick={() => add('multi_blank')}
+          className="px-3 py-1.5 text-sm rounded-md border border-kotoba-text/15 hover:border-kotoba-primary hover:bg-kotoba-primary/5"
+        >
+          Multi-blank
         </button>
         <button
           type="button"

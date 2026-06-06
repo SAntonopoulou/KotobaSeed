@@ -1,0 +1,80 @@
+/* Tutor theme bundles.
+ *
+ * Each theme defines the same set of CSS custom properties as
+ * space-separated RGB triples (so Tailwind's `<alpha-value>` slot works
+ * with `rgb(var(--kotoba-primary-rgb) / <alpha-value>)`).
+ *
+ * The :root values are the platform default — Sage — so the apex marketing
+ * site (which never sets a theme class) and any unthemed surface keep
+ * today's look exactly.
+ *
+ * Theme keys here MUST match the keys in backend/services/themes.py.
+ */
+
+:root,
+.theme-sage {
+  --kotoba-primary-rgb: 22 86 29;
+  --kotoba-secondary-rgb: 214 164 47;
+  --kotoba-secondary-dark-rgb: 181 140 39;
+  --kotoba-accent-rgb: 248 153 115;
+  --kotoba-background-rgb: 244 241 233;
+  --kotoba-text-rgb: 43 70 60;
+}
+
+.theme-midnight {
+  --kotoba-primary-rgb: 26 35 64;
+  --kotoba-secondary-rgb: 235 222 199;
+  --kotoba-secondary-dark-rgb: 198 182 154;
+  --kotoba-accent-rgb: 138 154 209;
+  --kotoba-background-rgb: 246 244 240;
+  --kotoba-text-rgb: 26 35 64;
+}
+
+.theme-sakura {
+  --kotoba-primary-rgb: 196 92 124;
+  --kotoba-secondary-rgb: 247 219 213;
+  --kotoba-secondary-dark-rgb: 217 178 168;
+  --kotoba-accent-rgb: 56 64 81;
+  --kotoba-background-rgb: 253 247 243;
+  --kotoba-text-rgb: 56 64 81;
+}
+
+.theme-sunlight {
+  --kotoba-primary-rgb: 31 88 92;
+  --kotoba-secondary-rgb: 226 178 38;
+  --kotoba-secondary-dark-rgb: 192 148 28;
+  --kotoba-accent-rgb: 247 211 130;
+  --kotoba-background-rgb: 251 246 232;
+  --kotoba-text-rgb: 31 88 92;
+}
+
+.theme-aegean {
+  --kotoba-primary-rgb: 22 81 138;
+  --kotoba-secondary-rgb: 240 245 250;
+  --kotoba-secondary-dark-rgb: 196 213 230;
+  --kotoba-accent-rgb: 80 174 220;
+  --kotoba-background-rgb: 244 248 252;
+  --kotoba-text-rgb: 21 39 60;
+}
+
+.theme-slate {
+  --kotoba-primary-rgb: 51 65 84;
+  --kotoba-secondary-rgb: 56 189 248;
+  --kotoba-secondary-dark-rgb: 44 158 208;
+  --kotoba-accent-rgb: 226 232 240;
+  --kotoba-background-rgb: 248 250 252;
+  --kotoba-text-rgb: 28 36 49;
+}
+
+/* Theme-aware body background — themed surfaces respect the picked theme's
+ * background colour. Outside any theme- class (the apex), the :root variable
+ * supplies the original Sage cream.
+ */
+.theme-sage body,
+.theme-midnight body,
+.theme-sakura body,
+.theme-sunlight body,
+.theme-aegean body,
+.theme-slate body {
+  background-color: rgb(var(--kotoba-background-rgb));
+}

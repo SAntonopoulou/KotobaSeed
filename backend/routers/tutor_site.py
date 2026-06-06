@@ -61,6 +61,7 @@ class TutorRead(BaseModel):
     stripe_connect_account_id: str | None
     list_in_marketplace: bool
     cancellation_cutoff_hours: int
+    theme: str
     created_at: datetime
 
 
@@ -82,6 +83,7 @@ def _serialize_tutor(tutor: Tutor) -> TutorRead:
         stripe_connect_account_id=tutor.stripe_connect_account_id,
         list_in_marketplace=tutor.list_in_marketplace,
         cancellation_cutoff_hours=tutor.cancellation_cutoff_hours,
+        theme=tutor.theme or "sage",
         created_at=tutor.created_at,
     )
 
@@ -99,6 +101,7 @@ class TutorUpdate(BaseModel):
     public_reply_email: EmailStr | None = None
     list_in_marketplace: bool | None = None
     cancellation_cutoff_hours: int | None = Field(default=None, ge=48, le=720)
+    theme: str | None = Field(default=None, max_length=32)
     # User-side (single identity source)
     bio: str | None = Field(default=None, max_length=4000)
     photo_url: str | None = Field(default=None, max_length=2048)
@@ -138,6 +141,20 @@ def _maybe_sync_kyc_status(tutor: Tutor, session: Session) -> Tutor:
         session.commit()
         session.refresh(tutor)
     return tutor
+
+
+class ThemeOption(BaseModel):
+    key: str
+    label: str
+    description: str
+
+
+@router.get("/themes", response_model=list[ThemeOption])
+def list_themes() -> list[ThemeOption]:
+    """Public — the curated theme list for the page builder picker."""
+    from ..services.themes import THEMES
+
+    return [ThemeOption(**theme) for theme in THEMES]
 
 
 @router.get("/me", response_model=TutorRead)
@@ -194,6 +211,23 @@ def update_current_tutor(
         tutor_dirty = True
     if "cancellation_cutoff_hours" in changes:
         tutor.cancellation_cutoff_hours = int(changes["cancellation_cutoff_hours"])
+        tutor_dirty = True
+    if "theme" in changes and changes["theme"] is not None:
+        from ..services.themes import THEME_KEYS
+
+        # Themes are a Pro feature — match the page builder + custom domain
+        # plan gates. Free/Plus stay on the default `sage` theme.
+        if not current.is_pro_subscriber:
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail="Themes are a Pro feature. Upgrade your plan to switch.",
+            )
+        if changes["theme"] not in THEME_KEYS:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unknown theme. Pick one of: {', '.join(sorted(THEME_KEYS))}.",
+            )
+        tutor.theme = changes["theme"]
         tutor_dirty = True
 
     # User-side identity fields (single source — shared with marketplace profile)
@@ -686,12 +720,16 @@ class CustomDomainRead(BaseModel):
       - not_set: no domain on record
       - pending: domain saved but not yet verified
       - verified: DNS lookup succeeded; tenancy middleware now honours it
+
+    `last_check` is populated by the verify endpoint so the UI can show what
+    we actually saw on the network — way more useful than a generic error.
     """
 
     domain: str | None
     status: str  # "not_set" | "pending" | "verified"
     verified_at: datetime | None
     target_ip: str | None  # what tutors should point their A record at
+    last_check: dict | None = None  # {success, resolved_ip, expected_ip, message}
 
 
 class CustomDomainUpdate(BaseModel):
@@ -782,32 +820,72 @@ def verify_custom_domain(
     tutor: CurrentTutor,
     session: Annotated[Session, Depends(get_session)],
 ) -> CustomDomainRead:
-    """Owner-only — run the DNS check. Stamps verified_at on success.
-    Idempotent: re-running on an already-verified domain just refreshes
-    the stamp."""
+    """Owner-only — run the DNS check.
+
+    On success: stamps `verified_at` and returns a 200 with `last_check` set
+    to {success=true, resolved_ip, expected_ip, message}. On failure: still
+    returns 200 (not 400), with `last_check.success=false` and a message the
+    UI can render verbatim. Returning the diagnostic in the body is much
+    more useful than throwing an opaque 4xx — the tutor can see exactly
+    what IP we resolved vs what we expected and fix the DNS themselves.
+    """
     _require_owner(tutor, current)
     if not tutor.custom_domain:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Save your domain first.",
         )
-    from ..services.custom_domain import verify_domain_dns
+    from ..services.custom_domain import (
+        expected_target_ip,
+        resolve_a_record,
+        verify_domain_dns,
+    )
 
-    if not verify_domain_dns(tutor.custom_domain):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                "We couldn't confirm your DNS yet. Add the A record below "
-                "and try again — DNS changes can take a few minutes to "
-                "propagate."
-            ),
+    expected = expected_target_ip()
+    resolved = resolve_a_record(tutor.custom_domain)
+    success = verify_domain_dns(tutor.custom_domain)
+
+    state = _custom_domain_state(tutor)
+    if success:
+        tutor.custom_domain_verified_at = datetime.now(UTC)
+        tutor.updated_at = datetime.now(UTC)
+        session.add(tutor)
+        session.commit()
+        session.refresh(tutor)
+        state = _custom_domain_state(tutor)
+        state.last_check = {
+            "success": True,
+            "resolved_ip": resolved,
+            "expected_ip": expected,
+            "message": "DNS verified. Your domain is now serving your tutor site.",
+        }
+        return state
+
+    if expected is None:
+        message = (
+            "We can't run DNS checks yet — the platform's server IP isn't "
+            "configured. Contact support if this persists."
         )
-    tutor.custom_domain_verified_at = datetime.now(UTC)
-    tutor.updated_at = datetime.now(UTC)
-    session.add(tutor)
-    session.commit()
-    session.refresh(tutor)
-    return _custom_domain_state(tutor)
+    elif resolved is None:
+        message = (
+            f"We couldn't resolve {tutor.custom_domain}. Make sure you've "
+            "added the A record at your registrar and saved it. DNS changes "
+            "can take a few minutes to propagate."
+        )
+    else:
+        message = (
+            f"{tutor.custom_domain} resolves to {resolved}, but it should "
+            f"point to {expected}. Update the A record at your registrar "
+            "and try again."
+        )
+
+    state.last_check = {
+        "success": False,
+        "resolved_ip": resolved,
+        "expected_ip": expected,
+        "message": message,
+    }
+    return state
 
 
 @router.delete("/custom-domain", status_code=status.HTTP_204_NO_CONTENT)

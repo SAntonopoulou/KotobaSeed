@@ -47,7 +47,7 @@ const PledgeForm = ({ projectId, projectName }) => {
             type="number"
             name="pledgeAmount"
             id="pledgeAmount"
-            className="focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-7 pr-12 sm:text-sm border-gray-300 rounded-md"
+            className="focus:ring-kotoba-primary focus:border-kotoba-primary block w-full pl-7 pr-12 sm:text-sm border-gray-300 rounded-md"
             placeholder="10.00"
             min="1"
             step="0.01"
@@ -61,7 +61,7 @@ const PledgeForm = ({ projectId, projectName }) => {
       <button
         type="submit"
         disabled={isPledging}
-        className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-indigo-400"
+        className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-kotoba-primary hover:bg-kotoba-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-kotoba-primary disabled:bg-kotoba-primary/40"
       >
         {isPledging ? 'Processing...' : 'Pledge Now'}
       </button>

@@ -44,6 +44,15 @@ _COMMON_BOOKING_PLACEHOLDERS = (
     "classroom_url",
 )
 
+_TUTOR_SIDE_PLACEHOLDERS = (
+    "student_name",
+    "tutor_name",
+    "when",
+    "duration_minutes",
+    "pack_name",
+    "dashboard_url",
+)
+
 
 DEFAULTS: dict[str, TemplateDefinition] = {
     "booking_confirmation_student": TemplateDefinition(
@@ -93,6 +102,58 @@ DEFAULTS: dict[str, TemplateDefinition] = {
             "The classroom opens 15 minutes before the lesson starts."
         ),
         placeholders=_COMMON_BOOKING_PLACEHOLDERS,
+    ),
+    "booking_confirmation_tutor": TemplateDefinition(
+        key="booking_confirmation_tutor",
+        label="New booking notification (tutor)",
+        description="Sent to you when a student books a lesson.",
+        default_subject="New lesson booked: {student_name}, {when}",
+        default_body_markdown=(
+            "Hi {tutor_name},\n\n"
+            "**{student_name}** booked a lesson with you for **{when}** "
+            "({duration_minutes} minutes).\n\n"
+            "**Pack:** {pack_name}\n\n"
+            "[Open your dashboard]({dashboard_url})\n\n"
+            "The classroom opens 15 minutes before the lesson."
+        ),
+        placeholders=_TUTOR_SIDE_PLACEHOLDERS,
+    ),
+    "booking_reminder_tutor": TemplateDefinition(
+        key="booking_reminder_tutor",
+        label="24h reminder (tutor)",
+        description="Sent to you ~24 hours before each lesson.",
+        default_subject="Tomorrow: lesson with {student_name}",
+        default_body_markdown=(
+            "Hi {tutor_name},\n\n"
+            "You have a lesson with **{student_name}** at **{when}** "
+            "({duration_minutes} minutes).\n\n"
+            "[Open your dashboard]({dashboard_url})"
+        ),
+        placeholders=_TUTOR_SIDE_PLACEHOLDERS,
+    ),
+    "booking_cancelled_student": TemplateDefinition(
+        key="booking_cancelled_student",
+        label="Cancellation confirmation (student)",
+        description=(
+            "Sent when a student cancels a booking. Includes refund details "
+            "when the cancellation refunded a paid lesson — falls back to a "
+            "simple cancellation note for pending-payment slots."
+        ),
+        default_subject="Cancelled: your lesson with {tutor_name}",
+        default_body_markdown=(
+            "Hi {student_name},\n\n"
+            "Your lesson with **{tutor_name}** on **{when}** is cancelled.\n\n"
+            "{refund_note}\n\n"
+            "If anything changes, you're welcome to book again any time."
+        ),
+        placeholders=(
+            "student_name",
+            "tutor_name",
+            "when",
+            "duration_minutes",
+            "pack_name",
+            "refund_note",
+        ),
     ),
 }
 

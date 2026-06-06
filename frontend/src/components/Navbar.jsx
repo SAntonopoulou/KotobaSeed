@@ -93,6 +93,10 @@ const Navbar = () => {
                   {user.role === 'student' && <Link to="/student/assignments" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Homework</Link>}
                   {user.role === 'student' && <Link to="/student/subscriptions" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Subscriptions</Link>}
                   {user.role === 'admin' && <Link to="/admin/dashboard" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Admin</Link>}
+                  {['support', 'manager', 'admin', 'moderator'].includes(user.role) && (
+                    <Link to="/staff/support" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Support queue</Link>
+                  )}
+                  <Link to="/support" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Support</Link>
                 </>
               ) : (
                 <>
@@ -116,7 +120,7 @@ const Navbar = () => {
                       <input
                           id="search"
                           name="search"
-                          className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                          className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm"
                           placeholder="Search projects"
                           type="search"
                           value={searchQuery}
@@ -147,7 +151,7 @@ const Navbar = () => {
                         {user.avatar_url ? (
                             <img src={user.avatar_url} alt={user.full_name} className="h-8 w-8 rounded-full object-cover" onError={(e) => { e.target.onerror = null; e.target.src = `https://ui-avatars.com/api/?name=${user.full_name}&background=random`; }} />
                         ) : (
-                            <div className="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-xs">
+                            <div className="h-8 w-8 rounded-full bg-kotoba-primary/10 flex items-center justify-center text-kotoba-primary font-bold text-xs">
                                 {user.full_name ? user.full_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) : '??'}
                             </div>
                         )}
@@ -186,7 +190,7 @@ const Navbar = () => {
             ) : (
               <div className="flex space-x-4">
                 <Link to="/login" className="text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md text-sm font-medium">Login</Link>
-                <Link to="/register" className="bg-indigo-600 text-white hover:bg-indigo-700 px-4 py-2 rounded-md text-sm font-medium">Register</Link>
+                <Link to="/register" className="bg-kotoba-primary text-white hover:bg-kotoba-primary/90 px-4 py-2 rounded-md text-sm font-medium">Register</Link>
               </div>
             )}
           </div>

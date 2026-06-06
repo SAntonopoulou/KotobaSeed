@@ -324,6 +324,87 @@ const TakeAssignment = () => {
                 </div>
               )}
 
+              {q.type === 'translation' && (
+                <div>
+                  <textarea
+                    value={answers[q.id] ?? ''}
+                    onChange={(e) => setAnswer(q.id, e.target.value)}
+                    disabled={submitted}
+                    rows={2}
+                    placeholder="Your translation"
+                    className="w-full px-3 py-2 border border-kotoba-text/20 rounded focus:outline-none focus:ring-2 focus:ring-kotoba-primary"
+                  />
+                  {submitted && q.accepted_answers && (
+                    <p className="mt-2 text-xs text-kotoba-text/70">
+                      Accepted: {q.accepted_answers.join(' / ')}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {q.type === 'multi_blank' && (
+                <div>
+                  {/* Render the sentence with inline inputs at each "___". */}
+                  <div className="flex flex-wrap items-baseline gap-2 text-base leading-relaxed text-kotoba-text">
+                    {(() => {
+                      const template = q.sentence_template || '';
+                      const parts = template.split('___');
+                      const blanks = q.blanks || [];
+                      const blankAnswers =
+                        typeof answers[q.id] === 'object' && answers[q.id] !== null
+                          ? answers[q.id]
+                          : {};
+                      const setBlank = (idx, value) => {
+                        setAnswer(q.id, { ...blankAnswers, [String(idx)]: value });
+                      };
+                      const nodes = [];
+                      parts.forEach((piece, idx) => {
+                        if (piece) nodes.push(<span key={`p-${idx}`}>{piece}</span>);
+                        if (idx < parts.length - 1) {
+                          nodes.push(
+                            <input
+                              key={`b-${idx}`}
+                              type="text"
+                              value={blankAnswers[String(idx)] ?? ''}
+                              onChange={(e) => setBlank(idx, e.target.value)}
+                              disabled={submitted}
+                              placeholder={`Blank ${idx + 1}`}
+                              className="inline-block w-32 px-2 py-1 border-b-2 border-kotoba-primary/40 focus:border-kotoba-primary focus:outline-none bg-kotoba-background/40 rounded"
+                            />
+                          );
+                        }
+                      });
+                      if (parts.length <= 1 && blanks.length > 0) {
+                        // No template — fall back to numbered list of inputs.
+                        blanks.forEach((_, idx) => {
+                          nodes.push(
+                            <input
+                              key={`fallback-b-${idx}`}
+                              type="text"
+                              value={blankAnswers[String(idx)] ?? ''}
+                              onChange={(e) => setBlank(idx, e.target.value)}
+                              disabled={submitted}
+                              placeholder={`Blank ${idx + 1}`}
+                              className="block w-full mt-2 px-3 py-2 border border-kotoba-text/20 rounded focus:outline-none focus:ring-2 focus:ring-kotoba-primary"
+                            />
+                          );
+                        });
+                      }
+                      return nodes;
+                    })()}
+                  </div>
+                  {submitted && Array.isArray(q.blanks) && (
+                    <ul className="mt-3 text-xs text-kotoba-text/70 space-y-0.5">
+                      {q.blanks.map((b, i) => (
+                        <li key={i}>
+                          Blank {i + 1}: {(b.accepted_answers || []).join(' / ')}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+
               {q.type === 'short_answer' && (
                 <textarea
                   value={answers[q.id] ?? ''}

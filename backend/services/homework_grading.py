@@ -94,6 +94,83 @@ def _grade_question(
                 return True, points_possible, points_possible, False
         return False, 0, points_possible, False
 
+    if qtype == "translation":
+        # Same matching logic as fill_blank, but semantically distinct in
+        # the UI: the tutor sets a prompt sentence + a list of accepted
+        # translations (synonyms). Optional `min_words`/`max_words` are
+        # advisory only — we never penalise for length.
+        case_sensitive = bool(question.get("case_sensitive", False))
+        normalize_flag = bool(question.get("normalize_accents", True))
+        accepted = question.get("accepted_answers") or []
+        if not isinstance(answer, str):
+            return False, 0, points_possible, False
+        student_norm = _normalize_for_match(
+            answer,
+            case_sensitive=case_sensitive,
+            normalize_accents_flag=normalize_flag,
+        )
+        for candidate in accepted:
+            if not isinstance(candidate, str):
+                continue
+            target_norm = _normalize_for_match(
+                candidate,
+                case_sensitive=case_sensitive,
+                normalize_accents_flag=normalize_flag,
+            )
+            if student_norm == target_norm:
+                return True, points_possible, points_possible, False
+        return False, 0, points_possible, False
+
+    if qtype == "multi_blank":
+        # A sentence with N blanks, each with its own accepted_answers list.
+        # Answer is expected as {"0": "...", "1": "...", ...} keyed by blank
+        # index. Scoring is per-blank: each correct blank gets
+        # round(points_possible / N) — final remainder lands on the last
+        # blank so totals always sum correctly.
+        blanks = question.get("blanks") or []
+        if not isinstance(blanks, list) or not blanks:
+            return False, 0, points_possible, False
+        case_sensitive = bool(question.get("case_sensitive", False))
+        normalize_flag = bool(question.get("normalize_accents", True))
+        ans_dict = answer if isinstance(answer, dict) else {}
+        n = len(blanks)
+        per_blank = points_possible // n
+        earned = 0
+        all_correct = True
+        for idx, blank in enumerate(blanks):
+            student = ans_dict.get(str(idx))
+            if not isinstance(student, str):
+                all_correct = False
+                continue
+            student_norm = _normalize_for_match(
+                student,
+                case_sensitive=case_sensitive,
+                normalize_accents_flag=normalize_flag,
+            )
+            accepted = blank.get("accepted_answers") if isinstance(blank, dict) else []
+            matched = False
+            for candidate in accepted or []:
+                if not isinstance(candidate, str):
+                    continue
+                target_norm = _normalize_for_match(
+                    candidate,
+                    case_sensitive=case_sensitive,
+                    normalize_accents_flag=normalize_flag,
+                )
+                if student_norm == target_norm:
+                    matched = True
+                    break
+            if matched:
+                # Last blank absorbs any rounding remainder so the per-question
+                # total can still reach points_possible exactly.
+                if idx == n - 1:
+                    earned += points_possible - per_blank * (n - 1)
+                else:
+                    earned += per_blank
+            else:
+                all_correct = False
+        return all_correct, earned, points_possible, False
+
     if qtype == "short_answer":
         # No autograde — tutor reviews manually.
         return False, 0, points_possible, True

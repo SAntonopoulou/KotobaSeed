@@ -23,7 +23,11 @@ client.interceptors.request.use((config) => {
 client.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+    // 401 = token invalid/expired → drop it and bounce to the apex.
+    // 403 = authenticated but not authorized for this resource. This is a
+    // normal answer (e.g. visiting a tutor's owner-only endpoint when you
+    // aren't the owner). Components handle 403 locally; never log out on it.
+    if (error.response && error.response.status === 401) {
       localStorage.removeItem('token');
       window.location.href = '/';
     }

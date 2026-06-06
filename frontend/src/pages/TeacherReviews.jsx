@@ -78,7 +78,7 @@ const TeacherReviews = () => {
                             )}
 
                             <div className="mt-4 pt-4 border-t border-gray-100">
-                                <p className="text-sm text-gray-600">For project: <Link to={`/projects/${review.project.id}`} className="font-semibold text-indigo-600 hover:underline">{review.project.title}</Link></p>
+                                <p className="text-sm text-gray-600">For project: <Link to={`/projects/${review.project.id}`} className="font-semibold text-kotoba-primary hover:underline">{review.project.title}</Link></p>
                                 <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500">
                                     <span>Goal: {formatCurrency(review.project.funding_goal)}</span>
                                     <span className="capitalize">Language: {review.project.language}</span>

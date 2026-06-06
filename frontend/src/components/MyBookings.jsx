@@ -179,7 +179,7 @@ const MyBookings = () => {
                     {b.tutor_slug && (
                       <a
                         href={tutorSiteUrl(b.tutor_slug, '/')}
-                        className="text-xs text-indigo-600 hover:underline"
+                        className="text-xs text-kotoba-primary hover:underline"
                       >
                         Visit {b.tutor_slug}.kotobaseed.net
                       </a>
@@ -199,7 +199,7 @@ const MyBookings = () => {
                       <button
                         type="button"
                         onClick={() => openReschedule(b)}
-                        className="text-sm text-indigo-700 hover:underline"
+                        className="text-sm text-kotoba-primary hover:underline"
                       >
                         Reschedule
                       </button>
@@ -219,6 +219,13 @@ const MyBookings = () => {
                         Locked in (within {cutoff}h)
                       </span>
                     )}
+                    <a
+                      href={`/support?booking=${b.id}&category=billing&subject=${encodeURIComponent('Help with booking #' + b.id)}`}
+                      className="text-sm text-kotoba-text/60 hover:text-kotoba-primary"
+                      title="Open a support ticket about this booking"
+                    >
+                      Get help
+                    </a>
                   </div>
                 </div>
 
@@ -233,13 +240,13 @@ const MyBookings = () => {
                         value={rescheduleAt}
                         onChange={(e) => setRescheduleAt(e.target.value)}
                         disabled={submittingReschedule}
-                        className="px-3 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        className="px-3 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-kotoba-primary"
                       />
                       <button
                         type="button"
                         onClick={() => submitReschedule(b)}
                         disabled={submittingReschedule || !rescheduleAt}
-                        className="text-sm px-3 py-1.5 rounded-md bg-indigo-600 text-white font-medium hover:bg-indigo-700 disabled:opacity-60"
+                        className="text-sm px-3 py-1.5 rounded-md bg-kotoba-primary text-white font-medium hover:bg-kotoba-primary/90 disabled:opacity-60"
                       >
                         {submittingReschedule ? 'Saving…' : 'Confirm reschedule'}
                       </button>

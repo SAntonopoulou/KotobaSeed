@@ -31,12 +31,15 @@ from .routers import (
     notifications,
     onboarding,
     placement,
+    platform,
     pledges,
     projects,
+    support,
     ratings,
     requests,
     subscriptions,
     testimonials,
+    tutor_pages,
     tutor_site,
     tutor_subscriptions,
     users,
@@ -172,6 +175,7 @@ for router in (
     groups.router,
     subscriptions.router,
     tutor_site.router,
+    tutor_pages.router,
     onboarding.router,
     marketplace.router,
     articles.router,
@@ -182,6 +186,9 @@ for router in (
     placement.router,
     modules.router,
     tutor_subscriptions.router,
+    platform.router,
+    support.router,
+    support.staff_router,
 ):
     app.include_router(router)
 

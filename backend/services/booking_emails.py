@@ -63,6 +63,54 @@ def _load_recipients(
     return tutor, tutor_user, student, pack
 
 
+def send_cancellation_email_student(session: Session, booking: Booking) -> None:
+    """Send a cancellation confirmation to the student.
+
+    `refund_note` adapts to whether the cancel triggered a refund. We never
+    raise — email is a side-channel; the cancel itself has already happened.
+    """
+    tutor, _tutor_user, student, pack = _load_recipients(session, booking)
+    if tutor is None or pack is None or student is None:
+        log.warning(
+            "Booking %s missing tutor/pack/student; skipping cancel email.",
+            booking.id,
+        )
+        return
+    tutor_user = session.get(User, tutor.user_id)
+    tutor_tz = tutor_user.timezone if tutor_user else None
+    when_str = email_service._format_when(booking.scheduled_at, tutor_tz)
+
+    if booking.status == BookingStatus.REFUNDED:
+        refund_note = (
+            "We've refunded the lesson back to your card. Stripe may take a "
+            "few business days to return it to your statement."
+        )
+    else:
+        # PENDING_PAYMENT path — no money moved, just freeing the slot.
+        refund_note = (
+            "No charge was made for this booking, so there's nothing to refund."
+        )
+
+    ctx = {
+        "student_name": student.full_name or student.username or "there",
+        "tutor_name": tutor.display_name,
+        "when": when_str,
+        "duration_minutes": booking.duration_minutes,
+        "pack_name": pack.name,
+        "refund_note": refund_note,
+    }
+    with contextlib.suppress(Exception):
+        subject, body_html = email_templates.render(
+            "booking_cancelled_student", ctx, session=session, tutor=tutor
+        )
+        email_service.send_email(
+            to=student.email,
+            subject=subject,
+            html=email_service._wrap(subject, body_html),
+            reply_to=tutor.public_reply_email,
+        )
+
+
 def send_confirmation_emails(session: Session, booking: Booking) -> None:
     """Send confirmation to student + tutor. Called when a booking moves to
     CONFIRMED — by the Stripe webhook for paid bookings, and directly from
@@ -103,18 +151,25 @@ def send_confirmation_emails(session: Session, booking: Booking) -> None:
 
     if tutor_user is not None:
         with contextlib.suppress(Exception):
-            email_service.send_booking_confirmation_tutor(
-                to_email=tutor_user.email,
-                tutor_name=tutor_user.full_name or tutor.display_name,
-                student_display_name=(
-                    (student.full_name or student.username) if student else "A student"
-                ),
-                pack_name=pack.name,
-                scheduled_at=booking.scheduled_at,
-                duration_minutes=booking.duration_minutes,
-                dashboard_url=dashboard,
-                tutor_timezone=tutor_tz,
-                is_trial=is_trial,
+            when_str = email_service._format_when(booking.scheduled_at, tutor_tz)
+            student_display = (
+                (student.full_name or student.username) if student else "A student"
+            )
+            ctx = {
+                "student_name": student_display,
+                "tutor_name": tutor_user.full_name or tutor.display_name,
+                "when": when_str,
+                "duration_minutes": booking.duration_minutes,
+                "pack_name": pack.name,
+                "dashboard_url": dashboard,
+            }
+            subject, body_html = email_templates.render(
+                "booking_confirmation_tutor", ctx, session=session, tutor=tutor
+            )
+            email_service.send_email(
+                to=tutor_user.email,
+                subject=subject,
+                html=email_service._wrap(subject, body_html),
             )
 
 
@@ -153,16 +208,25 @@ def send_reminder_emails(session: Session, booking: Booking) -> None:
 
     if tutor_user is not None:
         with contextlib.suppress(Exception):
-            email_service.send_booking_reminder_tutor(
-                to_email=tutor_user.email,
-                tutor_name=tutor_user.full_name or tutor.display_name,
-                student_display_name=(
-                    (student.full_name or student.username) if student else "A student"
-                ),
-                scheduled_at=booking.scheduled_at,
-                duration_minutes=booking.duration_minutes,
-                dashboard_url=dashboard,
-                tutor_timezone=tutor_tz,
+            when_str = email_service._format_when(booking.scheduled_at, tutor_tz)
+            student_display = (
+                (student.full_name or student.username) if student else "A student"
+            )
+            ctx = {
+                "student_name": student_display,
+                "tutor_name": tutor_user.full_name or tutor.display_name,
+                "when": when_str,
+                "duration_minutes": booking.duration_minutes,
+                "pack_name": pack.name,
+                "dashboard_url": dashboard,
+            }
+            subject, body_html = email_templates.render(
+                "booking_reminder_tutor", ctx, session=session, tutor=tutor
+            )
+            email_service.send_email(
+                to=tutor_user.email,
+                subject=subject,
+                html=email_service._wrap(subject, body_html),
             )
 
 

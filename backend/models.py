@@ -23,7 +23,9 @@ class UserRole(str, Enum):
     STUDENT = "student"
     CREATOR = "creator"
     MODERATOR = "moderator"
-    ADMIN = "admin"
+    SUPPORT = "support"  # staff tier 1 — handles support tickets
+    MANAGER = "manager"  # staff tier 2 — handles escalations, content review
+    ADMIN = "admin"  # staff tier 3 — full platform control
 
 
 class SubscriptionTier(str, Enum):
@@ -222,6 +224,11 @@ class User(SQLModel, table=True):
     email_verified_at: datetime | None = Field(default=None)
     email_verification_code_hash: str | None = Field(default=None, max_length=255)
     email_verification_expires_at: datetime | None = Field(default=None)
+
+    # Password reset — opaque token hashed in DB. Same shape as email
+    # verification: a short-TTL stamped hash, validated and cleared on use.
+    password_reset_token_hash: str | None = Field(default=None, max_length=255)
+    password_reset_expires_at: datetime | None = Field(default=None)
 
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
@@ -1438,6 +1445,13 @@ class Tutor(SQLModel, table=True):
     # disabled afterwards.
     cancellation_cutoff_hours: int = Field(default=48, ge=48, le=720)
 
+    # ----- Theme -----
+    # Pro+ tutors can pick from a curated set of colour bundles. The string
+    # matches a CSS class on the frontend (theme-sage, theme-midnight, etc.).
+    # Free + Plus tutors stay on the default — `sage` is what the platform
+    # ships with, so nothing changes visually for them.
+    theme: str = Field(default="sage", max_length=32)
+
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
@@ -1618,6 +1632,129 @@ class TutorPageSection(SQLModel, table=True):
 
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class SupportTicketStatus(str, Enum):
+    """Where a ticket sits in the staff workflow.
+
+    - OPEN: new, no staff has touched it yet
+    - IN_PROGRESS: staff is handling it
+    - ESCALATED: support couldn't resolve, bumped to manager
+    - RESOLVED: staff says it's fixed; user can still reply to reopen
+    - CLOSED: final — no further replies. Only manager+ can close.
+    """
+
+    OPEN = "open"
+    IN_PROGRESS = "in_progress"
+    ESCALATED = "escalated"
+    RESOLVED = "resolved"
+    CLOSED = "closed"
+
+
+class SupportTicketPriority(str, Enum):
+    LOW = "low"
+    NORMAL = "normal"
+    HIGH = "high"
+    URGENT = "urgent"
+
+
+class SupportTicketCategory(str, Enum):
+    """Coarse-grained bucket so staff can filter the queue. We keep this
+    list short on purpose — finer categorisation lives in tags / search.
+    """
+
+    TECHNICAL = "technical"
+    BILLING = "billing"
+    ACCOUNT = "account"
+    CONTENT = "content"
+    ABUSE = "abuse"
+    OTHER = "other"
+
+
+class SupportTicket(SQLModel, table=True):
+    """A user's support request.
+
+    The initial message body lives on the ticket row itself; subsequent
+    back-and-forth is recorded as `SupportTicketMessage` children so the
+    thread is preserved. We snapshot the submitter's email so closed
+    tickets stay readable even if the user later deletes their account.
+    """
+
+    __tablename__ = "support_ticket"
+
+    id: int | None = Field(default=None, primary_key=True)
+    subject: str = Field(max_length=200)
+    body: str  # initial message text
+
+    submitted_by_user_id: int | None = Field(
+        default=None, foreign_key="user.id", index=True
+    )
+    submitted_by_email: str = Field(max_length=255)
+    submitted_by_name: str | None = Field(default=None, max_length=120)
+
+    status: SupportTicketStatus = Field(default=SupportTicketStatus.OPEN, index=True)
+    priority: SupportTicketPriority = Field(
+        default=SupportTicketPriority.NORMAL, index=True
+    )
+    category: SupportTicketCategory = Field(
+        default=SupportTicketCategory.OTHER, index=True
+    )
+
+    # Bumped from 0 → 1 on first escalation (support → manager),
+    # 1 → 2 on second (manager → admin). Used for routing + visibility.
+    escalation_level: int = Field(default=0)
+    assigned_to_user_id: int | None = Field(default=None, foreign_key="user.id")
+
+    # Optional context — what the ticket is about. None of these are
+    # required, but having them lets staff jump straight to the booking
+    # or tutor page without searching.
+    related_user_id: int | None = Field(default=None, foreign_key="user.id")
+    related_booking_id: int | None = Field(default=None, foreign_key="booking.id")
+    related_tutor_id: int | None = Field(default=None, foreign_key="tutor.id")
+
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC), index=True)
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    last_activity_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC), index=True
+    )
+    resolved_at: datetime | None = None
+    closed_at: datetime | None = None
+
+
+class SupportTicketMessage(SQLModel, table=True):
+    """One reply or internal note on a ticket."""
+
+    __tablename__ = "support_ticket_message"
+
+    id: int | None = Field(default=None, primary_key=True)
+    ticket_id: int = Field(foreign_key="support_ticket.id", index=True)
+    author_user_id: int | None = Field(default=None, foreign_key="user.id")
+    # Snapshot the author's display so closed tickets keep their author
+    # label even if the user deletes their account later.
+    author_label: str = Field(max_length=200)
+    body: str
+    # Internal notes are visible only to staff — used for coordination
+    # between support / manager / admin.
+    is_internal: bool = Field(default=False)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class PlatformSetting(SQLModel, table=True):
+    """Key/value store for platform-wide configuration that needs to change
+    without a redeploy — social network URLs, support contact email, brand
+    bits, feature flags, etc.
+
+    Values are JSON-encoded so anything serialisable fits without a schema
+    migration. Read access is per-key public (the public endpoints curate
+    what's exposed); write access is admin-only.
+    """
+
+    __tablename__ = "platform_setting"
+
+    key: str = Field(primary_key=True, max_length=128)
+    value_json: str = Field(description="JSON-encoded value")
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_by_user_id: int | None = Field(default=None, foreign_key="user.id")
 
 
 # ---------------------------------------------------------------------------

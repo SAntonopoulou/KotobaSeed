@@ -106,6 +106,43 @@ def send_verification_code(
     return send_email(to=to_email, subject=subject, html=_wrap(subject, body))
 
 
+def send_password_reset(
+    *,
+    to_email: str,
+    full_name: str,
+    token: str,
+    expires_minutes: int = 60,
+) -> bool:
+    """Email the password reset link. The token is opaque and large; we
+    build the URL against `settings.frontend_url` and include the email
+    too so the reset page has both pieces it needs."""
+    first_name = full_name.split()[0] if full_name else "there"
+    subject = "Reset your Kotobaseed password"
+    frontend = settings.frontend_url.rstrip("/")
+    # URL-encode minimally — token is already URL-safe (token_urlsafe), the
+    # email gets normalised by the frontend before submission.
+    reset_url = (
+        f"{frontend}/reset-password"
+        f"?email={to_email}&token={token}"
+    )
+    body = (
+        f"<p>Hi {first_name},</p>"
+        "<p>You asked to reset your Kotobaseed password. Click the button "
+        "below to set a new one:</p>"
+        f'<p style="margin:24px 0;"><a href="{reset_url}" '
+        'style="display:inline-block;background:#16561D;color:#ffffff;'
+        'padding:12px 24px;border-radius:6px;text-decoration:none;'
+        'font-weight:600;">Reset password</a></p>'
+        f"<p>This link expires in {expires_minutes} minutes. If you didn't "
+        "ask to reset your password, you can safely ignore this email — your "
+        "password stays unchanged.</p>"
+        '<p style="font-size:12px;color:#6b6660;margin-top:24px;">'
+        "If the button doesn't work, copy and paste this URL into your browser:"
+        f'<br><span style="word-break:break-all;">{reset_url}</span></p>'
+    )
+    return send_email(to=to_email, subject=subject, html=_wrap(subject, body))
+
+
 def _first_name(full_name: str | None) -> str:
     if not full_name:
         return "there"

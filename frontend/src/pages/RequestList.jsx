@@ -160,7 +160,7 @@ const RequestList = () => {
     <div className="text-center py-16 bg-white rounded-lg shadow-md">
       <h2 className="text-2xl font-bold text-gray-800">Don't see the content you need?</h2>
       <p className="mt-2 text-gray-600">Request it directly from our community of teachers.</p>
-      <button onClick={() => setShowModal(true)} className="mt-6 inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none">
+      <button onClick={() => setShowModal(true)} className="mt-6 inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-kotoba-primary hover:bg-kotoba-primary/90 focus:outline-none">
         Post Your First Request
       </button>
     </div>
@@ -173,7 +173,7 @@ const RequestList = () => {
                 <h2 className="text-xl font-bold text-gray-800">Have another great idea?</h2>
                 <p className="mt-1 text-gray-600">Let our teachers know what you'd like to see next.</p>
             </div>
-            <button onClick={() => setShowModal(true)} className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none">
+            <button onClick={() => setShowModal(true)} className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-kotoba-primary hover:bg-kotoba-primary/90 focus:outline-none">
                 Post a Request
             </button>
         </div>
@@ -187,17 +187,17 @@ const RequestList = () => {
     const budget = isAccepted ? req.project_funding_goal : req.budget;
 
     return (
-      <div key={req.id} className={`bg-white overflow-hidden shadow rounded-lg border ${req.target_teacher_id ? 'border-indigo-200 ring-1 ring-indigo-100' : 'border-gray-200'}`}>
+      <div key={req.id} className={`bg-white overflow-hidden shadow rounded-lg border ${req.target_teacher_id ? 'border-kotoba-primary/30 ring-1 ring-kotoba-primary' : 'border-gray-200'}`}>
         <div className="px-4 py-5 sm:p-6">
           <div className="flex justify-between items-start">
               <h3 className="text-lg leading-6 font-medium text-gray-900 mb-2">{title}</h3>
               <div className="flex flex-col items-end space-y-1">
-                  {req.target_teacher_id && <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-800">Targeted</span>}
+                  {req.target_teacher_id && <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-kotoba-primary/10 text-kotoba-primary">Targeted</span>}
                   {req.is_private && <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">Private</span>}
               </div>
           </div>
           <div className="flex space-x-2 mb-4">
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">{req.language}</span>
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-kotoba-secondary/20 text-kotoba-text">{req.language}</span>
             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">{req.level}</span>
           </div>
           {req.is_series && (
@@ -214,7 +214,7 @@ const RequestList = () => {
           <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
             <span className="text-xs text-gray-400">Requested by {req.user_name}</span>
             {currentUser && currentUser.role === 'creator' && req.user_id !== currentUser.id && (req.status === 'open' || req.status === 'negotiating') && (
-              <button onClick={() => handleDiscussWithStudent(req.id)} className="inline-flex items-center px-2 py-1 border border-transparent text-xs font-medium rounded text-white bg-indigo-600 hover:bg-indigo-700">Discuss with Student</button>
+              <button onClick={() => handleDiscussWithStudent(req.id)} className="inline-flex items-center px-2 py-1 border border-transparent text-xs font-medium rounded text-white bg-kotoba-primary hover:bg-kotoba-primary/90">Discuss with Student</button>
             )}
             {currentUser && currentUser.id === req.user_id && (req.status === 'open' || req.status === 'negotiating') && (
               <button onClick={() => confirmCancelRequest(req.id)} className="inline-flex items-center px-2 py-1 border border-gray-300 text-xs font-medium rounded text-gray-500 bg-white hover:bg-gray-50">Cancel Request</button>
@@ -274,41 +274,41 @@ const RequestList = () => {
                   <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">What content do you want to see?</h3>
                   <p className="text-sm text-gray-500 mb-4">Describe the video you'd like a teacher to create. Be as specific as you can!</p>
                   <div className="space-y-4">
-                    <div><label className="block text-sm font-medium text-gray-700">Title</label><input type="text" required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" value={newRequest.title} onChange={(e) => setNewRequest({...newRequest, title: e.target.value})} /></div>
-                    <div><label className="block text-sm font-medium text-gray-700">Description</label><textarea required rows={3} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" value={newRequest.description} onChange={(e) => setNewRequest({...newRequest, description: e.target.value})} /></div>
+                    <div><label className="block text-sm font-medium text-gray-700">Title</label><input type="text" required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={newRequest.title} onChange={(e) => setNewRequest({...newRequest, title: e.target.value})} /></div>
+                    <div><label className="block text-sm font-medium text-gray-700">Description</label><textarea required rows={3} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={newRequest.description} onChange={(e) => setNewRequest({...newRequest, description: e.target.value})} /></div>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700">Language</label>
-                        <input type="text" list="languages" required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" value={newRequest.language} onChange={(e) => setNewRequest({...newRequest, language: e.target.value})} />
+                        <input type="text" list="languages" required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={newRequest.language} onChange={(e) => setNewRequest({...newRequest, language: e.target.value})} />
                         <datalist id="languages">{allLanguages.map(lang => <option key={lang} value={lang} />)}</datalist>
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700">Level</label>
-                        <input type="text" list="levels" required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" value={newRequest.level} onChange={(e) => setNewRequest({...newRequest, level: e.target.value})} />
+                        <input type="text" list="levels" required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={newRequest.level} onChange={(e) => setNewRequest({...newRequest, level: e.target.value})} />
                         <datalist id="levels">{allLevels.map(lvl => <option key={lvl} value={lvl} />)}</datalist>
                       </div>
                     </div>
                     <div className="flex items-center">
-                      <input id="is_series" name="is_series" type="checkbox" className="h-4 w-4 text-indigo-600 border-gray-300 rounded" checked={newRequest.is_series} onChange={(e) => setNewRequest({...newRequest, is_series: e.target.checked, num_videos: e.target.checked ? 1 : null})} />
+                      <input id="is_series" name="is_series" type="checkbox" className="h-4 w-4 text-kotoba-primary border-gray-300 rounded" checked={newRequest.is_series} onChange={(e) => setNewRequest({...newRequest, is_series: e.target.checked, num_videos: e.target.checked ? 1 : null})} />
                       <label htmlFor="is_series" className="ml-2 block text-sm text-gray-900">Is this a series?</label>
                     </div>
                     {newRequest.is_series && (
                       <div>
                         <label className="block text-sm font-medium text-gray-700">Number of Videos</label>
-                        <input type="number" min="1" required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" value={newRequest.num_videos || ''} onChange={(e) => setNewRequest({...newRequest, num_videos: parseInt(e.target.value, 10)})} />
+                        <input type="number" min="1" required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={newRequest.num_videos || ''} onChange={(e) => setNewRequest({...newRequest, num_videos: parseInt(e.target.value, 10)})} />
                       </div>
                     )}
-                    <div><label className="block text-sm font-medium text-gray-700">Budget (EUR)</label><input type="number" min="0" className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" value={newRequest.budget} onChange={(e) => setNewRequest({...newRequest, budget: e.target.value})} /></div>
+                    <div><label className="block text-sm font-medium text-gray-700">Budget (EUR)</label><input type="number" min="0" className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={newRequest.budget} onChange={(e) => setNewRequest({...newRequest, budget: e.target.value})} /></div>
                     <div className="relative">
                         <label className="block text-sm font-medium text-gray-700">Target Teacher (Optional)</label>
-                        <input type="text" placeholder="Search by name..." className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" value={selectedTeacherName || teacherSearch} onChange={(e) => { setTeacherSearch(e.target.value); setSelectedTeacherName(''); setNewRequest({...newRequest, target_teacher_id: null}); }} />
+                        <input type="text" placeholder="Search by name..." className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={selectedTeacherName || teacherSearch} onChange={(e) => { setTeacherSearch(e.target.value); setSelectedTeacherName(''); setNewRequest({...newRequest, target_teacher_id: null}); }} />
                         {teacherResults.length > 0 && !selectedTeacherName && (
                             <ul className="absolute z-10 mt-1 w-full bg-white shadow-lg max-h-60 rounded-md py-1 text-base ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none sm:text-sm">
-                                {teacherResults.map((teacher) => <li key={teacher.id} className="cursor-pointer select-none relative py-2 pl-3 pr-9 hover:bg-indigo-600 hover:text-white" onClick={() => { setNewRequest({...newRequest, target_teacher_id: teacher.id}); setSelectedTeacherName(teacher.full_name); setTeacherResults([]); }}>{teacher.full_name}</li>)}
+                                {teacherResults.map((teacher) => <li key={teacher.id} className="cursor-pointer select-none relative py-2 pl-3 pr-9 hover:bg-kotoba-primary/90 hover:text-white" onClick={() => { setNewRequest({...newRequest, target_teacher_id: teacher.id}); setSelectedTeacherName(teacher.full_name); setTeacherResults([]); }}>{teacher.full_name}</li>)}
                             </ul>
                         )}
                     </div>
-                    {newRequest.target_teacher_id && <div className="flex items-center"><input id="is_private" name="is_private" type="checkbox" className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded" checked={newRequest.is_private} onChange={(e) => setNewRequest({...newRequest, is_private: e.target.checked})} /><label htmlFor="is_private" className="ml-2 block text-sm text-gray-900">Private Request (Only visible to target teacher)</label></div>}
+                    {newRequest.target_teacher_id && <div className="flex items-center"><input id="is_private" name="is_private" type="checkbox" className="h-4 w-4 text-kotoba-primary focus:ring-kotoba-primary border-gray-300 rounded" checked={newRequest.is_private} onChange={(e) => setNewRequest({...newRequest, is_private: e.target.checked})} /><label htmlFor="is_private" className="ml-2 block text-sm text-gray-900">Private Request (Only visible to target teacher)</label></div>}
                     
                     {isPremiumStudent && (
                       <div className="flex items-center mt-4">
@@ -316,7 +316,7 @@ const RequestList = () => {
                           id="use_priority_credit"
                           name="use_priority_credit"
                           type="checkbox"
-                          className="h-4 w-4 text-indigo-600 border-gray-300 rounded"
+                          className="h-4 w-4 text-kotoba-primary border-gray-300 rounded"
                           checked={usePriorityCredit}
                           onChange={(e) => setUsePriorityCredit(e.target.checked)}
                         />
@@ -328,7 +328,7 @@ const RequestList = () => {
                   </div>
                 </div>
                 <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-                  <button type="submit" className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 focus:outline-none sm:ml-3 sm:w-auto sm:text-sm">Post Request</button>
+                  <button type="submit" className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-kotoba-primary text-base font-medium text-white hover:bg-kotoba-primary/90 focus:outline-none sm:ml-3 sm:w-auto sm:text-sm">Post Request</button>
                   <button type="button" onClick={() => setShowModal(false)} className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">Cancel</button>
                 </div>
               </form>

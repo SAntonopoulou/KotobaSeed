@@ -351,6 +351,10 @@ def cancel_my_booking(
             detail=f"Booking is {booking.status.value}; cannot cancel.",
         )
 
+    from ..services.booking_emails import send_cancellation_email_student
+
+    send_cancellation_email_student(session, booking)
+
     tutor = session.get(Tutor, booking.tutor_id)
     pack = session.get(LessonPack, booking.lesson_pack_id)
     return StudentBookingRead(
@@ -510,10 +514,127 @@ def reschedule_my_booking(
     )
 
 
+@router.get("/me/export")
+def export_my_data(
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """GDPR Article 15 — right of access. Returns a JSON dump of everything
+    we hold that's tied to this user. Frontend can offer it as a download.
+
+    Scope: profile, bookings, pledges, content authored, messages,
+    notifications, testimonials. We exclude server logs and hashed
+    passwords — neither is meaningful data the user can act on.
+    """
+    from ..models import (
+        Article,
+        HomeworkAssignment,
+        HomeworkSubmission,
+        LessonModule,
+        Testimonial,
+    )
+
+    def _serialize_model(row) -> dict:
+        return row.model_dump(mode="json", exclude={"hashed_password"})
+
+    tutor = session.exec(select(Tutor).where(Tutor.user_id == current_user.id)).first()
+
+    payload: dict = {
+        "exported_at": datetime.now(UTC).isoformat(),
+        "export_format_version": 1,
+        "profile": current_user.model_dump(
+            mode="json", exclude={"hashed_password"}
+        ),
+    }
+
+    if tutor is not None:
+        payload["tutor_site"] = tutor.model_dump(mode="json")
+        payload["tutor_articles"] = [
+            _serialize_model(r)
+            for r in session.exec(
+                select(Article).where(Article.tutor_id == tutor.id)
+            ).all()
+        ]
+        payload["tutor_modules"] = [
+            _serialize_model(r)
+            for r in session.exec(
+                select(LessonModule).where(LessonModule.tutor_id == tutor.id)
+            ).all()
+        ]
+        payload["tutor_bookings_as_tutor"] = [
+            _serialize_model(r)
+            for r in session.exec(
+                select(Booking).where(Booking.tutor_id == tutor.id)
+            ).all()
+        ]
+        payload["testimonials_about_me"] = [
+            _serialize_model(r)
+            for r in session.exec(
+                select(Testimonial).where(Testimonial.tutor_id == tutor.id)
+            ).all()
+        ]
+
+    payload["bookings_as_student"] = [
+        _serialize_model(r)
+        for r in session.exec(
+            select(Booking).where(Booking.student_user_id == current_user.id)
+        ).all()
+    ]
+    payload["pledges"] = [
+        _serialize_model(r)
+        for r in session.exec(
+            select(Pledge).where(Pledge.user_id == current_user.id)
+        ).all()
+    ]
+    payload["projects_authored"] = [
+        _serialize_model(r)
+        for r in session.exec(
+            select(Project).where(Project.teacher_id == current_user.id)
+        ).all()
+    ]
+    payload["requests_made"] = [
+        _serialize_model(r)
+        for r in session.exec(
+            select(Request).where(Request.user_id == current_user.id)
+        ).all()
+    ]
+    payload["messages_sent"] = [
+        _serialize_model(r)
+        for r in session.exec(
+            select(Message).where(Message.sender_id == current_user.id)
+        ).all()
+    ]
+    payload["notifications"] = [
+        _serialize_model(r)
+        for r in session.exec(
+            select(Notification).where(Notification.user_id == current_user.id)
+        ).all()
+    ]
+    payload["homework_assignments"] = [
+        _serialize_model(r)
+        for r in session.exec(
+            select(HomeworkAssignment).where(
+                HomeworkAssignment.student_user_id == current_user.id
+            )
+        ).all()
+    ]
+    payload["homework_submissions"] = [
+        _serialize_model(r)
+        for r in session.exec(
+            select(HomeworkSubmission).where(
+                HomeworkSubmission.student_user_id == current_user.id
+            )
+        ).all()
+    ]
+
+    return payload
+
+
 @router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
 def delete_me(
     current_user: User = Depends(get_current_user), session: Session = Depends(get_session)
 ):
+    now = datetime.now(UTC)
     # 1. Find or create the singleton deleted-user placeholder
     deleted_user = _get_or_create_deleted_user(session)
 
@@ -585,8 +706,91 @@ def delete_me(
         msg.sender_id = deleted_user.id
         session.add(msg)
 
-    # 3. Anonymize the current_user's data (soft delete)
-    now = datetime.now(UTC)
+    # 3. If the user has a Tutor row, anonymise it. We DO NOT delete it
+    # because Tutor.id is referenced by Bookings, Articles, Modules,
+    # HomeworkAssignments etc. — financial records must survive deletion
+    # for tax purposes. We strip identifying fields and orphan the tutor
+    # site by clearing the slug + Stripe + custom domain.
+    tutor = session.exec(select(Tutor).where(Tutor.user_id == current_user.id)).first()
+    if tutor is not None:
+        from ..models import (
+            Article,
+            HomeworkAssignment,
+            HomeworkSubmission,
+            LessonModule,
+            Testimonial,
+            TutorEmailTemplate,
+            TutorPageSection,
+        )
+
+        # The slug becomes a guaranteed-unique sentinel so a re-registration
+        # never collides — and tenancy middleware can never resolve to this
+        # ghost tutor again.
+        tutor.tutor_slug = f"deleted_{tutor.id}_{int(now.timestamp())}"
+        tutor.display_name = "Deleted tutor"
+        tutor.public_reply_email = None
+        tutor.custom_domain = None
+        tutor.custom_domain_verified_at = None
+        tutor.list_in_marketplace = False
+        tutor.stripe_connect_account_id = None
+        tutor.account_status_paused_reason = None if hasattr(tutor, "account_status_paused_reason") else None
+        session.add(tutor)
+
+        # Cascade-anonymise content owned by this tutor. We DELETE rather
+        # than reassign for content rows — they're tutor-scoped, not
+        # platform-wide, and reassigning to a placeholder would leak the
+        # tutor's pedagogy under a different identity.
+        for row in session.exec(
+            select(Article).where(Article.tutor_id == tutor.id)
+        ).all():
+            session.delete(row)
+        for row in session.exec(
+            select(LessonModule).where(LessonModule.tutor_id == tutor.id)
+        ).all():
+            session.delete(row)
+        for row in session.exec(
+            select(TutorPageSection).where(TutorPageSection.tutor_id == tutor.id)
+        ).all():
+            session.delete(row)
+        for row in session.exec(
+            select(TutorEmailTemplate).where(TutorEmailTemplate.tutor_id == tutor.id)
+        ).all():
+            session.delete(row)
+        # Testimonials about this tutor are about-the-business — delete with
+        # the tutor identity. Submitted-by side handled above via Conversation
+        # placeholder reassignment.
+        for row in session.exec(
+            select(Testimonial).where(Testimonial.tutor_id == tutor.id)
+        ).all():
+            session.delete(row)
+        # Submissions + assignments are pedagogical artefacts of completed
+        # work — anonymise the student-side fields if they belong to this
+        # user, otherwise leave them attached to the tutor (anonymised
+        # display).
+        for row in session.exec(
+            select(HomeworkAssignment).where(
+                HomeworkAssignment.student_user_id == current_user.id
+            )
+        ).all():
+            row.student_user_id = deleted_user.id
+            session.add(row)
+        for row in session.exec(
+            select(HomeworkSubmission).where(
+                HomeworkSubmission.student_user_id == current_user.id
+            )
+        ).all():
+            row.student_user_id = deleted_user.id
+            session.add(row)
+
+    # 4. Detach the user from their bookings as a student (financial records
+    # stay intact at the tutor side; the student-PII link is severed).
+    for booking in session.exec(
+        select(Booking).where(Booking.student_user_id == current_user.id)
+    ).all():
+        booking.student_user_id = deleted_user.id
+        session.add(booking)
+
+    # 5. Anonymize the current_user's row (soft delete)
     current_user.full_name = "Deleted User"
     current_user.email = f"deleted_{current_user.id}_{int(now.timestamp())}@system.com"
     current_user.hashed_password = "deleted"
@@ -596,6 +800,9 @@ def delete_me(
     current_user.sample_video_url = None
     current_user.avatar_url = None
     current_user.stripe_account_id = None
+    current_user.stripe_customer_id = None
+    current_user.subscription_tier = current_user.subscription_tier.__class__.FREE
+    current_user.subscription_expires_at = None
     current_user.deleted_at = now
     current_user.role = UserRole.STUDENT
 

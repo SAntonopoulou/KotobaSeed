@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import client from '../api/client';
 import { useAuth } from '../context/AuthContext';
-import { apexUrl } from '../hooks/useTenant';
+
 import LessonPackManager from '../components/LessonPackManager';
 import BookingsManager from '../components/BookingsManager';
 import AvailabilityEditor from '../components/AvailabilityEditor';
@@ -13,7 +13,6 @@ import MarketplaceListingToggle from '../components/MarketplaceListingToggle';
 import CancellationPolicy from '../components/CancellationPolicy';
 import ArticlesManager from '../components/ArticlesManager';
 import TestimonialsManager from '../components/TestimonialsManager';
-import TutorAnalytics from '../components/TutorAnalytics';
 import EmailTemplatesManager from '../components/EmailTemplatesManager';
 import NewslettersManager from '../components/NewslettersManager';
 import HomeworkTemplatesManager from '../components/HomeworkTemplatesManager';
@@ -21,9 +20,21 @@ import HomeworkAssignmentsManager from '../components/HomeworkAssignmentsManager
 import PlacementTestManager from '../components/PlacementTestManager';
 import ModulesManager from '../components/ModulesManager';
 import SubscriptionPlanManager from '../components/SubscriptionPlanManager';
+import PageBuilder from '../components/PageBuilder';
+import ThemePicker from '../components/ThemePicker';
+import GradingQueue from '../components/GradingQueue';
+import { apexUrl } from '../hooks/useTenant';
 
-// Pull the token out of the URL fragment (#token=...) if present, store it,
-// then scrub the URL so the token doesn't sit in the address bar.
+import DashboardSidebar, { SECTION_KEYS } from '../components/dashboard/DashboardSidebar';
+import SectionHeader from '../components/dashboard/SectionHeader';
+import OverviewPanel from '../components/dashboard/OverviewPanel';
+import ProfileEditor from '../components/dashboard/ProfileEditor';
+
+const STRIPE_EXPRESS_DASHBOARD = 'https://dashboard.stripe.com/express';
+
+// Strip a token from #token=... if present (post-Stripe redirect). Done
+// synchronously on first render so a freshly-onboarded tutor doesn't bounce
+// to /login before we can claim the token.
 const claimTokenFromHash = (login) => {
   if (typeof window === 'undefined' || !window.location.hash) return false;
   const params = new URLSearchParams(window.location.hash.slice(1));
@@ -34,35 +45,28 @@ const claimTokenFromHash = (login) => {
   return true;
 };
 
-const STRIPE_EXPRESS_DASHBOARD = 'https://dashboard.stripe.com/express';
+// Section is selected via #section URL fragment so deep-links work and a
+// refresh stays on the same page. Falls back to overview.
+const readSectionFromHash = () => {
+  if (typeof window === 'undefined') return 'overview';
+  const raw = window.location.hash.replace('#', '').split('?')[0];
+  return SECTION_KEYS.includes(raw) ? raw : 'overview';
+};
 
 const TutorDashboard = () => {
   const navigate = useNavigate();
   const { token, login, logout } = useAuth();
   const [tutor, setTutor] = useState(null);
-  const [form, setForm] = useState({
-    display_name: '',
-    bio: '',
-    photo_url: '',
-    languages_taught: '',
-    languages_spoken: '',
-    public_reply_email: '',
-  });
+  const [section, setSection] = useState(readSectionFromHash);
   const [error, setError] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [savedAt, setSavedAt] = useState(null);
   const [tokenClaimed, setTokenClaimed] = useState(false);
 
-  // Take the token from #token= on the first render if present. We do this
-  // synchronously before the auth check below so a fresh-from-Stripe user
-  // doesn't bounce to /login.
   useMemo(() => {
     const claimed = claimTokenFromHash(login);
     if (claimed) setTokenClaimed(true);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    // Without a token there's nothing to load — send them to login.
     if (!token && !tokenClaimed) {
       navigate('/login');
       return undefined;
@@ -73,14 +77,6 @@ const TutorDashboard = () => {
         const res = await client.get('/tutor/me');
         if (!cancelled) {
           setTutor(res.data);
-          setForm({
-            display_name: res.data.display_name || '',
-            bio: res.data.bio || '',
-            photo_url: res.data.photo_url || '',
-            languages_taught: res.data.languages_taught || '',
-            languages_spoken: res.data.languages_spoken || '',
-            public_reply_email: res.data.public_reply_email || '',
-          });
         }
       } catch (err) {
         if (!cancelled) {
@@ -97,30 +93,17 @@ const TutorDashboard = () => {
     };
   }, [token, tokenClaimed, navigate]);
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setForm((f) => ({ ...f, [name]: value }));
-  };
-
-  const handleSave = async (e) => {
-    e.preventDefault();
-    setError('');
-    setSaving(true);
-    try {
-      // Only send fields that have values (PATCH semantics — backend uses
-      // exclude_unset).
-      const payload = Object.fromEntries(
-        Object.entries(form).filter(([, v]) => v !== '')
-      );
-      const res = await client.patch('/tutor/me', payload);
-      setTutor(res.data);
-      setSavedAt(new Date());
-    } catch (err) {
-      const detail = err?.response?.data?.detail;
-      setError(typeof detail === 'string' ? detail : 'Could not save changes.');
-    } finally {
-      setSaving(false);
+  // Sync section selection to the URL hash for refresh-stable deep links.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (window.location.hash.replace('#', '') !== section) {
+      history.replaceState(null, '', `${window.location.pathname}#${section}`);
     }
+  }, [section]);
+
+  const handleLogout = () => {
+    logout();
+    navigate('/');
   };
 
   if (error && !tutor) {
@@ -142,242 +125,149 @@ const TutorDashboard = () => {
     );
   }
 
-  const isPaused = tutor.account_status !== 'active';
-
   return (
-    <div className="bg-kotoba-background min-h-screen">
-      <header className="bg-white shadow-sm">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between flex-wrap gap-2">
-          <div className="flex items-center gap-3">
-            <a
-              href={apexUrl('/')}
-              className="text-xs uppercase tracking-wider text-kotoba-text/50 hover:text-kotoba-primary"
-              title="Browse Kotobaseed"
-            >
-              Kotobaseed
-            </a>
-            <span className="text-kotoba-text/30">·</span>
-            <div>
-              <span className="text-xl font-semibold text-kotoba-primary">{tutor.display_name}</span>
-              <span className="ml-3 text-sm text-kotoba-text/60">Dashboard</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <a href="/" className="text-sm text-kotoba-primary hover:underline">
-              View your site
-            </a>
-            <button
-              type="button"
-              onClick={() => {
-                logout();
-                navigate('/');
-              }}
-              className="text-sm text-kotoba-text/70 hover:text-kotoba-text"
-            >
-              Log out
-            </button>
-          </div>
-        </div>
-      </header>
+    <div className="bg-kotoba-background min-h-screen lg:flex">
+      <DashboardSidebar
+        tutor={tutor}
+        currentSection={section}
+        onSelect={setSection}
+        onLogout={handleLogout}
+      />
 
-      <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
-        {/* Onboarding status banner */}
-        <section className={`rounded-2xl p-6 ${isPaused ? 'bg-kotoba-secondary/20' : 'bg-white shadow-sm'}`}>
-          <div className="flex items-start justify-between gap-4 flex-wrap">
-            <div>
-              <h2 className="text-lg font-bold text-kotoba-primary">
-                {isPaused ? 'Stripe verification pending' : 'Your site is live'}
-              </h2>
-              <p className="mt-1 text-sm text-kotoba-text">
-                {isPaused
-                  ? 'Finish Stripe identity verification to start taking bookings.'
-                  : 'Bookings and payments are turned on.'}
-              </p>
-              {tutor.stripe_connect_account_id && (
-                <p className="mt-2 text-xs text-kotoba-text/60 font-mono">
-                  Stripe account: {tutor.stripe_connect_account_id}
-                </p>
-              )}
-            </div>
-            <a
-              href={STRIPE_EXPRESS_DASHBOARD}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center px-4 py-2 rounded-md border-2 border-kotoba-primary text-kotoba-primary font-medium hover:bg-kotoba-primary hover:text-white transition-colors"
-            >
-              Open Stripe dashboard
-            </a>
-          </div>
-        </section>
+      <main className="flex-1 min-w-0 px-4 sm:px-6 lg:px-10 py-8 space-y-6 max-w-5xl mx-auto w-full">
+        {section === 'overview' && (
+          <OverviewPanel tutor={tutor} onJumpTo={setSection} />
+        )}
 
-        {/* Business analytics — at the top so tutors see what's happening
-            before anything else when they open the dashboard. */}
-        <TutorAnalytics />
+        {section === 'bookings' && (
+          <>
+            <SectionHeader
+              title="Bookings"
+              description="Upcoming, completed, and cancelled lessons across all students."
+            />
+            <BookingsManager />
+          </>
+        )}
 
-        {/* Profile editor */}
-        <section className="bg-white rounded-2xl shadow-sm p-6">
-          <h2 className="text-lg font-bold text-kotoba-primary mb-4">Your profile</h2>
+        {section === 'lessons' && (
+          <>
+            <SectionHeader
+              title="Lessons"
+              description="Availability, pricing, free trial, and cancellation rules. This is what students see when they go to book."
+            />
+            <AvailabilityEditor />
+            <SingleLessonQuickSet />
+            <LessonPackManager />
+            <TrialSettings />
+            <CancellationPolicy />
+          </>
+        )}
 
-          {error && (
-            <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm">
-              {error}
-            </div>
-          )}
-          {savedAt && !error && (
-            <div className="mb-4 bg-kotoba-primary/10 text-kotoba-primary px-4 py-3 rounded-md text-sm">
-              Saved at {savedAt.toLocaleTimeString()}.
-            </div>
-          )}
+        {section === 'content' && (
+          <>
+            <SectionHeader
+              title="Content"
+              description="Articles, modules, and your monthly subscription. Build the library that brings students to you."
+            />
+            <ArticlesManager />
+            <ModulesManager />
+            <SubscriptionPlanManager />
+            <NewslettersManager />
+          </>
+        )}
 
-          <form onSubmit={handleSave} className="space-y-5">
-            <div>
-              <label className="block text-sm font-medium text-kotoba-text mb-1" htmlFor="display_name">
-                Display name
-              </label>
-              <input
-                id="display_name"
-                name="display_name"
-                type="text"
-                value={form.display_name}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-kotoba-text/20 rounded-md focus:outline-none focus:ring-2 focus:ring-kotoba-primary"
-              />
-            </div>
+        {section === 'students' && (
+          <>
+            <SectionHeader
+              title="Students"
+              description="Homework, placement test, and the testimonials students leave you."
+            />
+            <GradingQueue />
+            <PlacementTestManager />
+            <HomeworkTemplatesManager />
+            <HomeworkAssignmentsManager />
+            <TestimonialsManager />
+          </>
+        )}
 
-            <div>
-              <label className="block text-sm font-medium text-kotoba-text mb-1" htmlFor="bio">
-                Bio
-              </label>
-              <textarea
-                id="bio"
-                name="bio"
-                value={form.bio}
-                onChange={handleChange}
-                rows={5}
-                className="w-full px-3 py-2 border border-kotoba-text/20 rounded-md focus:outline-none focus:ring-2 focus:ring-kotoba-primary"
-              />
-              <p className="mt-1 text-xs text-kotoba-text/60">Appears on your public site. Line breaks are preserved.</p>
-            </div>
+        {section === 'site' && (
+          <>
+            <SectionHeader
+              title="Your site"
+              description="Your public profile, page layout, custom domain, and marketplace listing."
+            />
+            <ProfileEditor tutor={tutor} onSaved={setTutor} />
+            <ThemePicker tutor={tutor} onSaved={setTutor} />
+            <PageBuilder />
+            <CustomDomainSettings />
+            <MarketplaceListingToggle />
+          </>
+        )}
 
-            <div>
-              <label className="block text-sm font-medium text-kotoba-text mb-1" htmlFor="photo_url">
-                Photo URL
-              </label>
-              <input
-                id="photo_url"
-                name="photo_url"
-                type="url"
-                value={form.photo_url}
-                onChange={handleChange}
-                placeholder="https://…"
-                className="w-full px-3 py-2 border border-kotoba-text/20 rounded-md focus:outline-none focus:ring-2 focus:ring-kotoba-primary"
-              />
-              <p className="mt-1 text-xs text-kotoba-text/60">
-                Hosted image URL. File uploads land in a later step.
-              </p>
-            </div>
-
-            <div className="grid sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-kotoba-text mb-1" htmlFor="languages_taught">
-                  Languages you teach
-                </label>
-                <input
-                  id="languages_taught"
-                  name="languages_taught"
-                  type="text"
-                  value={form.languages_taught}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-kotoba-text/20 rounded-md focus:outline-none focus:ring-2 focus:ring-kotoba-primary"
-                />
+        {section === 'money' && (
+          <>
+            <SectionHeader
+              title="Money"
+              description="Payouts and Stripe verification. Kotobaseed never holds your money — it goes straight to your bank."
+            />
+            <section className="bg-white rounded-2xl shadow-sm p-6">
+              <div className="flex items-start justify-between gap-4 flex-wrap">
+                <div>
+                  <h2 className="text-lg font-bold text-kotoba-primary">
+                    {tutor.account_status === 'active'
+                      ? 'Payouts are live'
+                      : 'Stripe verification pending'}
+                  </h2>
+                  <p className="mt-1 text-sm text-kotoba-text">
+                    {tutor.account_status === 'active'
+                      ? 'Stripe sends payouts to your bank on its standard schedule. Manage payout cadence + bank details from the Stripe dashboard.'
+                      : 'Finish Stripe identity verification to start taking bookings. Your site stays online; payments stay paused until verification is complete.'}
+                  </p>
+                  {tutor.stripe_connect_account_id && (
+                    <p className="mt-2 text-xs text-kotoba-text/60 font-mono">
+                      Stripe account: {tutor.stripe_connect_account_id}
+                    </p>
+                  )}
+                </div>
+                <a
+                  href={STRIPE_EXPRESS_DASHBOARD}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center px-4 py-2 rounded-md border-2 border-kotoba-primary text-kotoba-primary font-medium hover:bg-kotoba-primary hover:text-white transition-colors"
+                >
+                  Open Stripe dashboard
+                </a>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-kotoba-text mb-1" htmlFor="languages_spoken">
-                  Languages you speak
-                </label>
-                <input
-                  id="languages_spoken"
-                  name="languages_spoken"
-                  type="text"
-                  value={form.languages_spoken}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-kotoba-text/20 rounded-md focus:outline-none focus:ring-2 focus:ring-kotoba-primary"
-                />
+            </section>
+
+            <section className="bg-white rounded-2xl shadow-sm p-6">
+              <div className="flex items-start justify-between gap-4 flex-wrap">
+                <div>
+                  <h2 className="text-lg font-bold text-kotoba-primary">Your plan</h2>
+                  <p className="mt-1 text-sm text-kotoba-text">
+                    Upgrade to <strong>Pro</strong> or <strong>Business</strong> to unlock themes, the page builder, custom domain, 0% lesson fees, and a higher classroom-minute quota. Subscriptions are managed through Kotobaseed.
+                  </p>
+                </div>
+                <a
+                  href={apexUrl('/pricing')}
+                  className="inline-flex items-center px-4 py-2 rounded-md bg-kotoba-primary text-white font-medium hover:bg-kotoba-primary/90"
+                >
+                  View plans
+                </a>
               </div>
-            </div>
+            </section>
+          </>
+        )}
 
-            <div>
-              <label className="block text-sm font-medium text-kotoba-text mb-1" htmlFor="public_reply_email">
-                Reply-to email (optional)
-              </label>
-              <input
-                id="public_reply_email"
-                name="public_reply_email"
-                type="email"
-                value={form.public_reply_email}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-kotoba-text/20 rounded-md focus:outline-none focus:ring-2 focus:ring-kotoba-primary"
-              />
-              <p className="mt-1 text-xs text-kotoba-text/60">
-                If set, students replying to your transactional emails reach this address instead of Kotobaseed support.
-              </p>
-            </div>
-
-            <div className="pt-2 flex justify-end">
-              <button
-                type="submit"
-                disabled={saving}
-                className="px-5 py-2.5 rounded-lg bg-kotoba-secondary text-kotoba-text font-semibold hover:bg-kotoba-secondary-dark disabled:opacity-60"
-              >
-                {saving ? 'Saving…' : 'Save changes'}
-              </button>
-            </div>
-          </form>
-        </section>
-
-        <BookingsManager />
-
-        <ArticlesManager />
-
-        <HomeworkAssignmentsManager />
-
-        <HomeworkTemplatesManager />
-
-        <PlacementTestManager />
-
-        <ModulesManager />
-
-        <SubscriptionPlanManager />
-
-        <TestimonialsManager />
-
-        <AvailabilityEditor />
-
-        <SingleLessonQuickSet />
-
-        <LessonPackManager />
-
-        <TrialSettings />
-
-        <CancellationPolicy />
-
-        <EmailTemplatesManager />
-
-        <NewslettersManager />
-
-        <CustomDomainSettings />
-
-        <MarketplaceListingToggle />
-
-        {/* Placeholder for future modules */}
-        <section className="bg-white/60 rounded-2xl p-6 text-sm text-kotoba-text">
-          <h3 className="font-semibold text-kotoba-primary mb-2">Coming soon</h3>
-          <ul className="space-y-1 list-disc list-inside">
-            <li>Classroom video (Daily.co rooms per lesson)</li>
-            <li>Reschedule and refund-window automations</li>
-            <li>Landing-page builder + theme</li>
-          </ul>
-        </section>
+        {section === 'settings' && (
+          <>
+            <SectionHeader
+              title="Settings"
+              description="Transactional emails students receive from your site."
+            />
+            <EmailTemplatesManager />
+          </>
+        )}
       </main>
     </div>
   );

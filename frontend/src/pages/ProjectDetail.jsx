@@ -249,27 +249,27 @@ const ProjectDetail = () => {
           {isOwner && isEditingImage && (
             <div className="mb-6 p-4 border rounded-lg bg-gray-50 shadow-sm">
               <label htmlFor="project_image_url" className="block text-sm font-medium text-gray-700">Project Image URL</label>
-              <input type="url" id="project_image_url" className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" value={newImageUrl} onChange={(e) => setNewImageUrl(e.target.value)} placeholder="https://example.com/your-image.png" />
+              <input type="url" id="project_image_url" className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={newImageUrl} onChange={(e) => setNewImageUrl(e.target.value)} placeholder="https://example.com/your-image.png" />
               <div className="mt-3 flex justify-end space-x-3">
                 <button onClick={() => setIsEditingImage(false)} className="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50">Cancel</button>
-                <button onClick={handleUpdateImage} className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">Save Image</button>
+                <button onClick={handleUpdateImage} className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-kotoba-primary hover:bg-kotoba-primary/90">Save Image</button>
               </div>
             </div>
           )}
 
           <h1 className="text-3xl font-extrabold text-gray-900 sm:text-4xl mb-4">{project.title}</h1>
           <div className="flex flex-wrap items-center gap-2 mb-6">
-            <span className="inline-flex items-center px-3 py-0.5 rounded-full text-sm font-medium bg-blue-100 text-blue-800">{project.language}</span>
+            <span className="inline-flex items-center px-3 py-0.5 rounded-full text-sm font-medium bg-kotoba-secondary/20 text-kotoba-text">{project.language}</span>
             <span className="inline-flex items-center px-3 py-0.5 rounded-full text-sm font-medium bg-green-100 text-green-800">{project.level}</span>
             {tags.map((tag, index) => <span key={index} className="inline-flex items-center px-3 py-0.5 rounded-full text-sm font-medium bg-gray-100 text-gray-800">{tag}</span>)}
           </div>
           <div className="mb-6 text-gray-500 text-sm flex items-center gap-4">
-            <p className="flex items-center">By <Link to={`/profile/${project.teacher_id}`} className="text-indigo-600 hover:underline ml-1">{project.teacher_name}</Link><VerifiedBadge languages={project.teacher_verified_languages} /></p>
+            <p className="flex items-center">By <Link to={`/profile/${project.teacher_id}`} className="text-kotoba-primary hover:underline ml-1">{project.teacher_name}</Link><VerifiedBadge languages={project.teacher_verified_languages} /></p>
             {canFollow && (
               isFollowing ? (
                 <button onClick={() => handleUnfollow(project.teacher_id)} className="bg-gray-200 text-gray-700 px-3 py-1 rounded-md text-sm font-medium">Unfollow</button>
               ) : (
-                <button onClick={() => handleFollow(project.teacher_id)} className="bg-indigo-600 text-white px-3 py-1 rounded-md text-sm font-medium">Follow</button>
+                <button onClick={() => handleFollow(project.teacher_id)} className="bg-kotoba-primary text-white px-3 py-1 rounded-md text-sm font-medium">Follow</button>
               )
             )}
           </div>
@@ -281,7 +281,7 @@ const ProjectDetail = () => {
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-2xl font-bold text-gray-900">Series Introduction</h2>
                 {isOwner && (
-                  <button onClick={() => { setIsEditingIntroVideo(!isEditingIntroVideo); setNewIntroVideoUrl(project.series_intro_video_url || ''); }} className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none">
+                  <button onClick={() => { setIsEditingIntroVideo(!isEditingIntroVideo); setNewIntroVideoUrl(project.series_intro_video_url || ''); }} className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-kotoba-primary hover:bg-kotoba-primary/90 focus:outline-none">
                     {project.series_intro_video_url ? 'Edit Intro Video' : 'Add Intro Video'}
                   </button>
                 )}
@@ -289,10 +289,10 @@ const ProjectDetail = () => {
               {isEditingIntroVideo ? (
                 <div className="p-4 border rounded-lg bg-gray-50 shadow-sm">
                   <label htmlFor="series_intro_video_url" className="block text-sm font-medium text-gray-700">Intro Video URL</label>
-                  <input type="url" id="series_intro_video_url" className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" value={newIntroVideoUrl} onChange={(e) => setNewIntroVideoUrl(e.target.value)} placeholder="https://youtube.com/watch?v=..." />
+                  <input type="url" id="series_intro_video_url" className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={newIntroVideoUrl} onChange={(e) => setNewIntroVideoUrl(e.target.value)} placeholder="https://youtube.com/watch?v=..." />
                   <div className="mt-3 flex justify-end space-x-3">
                     <button onClick={() => setIsEditingIntroVideo(false)} className="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50">Cancel</button>
-                    <button onClick={handleSaveIntroVideo} className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">Save Intro Video</button>
+                    <button onClick={handleSaveIntroVideo} className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-kotoba-primary hover:bg-kotoba-primary/90">Save Intro Video</button>
                   </div>
                 </div>
               ) : (
@@ -304,7 +304,7 @@ const ProjectDetail = () => {
           <div className="mt-8 border-t border-gray-200 pt-8">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-2xl font-bold text-gray-900">Project Videos</h2>
-              {isOwner && project.status === 'successful' && (<button onClick={() => setShowVideoModal(true)} className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none">Link Video</button>)}
+              {isOwner && project.status === 'successful' && (<button onClick={() => setShowVideoModal(true)} className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-kotoba-primary hover:bg-kotoba-primary/90 focus:outline-none">Link Video</button>)}
             </div>
             {videos.length > 0 ? (
               <div className="space-y-8">
@@ -317,14 +317,14 @@ const ProjectDetail = () => {
                         <h4 className="text-sm font-medium text-gray-800 mb-2">Resources:</h4>
                         <ul className="space-y-1">
                           {video.resources.map(res => (
-                            <li key={res.id}><a href={res.url} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">{res.title}</a></li>
+                            <li key={res.id}><a href={res.url} target="_blank" rel="noopener noreferrer" className="text-kotoba-primary hover:underline">{res.title}</a></li>
                           ))}
                         </ul>
                       </div>
                     )}
                     {isOwner && (
                       <div className="mt-4 text-right">
-                        <button onClick={() => { setSelectedVideoId(video.id); setShowResourceModal(true); }} className="text-sm text-indigo-600 hover:underline">Add Resource</button>
+                        <button onClick={() => { setSelectedVideoId(video.id); setShowResourceModal(true); }} className="text-sm text-kotoba-primary hover:underline">Add Resource</button>
                       </div>
                     )}
                   </div>
@@ -373,16 +373,16 @@ const ProjectDetail = () => {
           <div className="mt-8 border-t border-gray-200 pt-8">
             <h2 className="text-2xl font-bold text-gray-900 mb-4">Project Updates</h2>
             {isOwner && (
-              <div className="mb-6"><textarea className="w-full border border-gray-300 rounded-md p-2 text-sm" rows={3} placeholder="Post an update for your backers..." value={newUpdate} onChange={(e) => setNewUpdate(e.target.value)} /><div className="mt-2 text-right"><button onClick={handlePostUpdate} className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none">Post Update</button></div></div>
+              <div className="mb-6"><textarea className="w-full border border-gray-300 rounded-md p-2 text-sm" rows={3} placeholder="Post an update for your backers..." value={newUpdate} onChange={(e) => setNewUpdate(e.target.value)} /><div className="mt-2 text-right"><button onClick={handlePostUpdate} className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-kotoba-primary hover:bg-kotoba-primary/90 focus:outline-none">Post Update</button></div></div>
             )}
             {updates.length === 0 ? (<p className="text-gray-500 text-sm">No updates yet.</p>) : (
               <div className="space-y-4">
                 {updates.map(update => (
                   <div key={update.id} className="bg-gray-50 p-4 rounded-lg border border-gray-200">
                     {editingUpdateId === update.id ? (
-                      <div><textarea className="w-full border border-gray-300 rounded-md p-2 text-sm" rows={3} value={editingContent} onChange={(e) => setEditingContent(e.target.value)} /><div className="mt-2 text-right space-x-2"><button onClick={handleCancelEdit} className="text-sm text-gray-600">Cancel</button><button onClick={() => handleSaveUpdate(update.id)} className="text-sm text-indigo-600 font-medium">Save</button></div></div>
+                      <div><textarea className="w-full border border-gray-300 rounded-md p-2 text-sm" rows={3} value={editingContent} onChange={(e) => setEditingContent(e.target.value)} /><div className="mt-2 text-right space-x-2"><button onClick={handleCancelEdit} className="text-sm text-gray-600">Cancel</button><button onClick={() => handleSaveUpdate(update.id)} className="text-sm text-kotoba-primary font-medium">Save</button></div></div>
                     ) : (
-                      <><p className="text-gray-800 whitespace-pre-line">{update.content}</p><div className="flex justify-between items-center mt-2"><p className="text-xs text-gray-500">{new Date(update.created_at).toLocaleDateString()}</p>{isOwner && (<button onClick={() => handleEditUpdate(update)} className="text-xs text-indigo-600 hover:underline">Edit</button>)}</div></>
+                      <><p className="text-gray-800 whitespace-pre-line">{update.content}</p><div className="flex justify-between items-center mt-2"><p className="text-xs text-gray-500">{new Date(update.created_at).toLocaleDateString()}</p>{isOwner && (<button onClick={() => handleEditUpdate(update)} className="text-xs text-kotoba-primary hover:underline">Edit</button>)}</div></>
                     )}
                   </div>
                 ))}
@@ -395,13 +395,13 @@ const ProjectDetail = () => {
           <div className="bg-white p-6 rounded-lg shadow-lg border border-gray-200 sticky top-6">
             <div className="mb-6">
               <div className="flex justify-between text-base font-medium text-gray-900 mb-1"><span>{formatCurrency(project.current_funding)}</span><span className="text-gray-500">goal {formatCurrency(project.funding_goal)}</span></div>
-              <div className="w-full bg-gray-200 rounded-full h-3"><div className="bg-indigo-600 h-3 rounded-full transition-all duration-500" style={{ width: `${percentage}%` }}></div></div>
+              <div className="w-full bg-gray-200 rounded-full h-3"><div className="bg-kotoba-primary h-3 rounded-full transition-all duration-500" style={{ width: `${percentage}%` }}></div></div>
               <p className="mt-2 text-sm text-gray-500 text-right">{Math.round(percentage)}% funded</p>
             </div>
             {project.is_series && project.num_videos && (
               <p className="text-sm text-gray-500 mb-3">Expected videos: {project.num_videos}</p>
             )}
-            {project.status === 'funding' ? (token ? (<PledgeForm projectId={project.id} projectName={project.title} />) : (<div className="text-center"><p className="text-gray-600 mb-4">Log in to back this project.</p><Link to="/login" className="block w-full bg-indigo-600 text-white text-center py-2 px-4 rounded-md hover:bg-indigo-700">Login to Pledge</Link></div>)) : (<div className="bg-gray-100 p-4 rounded text-center text-gray-600">This project is {project.status.replace(/_/g, ' ')}.</div>)}
+            {project.status === 'funding' ? (token ? (<PledgeForm projectId={project.id} projectName={project.title} />) : (<div className="text-center"><p className="text-gray-600 mb-4">Log in to back this project.</p><Link to="/login" className="block w-full bg-kotoba-primary text-white text-center py-2 px-4 rounded-md hover:bg-kotoba-primary/90">Login to Pledge</Link></div>)) : (<div className="bg-gray-100 p-4 rounded text-center text-gray-600">This project is {project.status.replace(/_/g, ' ')}.</div>)}
             
             {['successful', 'completed', 'pending_confirmation'].includes(project.status) && project.teacher_stripe_account_id && (
               <div className="mt-6 pt-6 border-t border-gray-200">

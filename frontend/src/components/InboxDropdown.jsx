@@ -59,14 +59,14 @@ const InboxDropdown = ({ closeDropdown }) => {
             <Link
               key={conv.id}
               to={`/messages/${conv.id}`}
-              className={`flex items-center px-4 py-3 hover:bg-gray-100 ${conv.unread_messages_count > 0 ? 'bg-blue-50' : ''}`}
+              className={`flex items-center px-4 py-3 hover:bg-gray-100 ${conv.unread_messages_count > 0 ? 'bg-kotoba-primary/5' : ''}`}
               onClick={closeDropdown}
             >
               <div className="flex-shrink-0 mr-3">
                 {conv.other_participant.avatar_url ? (
                   <img className="h-8 w-8 rounded-full object-cover" src={conv.other_participant.avatar_url} alt={conv.other_participant.full_name} />
                 ) : (
-                  <div className="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-xs">
+                  <div className="h-8 w-8 rounded-full bg-kotoba-primary/10 flex items-center justify-center text-kotoba-primary font-bold text-xs">
                     {conv.other_participant.full_name ? conv.other_participant.full_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) : '??'}
                   </div>
                 )}
@@ -84,7 +84,7 @@ const InboxDropdown = ({ closeDropdown }) => {
                   {conv.last_message_content || 'No messages yet.'}
                 </p>
                 {conv.unread_messages_count > 0 && (
-                  <span className="text-xs text-blue-600">
+                  <span className="text-xs text-kotoba-primary">
                     {conv.unread_messages_count} unread
                   </span>
                 )}
@@ -95,7 +95,7 @@ const InboxDropdown = ({ closeDropdown }) => {
       )}
       <Link
         to="/messages"
-        className="block w-full text-center px-4 py-2 text-sm text-indigo-600 hover:bg-gray-100 border-t border-gray-200"
+        className="block w-full text-center px-4 py-2 text-sm text-kotoba-primary hover:bg-gray-100 border-t border-gray-200"
         onClick={closeDropdown}
       >
         View All Messages

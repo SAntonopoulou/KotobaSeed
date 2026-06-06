@@ -7,7 +7,7 @@ import VideoPlayer from '../components/VideoPlayer';
 import { useAuth } from '../context/AuthContext'; // Import useAuth
 
 const VerifiedLanguageBadge = ({ language }) => (
-  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-kotoba-secondary/20 text-kotoba-text">
     <FaShieldAlt className="mr-1.5" />
     {language}
   </span>
@@ -163,13 +163,13 @@ const Profile = () => {
             {profile.avatar_url ? (
                 <img src={profile.avatar_url} alt={profile.full_name} className="h-16 w-16 rounded-full object-cover mr-4" onError={(e) => { e.target.onerror = null; e.target.src = `https://ui-avatars.com/api/?name=${profile.full_name}&background=random`; }}/>
             ) : (
-                <div className="h-16 w-16 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-xl mr-4">{getInitials(profile.full_name)}</div>
+                <div className="h-16 w-16 rounded-full bg-kotoba-primary/10 flex items-center justify-center text-kotoba-primary font-bold text-xl mr-4">{getInitials(profile.full_name)}</div>
             )}
             <div>
                 <div className="flex items-center gap-x-2">
                     <h3 className="text-lg leading-6 font-medium text-gray-900">{profile.full_name}</h3>
                     {profile.subscription_tier && <SubscriptionBadge tier={profile.subscription_tier} />} {/* Subscription Badge */}
-                    {hasVerifiedLanguages && <FaShieldAlt className="text-blue-500" title="This teacher has verified languages" />}
+                    {hasVerifiedLanguages && <FaShieldAlt className="text-kotoba-primary" title="This teacher has verified languages" />}
                 </div>
                 <p className="mt-1 max-w-2xl text-sm text-gray-500">
                     {profile.role.charAt(0).toUpperCase() + profile.role.slice(1)}
@@ -177,19 +177,19 @@ const Profile = () => {
                         <span className="ml-3 inline-flex items-center">
                             <svg className="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>
                             <span className="ml-1 font-bold text-gray-700">{profile.average_rating}</span>
-                            <Link to={`/teacher/${profile.id}/reviews`} className="ml-3 text-xs text-indigo-600 hover:underline">See all reviews</Link>
+                            <Link to={`/teacher/${profile.id}/reviews`} className="ml-3 text-xs text-kotoba-primary hover:underline">See all reviews</Link>
                         </span>
                     )}
                 </p>
             </div>
           </div>
           {isOwner ? (
-            <button onClick={() => setIsEditing(!isEditing)} className="text-indigo-600 hover:text-indigo-900 text-sm font-medium">{isEditing ? 'Cancel' : 'Edit Profile'}</button>
+            <button onClick={() => setIsEditing(!isEditing)} className="text-kotoba-primary hover:text-kotoba-primary text-sm font-medium">{isEditing ? 'Cancel' : 'Edit Profile'}</button>
           ) : currentUser && profile.role === 'creator' && (
             profile.is_following ? (
               <button onClick={() => handleUnfollow(profile.id)} className="bg-gray-200 text-gray-700 px-3 py-1 rounded-md text-sm font-medium">Unfollow</button>
             ) : (
-              <button onClick={() => handleFollow(profile.id)} className="bg-indigo-600 text-white px-3 py-1 rounded-md text-sm font-medium">Follow</button>
+              <button onClick={() => handleFollow(profile.id)} className="bg-kotoba-primary text-white px-3 py-1 rounded-md text-sm font-medium">Follow</button>
             )
           )}
         </div>
@@ -244,7 +244,7 @@ const Profile = () => {
             </div>
           </dl>
         </div>
-        {isEditing && <div className="px-4 py-3 bg-gray-50 text-right sm:px-6"><button onClick={handleUpdate} className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none">Save</button></div>}
+        {isEditing && <div className="px-4 py-3 bg-gray-50 text-right sm:px-6"><button onClick={handleUpdate} className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-kotoba-primary hover:bg-kotoba-primary/90 focus:outline-none">Save</button></div>}
       </div>
 
       {profile.role === 'creator' && (
@@ -269,7 +269,7 @@ const Profile = () => {
                 ))}
               </div>
               {hasMoreFollowers && (
-                <button onClick={loadMoreFollowers} className="w-full text-center text-indigo-600 hover:underline mt-4">Show More</button>
+                <button onClick={loadMoreFollowers} className="w-full text-center text-kotoba-primary hover:underline mt-4">Show More</button>
               )}
             </div>
           ) : <p className="text-gray-500">No followers yet.</p>}
@@ -330,7 +330,7 @@ const Profile = () => {
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-medium text-gray-900">Completed Projects</h3>
                 {projectData.total_count > 2 && (
-                  <Link to={`/teacher/${id}/archive`} className="text-sm font-medium text-indigo-600 hover:text-indigo-800">
+                  <Link to={`/teacher/${id}/archive`} className="text-sm font-medium text-kotoba-primary hover:text-kotoba-primary">
                     See all projects &rarr;
                   </Link>
                 )}
@@ -356,7 +356,7 @@ const Profile = () => {
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-medium text-gray-900">Backed Projects</h3>
                 {projectData.total_count > 2 && (
-                  <Link to={`/student/${id}/archive`} className="text-sm font-medium text-indigo-600 hover:text-indigo-800">
+                  <Link to={`/student/${id}/archive`} className="text-sm font-medium text-kotoba-primary hover:text-kotoba-primary">
                     See all projects &rarr;
                   </Link>
                 )}

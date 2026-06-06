@@ -9,7 +9,9 @@ from ..database import get_session
 from ..deps import get_current_admin
 from ..models import (
     AuditLog,
+    PlatformSetting,
     Notification,
+    UserRole,
     Pledge,
     PledgeStatus,
     Project,
@@ -266,16 +268,25 @@ def list_audit_log(
     session: Session = Depends(get_session),
     action: str | None = Query(default=None),
     target_type: str | None = Query(default=None),
+    actor: str | None = Query(default=None, description="Filter by actor email or substring"),
+    actor_user_id: int | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ):
     """Most recent admin + system actions first. Filterable by action prefix
-    (e.g. `verification.`) or target_type."""
+    (e.g. `verification.`, `support.`, `settings.`), target_type, or actor
+    (by user id or label substring). Use the actor filter to audit a
+    specific staff member's history.
+    """
     filters = []
     if action:
         filters.append(AuditLog.action.like(f"{action}%"))
     if target_type:
         filters.append(AuditLog.target_type == target_type)
+    if actor_user_id is not None:
+        filters.append(AuditLog.actor_user_id == actor_user_id)
+    if actor:
+        filters.append(AuditLog.actor_label.like(f"%{actor}%"))
 
     total = session.exec(
         select(func.count(AuditLog.id)).where(*filters)
@@ -326,3 +337,210 @@ def reject_verification(
         details={"admin_notes": rejection.admin_notes} if rejection.admin_notes else None,
     )
     return verification
+
+
+# ---- Platform settings ------------------------------------------------------
+
+
+class PlatformSettingRead(BaseModel):
+    key: str
+    value: object | None  # decoded JSON
+    updated_at: datetime
+    updated_by_user_id: int | None
+
+
+class PlatformSettingWrite(BaseModel):
+    value: object | None
+
+
+@router.get("/settings", response_model=list[PlatformSettingRead])
+def list_platform_settings(
+    current_user: User = Depends(get_current_admin),
+    session: Session = Depends(get_session),
+) -> list[PlatformSettingRead]:
+    """Admin-only — every stored setting + last-write metadata."""
+    import json
+
+    rows = session.exec(select(PlatformSetting).order_by(PlatformSetting.key)).all()
+    out: list[PlatformSettingRead] = []
+    for r in rows:
+        try:
+            decoded = json.loads(r.value_json) if r.value_json else None
+        except (TypeError, ValueError):
+            decoded = None
+        out.append(
+            PlatformSettingRead(
+                key=r.key,
+                value=decoded,
+                updated_at=r.updated_at,
+                updated_by_user_id=r.updated_by_user_id,
+            )
+        )
+    return out
+
+
+# ---- Staff management -------------------------------------------------------
+
+
+class StaffUserRead(BaseModel):
+    id: int
+    email: str
+    full_name: str | None
+    role: UserRole
+    created_at: datetime
+    is_active: bool
+
+
+class StaffRoleUpdate(BaseModel):
+    role: UserRole
+
+
+@router.get("/staff", response_model=list[StaffUserRead])
+def list_staff(
+    current_user: User = Depends(get_current_admin),
+    session: Session = Depends(get_session),
+) -> list[StaffUserRead]:
+    """Admin-only — every staff user (support / manager / admin / legacy moderator)."""
+    rows = session.exec(
+        select(User)
+        .where(
+            User.role.in_(
+                [
+                    UserRole.SUPPORT,
+                    UserRole.MANAGER,
+                    UserRole.ADMIN,
+                    UserRole.MODERATOR,
+                ]
+            )
+        )
+        .order_by(User.role, User.email)
+    ).all()
+    return [
+        StaffUserRead(
+            id=u.id,
+            email=u.email,
+            full_name=u.full_name,
+            role=u.role,
+            created_at=u.created_at,
+            is_active=u.is_active,
+        )
+        for u in rows
+    ]
+
+
+@router.put("/users/{user_id}/role", response_model=StaffUserRead)
+def set_user_role(
+    user_id: int,
+    payload: StaffRoleUpdate,
+    current_user: User = Depends(get_current_admin),
+    session: Session = Depends(get_session),
+) -> StaffUserRead:
+    """Admin-only — change any user's role.
+
+    Cannot change your own role (otherwise you could lock yourself out).
+    Every change is audit-logged with before/after.
+    """
+    if user_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You can't change your own role.",
+        )
+    target = session.get(User, user_id)
+    if target is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found."
+        )
+    if target.deleted_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot change role on a deleted account.",
+        )
+    previous = target.role
+    target.role = payload.role
+    target.updated_at = datetime.now(UTC)
+    session.add(target)
+    session.commit()
+    session.refresh(target)
+    record_audit(
+        session,
+        actor=current_user,
+        action="user.role_changed",
+        target_type="user",
+        target_id=target.id,
+        summary=f"Changed role for {target.email} from {previous.value} to {target.role.value}.",
+        details={"from": previous.value, "to": target.role.value},
+    )
+    return StaffUserRead(
+        id=target.id,
+        email=target.email,
+        full_name=target.full_name,
+        role=target.role,
+        created_at=target.created_at,
+        is_active=target.is_active,
+    )
+
+
+@router.get("/users/search", response_model=list[StaffUserRead])
+def search_users_for_staff_promotion(
+    q: str = Query(min_length=2, max_length=120),
+    current_user: User = Depends(get_current_admin),
+    session: Session = Depends(get_session),
+) -> list[StaffUserRead]:
+    """Admin-only — search non-staff users by email/name so admin can
+    promote them. Limits results so an empty query can't dump the whole
+    user table.
+    """
+    pattern = f"%{q.lower()}%"
+    rows = session.exec(
+        select(User)
+        .where(
+            User.deleted_at.is_(None),
+            (func.lower(User.email).like(pattern))
+            | (func.lower(User.full_name).like(pattern)),
+        )
+        .limit(20)
+    ).all()
+    return [
+        StaffUserRead(
+            id=u.id,
+            email=u.email,
+            full_name=u.full_name,
+            role=u.role,
+            created_at=u.created_at,
+            is_active=u.is_active,
+        )
+        for u in rows
+    ]
+
+
+@router.put("/settings/{key}", response_model=PlatformSettingRead)
+def set_platform_setting(
+    key: str,
+    payload: PlatformSettingWrite,
+    current_user: User = Depends(get_current_admin),
+    session: Session = Depends(get_session),
+) -> PlatformSettingRead:
+    """Admin-only — upsert a setting. Audit-logged.
+
+    The endpoint accepts any JSON-serialisable value. The frontend knows
+    which keys it edits (social.*, platform.support_email, etc.); it's
+    intentionally loose here so we don't need a code change every time we
+    add a new setting key.
+    """
+    from ..services.platform_settings import set_setting
+
+    set_setting(session, key, payload.value, updated_by_user_id=current_user.id)
+    record_audit(
+        session,
+        actor=current_user,
+        action="settings.updated",
+        target_type="platform_setting",
+        summary=f"Updated platform setting {key}.",
+        details={"key": key, "value": payload.value},
+    )
+    return PlatformSettingRead(
+        key=key,
+        value=payload.value,
+        updated_at=datetime.now(UTC),
+        updated_by_user_id=current_user.id,
+    )

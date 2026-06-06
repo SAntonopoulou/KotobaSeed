@@ -334,6 +334,44 @@ def _load_submission(
     ).first()
 
 
+@tutor_router.get("/grading-queue", response_model=list[HomeworkAssignmentRead])
+def grading_queue(
+    current: CurrentUser,
+    tutor: CurrentTutor,
+    session: Annotated[Session, Depends(get_session)],
+) -> list[HomeworkAssignmentRead]:
+    """Submissions awaiting tutor grading — paid + needs-manual-review + not
+    yet graded. Ordered oldest first so the tutor naturally clears the
+    backlog from the top.
+    """
+    _require_owner(tutor, current)
+    pending = session.exec(
+        select(HomeworkAssignment, HomeworkSubmission)
+        .join(
+            HomeworkSubmission,
+            HomeworkSubmission.assignment_id == HomeworkAssignment.id,
+        )
+        .where(
+            HomeworkAssignment.tutor_id == tutor.id,
+            HomeworkSubmission.needs_manual_review,
+            HomeworkSubmission.manual_score.is_(None),
+            HomeworkSubmission.grading_paid,
+        )
+        .order_by(HomeworkSubmission.submitted_at.asc())
+    ).all()
+    if not pending:
+        return []
+    student_ids = {a.student_user_id for a, _ in pending}
+    students = {
+        u.id: u
+        for u in session.exec(select(User).where(User.id.in_(student_ids))).all()
+    }
+    return [
+        _assignment_to_read(a, student=students.get(a.student_user_id), submission=s)
+        for a, s in pending
+    ]
+
+
 @tutor_router.get("/assignments", response_model=list[HomeworkAssignmentRead])
 def list_tutor_assignments(
     current: CurrentUser,
@@ -442,6 +480,54 @@ def assign_homework(
     session.commit()
     session.refresh(a)
     return _assignment_to_read(a, student=student, submission=None)
+
+
+class HomeworkSubmissionDetail(BaseModel):
+    id: int
+    assignment_id: int
+    student_user_id: int
+    answers_json: str
+    auto_score: int
+    manual_score: int | None
+    max_score: int
+    needs_manual_review: bool
+    feedback: str | None
+    submitted_at: datetime
+    graded_at: datetime | None
+
+
+@tutor_router.get(
+    "/submissions/{submission_id}",
+    response_model=HomeworkSubmissionDetail,
+)
+def read_submission(
+    submission_id: int,
+    current: CurrentUser,
+    tutor: CurrentTutor,
+    session: Annotated[Session, Depends(get_session)],
+) -> HomeworkSubmissionDetail:
+    """Owner-only — fetch a submission for the grading view. Includes
+    the raw answers_json so the queue can render each student answer."""
+    _require_owner(tutor, current)
+    sub = session.get(HomeworkSubmission, submission_id)
+    if sub is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Submission not found.")
+    assignment = session.get(HomeworkAssignment, sub.assignment_id)
+    if assignment is None or assignment.tutor_id != tutor.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Submission not found.")
+    return HomeworkSubmissionDetail(
+        id=sub.id,
+        assignment_id=sub.assignment_id,
+        student_user_id=sub.student_user_id,
+        answers_json=sub.answers_json or "{}",
+        auto_score=sub.auto_score or 0,
+        manual_score=sub.manual_score,
+        max_score=sub.max_score,
+        needs_manual_review=sub.needs_manual_review,
+        feedback=sub.feedback,
+        submitted_at=sub.submitted_at,
+        graded_at=sub.graded_at,
+    )
 
 
 class HomeworkSubmissionGrade(BaseModel):
