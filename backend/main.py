@@ -33,6 +33,8 @@ from .routers import (
     onboarding,
     placement,
     platform,
+    recurring,
+    referrals,
     pledges,
     projects,
     support,
@@ -111,6 +113,41 @@ def _run_group_evaluation_sweep() -> None:
             log.exception("Group lesson evaluation sweep failed")
 
 
+def _run_referrals_sweep() -> None:
+    """Daily — re-evaluate every referral attribution to catch newly-met
+    milestones (e.g. cumulative tutor revenue crossing the next threshold)."""
+    from .services import referrals as _referrals
+
+    with Session(_database.engine) as session:
+        try:
+            n = _referrals.sweep_attributions(session)
+            if n:
+                log.info("Referral sweep granted %d new reward(s).", n)
+        except Exception:
+            log.exception("Referral sweep failed")
+
+
+def _run_recurring_sweep() -> None:
+    """Daily job — top up child Bookings for every active recurring plan,
+    then cancel any PENDING_PAYMENT recurring bookings inside the 48h
+    cutoff so the slots free up.
+    """
+    from .services import recurring_bookings
+
+    with Session(_database.engine) as session:
+        try:
+            generated = recurring_bookings.sweep_active_plans(session)
+            cancelled = recurring_bookings.sweep_expire_unpaid(session)
+            if generated or cancelled:
+                log.info(
+                    "Recurring sweep: %d new booking(s), %d expired unpaid.",
+                    generated,
+                    cancelled,
+                )
+        except Exception:
+            log.exception("Recurring booking sweep failed")
+
+
 def _build_scheduler():
     """Return a started AsyncIOScheduler with the dormant-pause + booking-
     reminder jobs, or None if scheduling is disabled. Importing APScheduler
@@ -144,6 +181,20 @@ def _build_scheduler():
         id="group_evaluations",
         replace_existing=True,
         misfire_grace_time=1800,
+    )
+    scheduler.add_job(
+        _run_recurring_sweep,
+        trigger=CronTrigger(hour=3, minute=15, timezone="UTC"),
+        id="recurring_sweep",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
+    scheduler.add_job(
+        _run_referrals_sweep,
+        trigger=CronTrigger(hour=4, minute=30, timezone="UTC"),
+        id="referrals_sweep",
+        replace_existing=True,
+        misfire_grace_time=3600,
     )
     scheduler.start()
     log.info(
@@ -211,6 +262,8 @@ for router in (
     support.router,
     support.staff_router,
     group_sessions.router,
+    recurring.router,
+    referrals.router,
 ):
     app.include_router(router)
 

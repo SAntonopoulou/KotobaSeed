@@ -88,6 +88,7 @@ class TutorSignupRequest(BaseModel):
     languages_taught: str | None = None
     gdpr_consent: bool | None = None
     country: str | None = Field(default=None, max_length=2)
+    ref_code: str | None = Field(default=None, max_length=32)
 
 
 class TutorSignupResponse(BaseModel):
@@ -245,6 +246,18 @@ def signup_tutor(
     session.commit()
     session.refresh(user)
     session.refresh(tutor)
+
+    # Referral attribution + auto-issue codes for the new tutor.
+    try:
+        from ..services import referrals as _referrals
+
+        if payload.ref_code:
+            _referrals.attribute_signup(
+                session, referred_user=user, code_str=payload.ref_code
+            )
+        _referrals.ensure_codes_for_user(session, user)
+    except Exception:
+        log.exception("Referral attribution failed in tutor onboarding for %s", user.email)
 
     # Verification email only on the new-user branch.
     if code is not None:

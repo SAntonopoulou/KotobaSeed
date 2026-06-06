@@ -97,6 +97,7 @@ const Navbar = () => {
                     <Link to="/staff/support" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Support queue</Link>
                   )}
                   <Link to="/support" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Support</Link>
+                  <Link to="/referrals" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Referrals</Link>
                 </>
               ) : (
                 <>

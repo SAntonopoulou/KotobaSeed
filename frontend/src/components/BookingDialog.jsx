@@ -23,6 +23,11 @@ const BookingDialog = ({ pack, tutorDisplayName, onClose }) => {
   const [error, setError] = useState('');
   const [cutoffHours, setCutoffHours] = useState(48);
   const [acknowledgedCutoff, setAcknowledgedCutoff] = useState(false);
+  // Recurring opt-in. Available only for single-lesson, non-trial,
+  // non-group packs — recurring binds the student to a standing slot.
+  const canRecur = !pack.isTrial && !pack.is_group && pack.num_lessons === 1;
+  const [makeRecurring, setMakeRecurring] = useState(false);
+  const [recurringInfo, setRecurringInfo] = useState('');
 
   useEffect(() => {
     const original = document.body.style.overflow;
@@ -108,6 +113,30 @@ const BookingDialog = ({ pack, tutorDisplayName, onClose }) => {
         });
         const bookingId = res.data?.booking_id;
         window.location.href = `/booking/success?booking=${bookingId ?? ''}&trial=1`;
+        return;
+      }
+      // If the student opted to make this recurring, set up the plan
+      // first — it auto-creates the first batch of bookings including
+      // this slot, which they then pay for via the normal flow.
+      if (makeRecurring && canRecur) {
+        const slotDate = new Date(pickedSlot.scheduled_at);
+        const day_of_week = (slotDate.getUTCDay() + 6) % 7; // Sun=0 → Mon=0
+        const start_minute =
+          slotDate.getUTCHours() * 60 + slotDate.getUTCMinutes();
+        await client.post('/recurring/plans', {
+          lesson_pack_id: pack.id,
+          day_of_week,
+          start_minute,
+          start_date: pickedSlot.scheduled_at,
+          lookahead_weeks: 4,
+        });
+        setRecurringInfo(
+          'Recurring plan saved. Your weekly bookings are in your dashboard — pay for each one before the lesson.'
+        );
+        // Surface confirmation to the student and let them close. We
+        // don't auto-checkout here because they need to opt in to each
+        // weekly payment.
+        setTimeout(onClose, 2500);
         return;
       }
       const res = await client.post(`/tutor/lesson-packs/${pack.id}/book`, {
@@ -250,6 +279,26 @@ const BookingDialog = ({ pack, tutorDisplayName, onClose }) => {
           );
         })()}
 
+        {canRecur && pickedSlot && (
+          <label className="mt-3 inline-flex items-start gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={makeRecurring}
+              onChange={(e) => setMakeRecurring(e.target.checked)}
+              className="mt-0.5 h-4 w-4 text-kotoba-primary border-kotoba-text/30 rounded focus:ring-kotoba-primary"
+            />
+            <span className="text-sm text-kotoba-text">
+              Make this a recurring weekly lesson — same time every week. Cancel any time.
+            </span>
+          </label>
+        )}
+
+        {recurringInfo && (
+          <div className="mt-3 bg-kotoba-primary/10 border border-kotoba-primary/30 text-kotoba-primary px-3 py-2 rounded-md text-sm">
+            {recurringInfo}
+          </div>
+        )}
+
         {!token && (
           <p className="mt-3 text-xs text-kotoba-text/60">
             {pack.isTrial
@@ -273,7 +322,9 @@ const BookingDialog = ({ pack, tutorDisplayName, onClose }) => {
             ? 'Loading…'
             : pack.isTrial
               ? 'Book the free trial'
-              : 'Continue to checkout'}
+              : makeRecurring
+                ? 'Set up recurring weekly lessons'
+                : 'Continue to checkout'}
         </button>
         <p className="mt-2 text-xs text-center text-kotoba-text/60">
           {pack.isTrial

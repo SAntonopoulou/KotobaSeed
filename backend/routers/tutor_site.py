@@ -2029,6 +2029,31 @@ def mark_booking_complete(
     student = session.get(User, booking.student_user_id)
     pack = session.get(LessonPack, booking.lesson_pack_id)
 
+    # Referral evaluation — best-effort. Booking just moved to COMPLETED
+    # so the student's attribution (if any) is now qualified.
+    try:
+        from ..models import ReferralAttribution
+        from ..services import referrals as _referrals
+
+        for attr in session.exec(
+            select(ReferralAttribution).where(
+                ReferralAttribution.referred_user_id == booking.student_user_id
+            )
+        ).all():
+            _referrals.evaluate_attribution(session, attr)
+        # Also evaluate any attribution where the TUTOR is the referee
+        # (tutor-peer milestones key off completed lessons taught).
+        for attr in session.exec(
+            select(ReferralAttribution).where(
+                ReferralAttribution.referred_user_id == tutor.user_id
+            )
+        ).all():
+            _referrals.evaluate_attribution(session, attr)
+    except Exception:
+        log.exception(
+            "Referral evaluation failed on completed booking %s", booking.id
+        )
+
     # "Lesson complete" email to the student — best-effort.
     if student is not None:
         try:

@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import client from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import MyBookings from '../../components/MyBookings';
+import MyRecurringPlans from '../../components/MyRecurringPlans';
 import PriorityCreditsCard from '../../components/PriorityCreditsCard';
 
 const StudentDashboard = () => {
@@ -72,6 +73,10 @@ const StudentDashboard = () => {
 
       <div className="mb-8">
         <PriorityCreditsCard />
+      </div>
+
+      <div className="mb-8">
+        <MyRecurringPlans />
       </div>
 
       <section className="bg-white shadow rounded-lg p-6 mb-8">

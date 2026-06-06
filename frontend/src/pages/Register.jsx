@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import client from '../api/client';
 import { useAuth } from '../context/AuthContext';
 
@@ -34,6 +34,10 @@ const Register = () => {
   const [error, setError] = useState('');
   const navigate = useNavigate();
   const { login } = useAuth();
+  const [params] = useSearchParams();
+  // Referral code from `?ref=XYZ` — sent on signup so the platform can
+  // stamp an attribution. Uppercased to match how codes are stored.
+  const refCode = (params.get('ref') || '').toUpperCase().trim() || null;
 
   const slug = useMemo(() => slugify(form.tutor_slug), [form.tutor_slug]);
   const slugPreview = slug ? `${slug}.kotobaseed.net` : 'yourname.kotobaseed.net';
@@ -70,6 +74,7 @@ const Register = () => {
           languages_taught: form.languages_taught || null,
           timezone: form.timezone || 'UTC',
           gdpr_consent: true,
+          ref_code: refCode,
         };
         const res = await client.post('/onboarding/tutor', payload);
         const { access_token, onboarding_url } = res.data || {};
@@ -89,6 +94,7 @@ const Register = () => {
         password: form.password,
         role: form.role,
         gdpr_consent: true,
+        ref_code: refCode,
       });
       const token = res?.data?.access_token;
       if (token) login(token);
@@ -113,6 +119,11 @@ const Register = () => {
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded relative" role="alert">
                 <span className="block sm:inline">{error}</span>
+              </div>
+            )}
+            {refCode && (
+              <div className="bg-kotoba-primary/10 border border-kotoba-primary/30 text-kotoba-primary px-4 py-2 rounded text-sm">
+                You're signing up via referral code <strong>{refCode}</strong>. Once you complete your first paid lesson, your friend earns a reward.
               </div>
             )}
 

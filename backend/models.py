@@ -1832,6 +1832,123 @@ class SupportTicketMessage(SQLModel, table=True):
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
+class ReferralCodeKind(str, Enum):
+    TUTOR_PEER = "tutor_peer"
+    STUDENT_PEER = "student_peer"
+    AFFILIATE = "affiliate"
+
+
+class ReferralCode(SQLModel, table=True):
+    """A user's personal referral code. One row per (user, kind) so a user
+    can simultaneously have a tutor-peer code and a student-peer code."""
+
+    __tablename__ = "referral_code"
+
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="user.id", index=True)
+    code: str = Field(unique=True, index=True, max_length=32)
+    kind: ReferralCodeKind = Field(index=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class ReferralAttribution(SQLModel, table=True):
+    """A user signed up with a referral code. Qualifies into reward rows
+    once the referred user completes a qualifying action (first paid
+    lesson, lifetime revenue milestone, etc.)."""
+
+    __tablename__ = "referral_attribution"
+
+    id: int | None = Field(default=None, primary_key=True)
+    code_id: int = Field(foreign_key="referral_code.id", index=True)
+    referrer_user_id: int = Field(foreign_key="user.id", index=True)
+    referred_user_id: int = Field(foreign_key="user.id", index=True, unique=True)
+    kind: ReferralCodeKind = Field(index=True)
+    first_qualified_at: datetime | None = Field(default=None, index=True)
+    qualifying_amount_cents: int | None = Field(default=None)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class ReferralRewardKind(str, Enum):
+    STUDENT_PEER_CREDIT = "student_peer_credit"
+    TUTOR_PEER_MILESTONE = "tutor_peer_milestone"
+    AFFILIATE_TUTOR = "affiliate_tutor"
+    AFFILIATE_STUDENT = "affiliate_student"
+
+
+class ReferralRewardStatus(str, Enum):
+    PENDING = "pending"
+    PAID = "paid"
+    VOID = "void"
+
+
+class ReferralReward(SQLModel, table=True):
+    """Reward owed to a referrer for a qualified attribution + milestone."""
+
+    __tablename__ = "referral_reward"
+
+    id: int | None = Field(default=None, primary_key=True)
+    referrer_user_id: int = Field(foreign_key="user.id", index=True)
+    attribution_id: int = Field(foreign_key="referral_attribution.id", index=True)
+    kind: ReferralRewardKind = Field(index=True)
+    # `milestone_key` lets us dedupe — only one TUTOR_PEER_MILESTONE per
+    # attribution per (e.g. "first_lesson", "rev_500", "rev_2000").
+    milestone_key: str | None = Field(default=None, max_length=64, index=True)
+    amount_cents: int = Field(ge=0)
+    currency: str = Field(default="eur", max_length=3)
+    status: ReferralRewardStatus = Field(
+        default=ReferralRewardStatus.PENDING, index=True
+    )
+    earned_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    paid_at: datetime | None = Field(default=None)
+    paid_via: str | None = Field(default=None, max_length=64)
+    notes: str | None = Field(default=None, max_length=500)
+
+
+class AffiliateApplicationStatus(str, Enum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
+class AffiliateApplication(SQLModel, table=True):
+    __tablename__ = "affiliate_application"
+
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="user.id", index=True)
+    website_url: str = Field(max_length=2048)
+    audience_description: str = Field(max_length=4000)
+    status: AffiliateApplicationStatus = Field(
+        default=AffiliateApplicationStatus.PENDING, index=True
+    )
+    reviewed_by_user_id: int | None = Field(default=None, foreign_key="user.id")
+    reviewed_at: datetime | None = Field(default=None)
+    admin_notes: str | None = Field(default=None, max_length=2000)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class LessonCredit(SQLModel, table=True):
+    """Cash-equivalent credit toward a lesson booking (€10 from referring a
+    friend, refund credits, promo etc.). Separate from PriorityCredit
+    which only affects request queue position. Expires after 1 year."""
+
+    __tablename__ = "lesson_credit"
+
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="user.id", index=True)
+    amount_cents: int = Field(ge=0)
+    currency: str = Field(default="eur", max_length=3)
+    source: str = Field(max_length=64, description="e.g. referral, refund, promo")
+    source_id: int | None = Field(default=None)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    expires_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC) + timedelta(days=365),
+    )
+    used_at: datetime | None = Field(default=None)
+    used_on_booking_id: int | None = Field(
+        default=None, foreign_key="booking.id"
+    )
+
+
 class PlatformSetting(SQLModel, table=True):
     """Key/value store for platform-wide configuration that needs to change
     without a redeploy — social network URLs, support contact email, brand

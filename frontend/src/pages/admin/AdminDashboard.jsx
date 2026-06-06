@@ -116,6 +116,11 @@ const AdminDashboard = () => {
               Support queue
             </button>
           </Link>
+          <Link to="/admin/affiliates">
+            <button className="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-medium py-2 px-4 rounded">
+              Affiliates
+            </button>
+          </Link>
           <Link to="/admin/projects">
             <button className="bg-kotoba-primary hover:bg-kotoba-primary/90 text-white font-bold py-2 px-4 rounded">
               Project Management

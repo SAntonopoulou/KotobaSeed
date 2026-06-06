@@ -69,6 +69,9 @@ class RegisterRequest(BaseModel):
     newsletter_opt_in: bool = False
     gdpr_consent: bool
     role: UserRole = UserRole.STUDENT
+    # Optional ?ref= code captured at signup. Stamps an attribution row
+    # so any future rewards land with the right referrer.
+    ref_code: str | None = Field(default=None, max_length=32)
 
 
 class LoginRequest(BaseModel):
@@ -148,6 +151,20 @@ def register(
     session.add(user)
     session.commit()
     session.refresh(user)
+
+    # Stamp a referral attribution + auto-issue this user's own codes
+    # (everyone gets STUDENT_PEER; creators also get TUTOR_PEER). Both
+    # are best-effort — registration shouldn't fail if referrals does.
+    try:
+        from ..services import referrals as _referrals
+
+        if payload.ref_code:
+            _referrals.attribute_signup(
+                session, referred_user=user, code_str=payload.ref_code
+            )
+        _referrals.ensure_codes_for_user(session, user)
+    except Exception:
+        log.exception("Referral attribution failed for new user %s", user.email)
 
     try:
         send_verification_code(

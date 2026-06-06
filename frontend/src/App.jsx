@@ -68,6 +68,9 @@ const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
 const ResetPassword = lazy(() => import('./pages/ResetPassword'));
 const Support = lazy(() => import('./pages/Support'));
 const StaffSupport = lazy(() => import('./pages/staff/StaffSupport'));
+const Referrals = lazy(() => import('./pages/Referrals'));
+const AffiliateApply = lazy(() => import('./pages/AffiliateApply'));
+const AdminAffiliates = lazy(() => import('./pages/admin/AdminAffiliates'));
 
 const RouteFallback = () => (
   <div className="min-h-[60vh] flex items-center justify-center">
@@ -165,6 +168,7 @@ const ApexShell = () => {
               <Route path="/admin/audit-log" element={<AdminAuditLog />} />
               <Route path="/admin/settings" element={<AdminSettings />} />
               <Route path="/admin/staff" element={<AdminStaff />} />
+              <Route path="/admin/affiliates" element={<AdminAffiliates />} />
               <Route path="/admin/projects" element={<ProjectManagement />} />
             </Route>
 
@@ -173,6 +177,9 @@ const ApexShell = () => {
             <Route path="/support/:ticketId" element={<Support />} />
             <Route path="/staff/support" element={<StaffSupport />} />
             <Route path="/staff/support/:ticketId" element={<StaffSupport />} />
+
+            <Route path="/referrals" element={<Referrals />} />
+            <Route path="/affiliates/apply" element={<AffiliateApply />} />
 
             {/* Messaging Routes */}
             <Route path="/messages" element={<Inbox />} />
