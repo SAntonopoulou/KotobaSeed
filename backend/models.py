@@ -795,6 +795,11 @@ class HomeworkTemplate(SQLModel, table=True):
     is_premium: bool = Field(default=False, index=True)
     price_cents: int = Field(default=0, ge=0)
     currency: str = Field(default="eur", max_length=3)
+    # Per-grading price the tutor charges for manual review (short_answer
+    # questions or any time they override the autograde). 0 = free, no
+    # payment gate. Snapshot-copied onto each HomeworkAssignment at clone
+    # time so later edits don't retroactively change live work.
+    grading_price_cents: int = Field(default=0, ge=0)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
@@ -859,8 +864,71 @@ class TutorSubscriptionPlan(SQLModel, table=True):
     price_cents: int = Field(default=0, ge=0)
     currency: str = Field(default="eur", max_length=3)
     is_active: bool = Field(default=False, index=True)
+    # Grading credits subscribers receive each month. 0 means subscribers
+    # still pay per grading at the template's price. >0 means they get
+    # this many free gradings per renewal cycle.
+    monthly_grading_credits: int = Field(default=0, ge=0, le=10_000)
+    # When True, unused credits at renewal time are kept and added to the
+    # fresh batch. When False, the balance resets to monthly_grading_credits.
+    credits_roll_over: bool = Field(default=False)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class StudentGradingCreditBalance(SQLModel, table=True):
+    """Per (tutor, student) running balance of grading credits.
+
+    Unique on (tutor_id, student_user_id) so the refill webhook can
+    insert-or-update without race conditions. Refilled on initial
+    subscription checkout and on every customer.subscription.updated
+    that indicates a successful renewal (current_period_end advances).
+    `last_refilled_at` stores the period_end the refill applied to so a
+    duplicate webhook event doesn't double-grant.
+    """
+
+    __tablename__ = "student_grading_credit_balance"
+    __table_args__ = (
+        UniqueConstraint(
+            "tutor_id", "student_user_id", name="uq_grading_credit_pair"
+        ),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    tutor_id: int = Field(foreign_key="tutor.id", index=True)
+    student_user_id: int = Field(foreign_key="user.id", index=True)
+    available: int = Field(default=0, ge=0)
+    last_refilled_period_end: datetime | None = Field(default=None)
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class HomeworkGradingPaymentKind(str, Enum):
+    CREDIT = "credit"
+    STRIPE = "stripe"
+
+
+class HomeworkGradingPayment(SQLModel, table=True):
+    """Audit row for each "grading paid for" event. One per submission;
+    composite uniqueness on submission_id prevents double-charging on
+    webhook retries."""
+
+    __tablename__ = "homework_grading_payment"
+    __table_args__ = (
+        UniqueConstraint("submission_id", name="uq_grading_payment_submission"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    submission_id: int = Field(
+        foreign_key="homework_submission.id", index=True, unique=True
+    )
+    tutor_id: int = Field(foreign_key="tutor.id", index=True)
+    student_user_id: int = Field(foreign_key="user.id", index=True)
+    kind: HomeworkGradingPaymentKind
+    amount_cents: int = Field(default=0, ge=0)
+    platform_fee_cents: int = Field(default=0, ge=0)
+    currency: str = Field(default="eur", max_length=3)
+    stripe_checkout_session_id: str | None = Field(default=None, max_length=128, index=True)
+    stripe_payment_intent_id: str | None = Field(default=None, max_length=128, index=True)
+    paid_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class StudentTutorSubscription(SQLModel, table=True):
@@ -992,6 +1060,11 @@ class HomeworkAssignment(SQLModel, table=True):
     description: str | None = Field(default=None, max_length=2000)
     questions_snapshot_json: str = Field(default="[]", max_length=200_000)
     max_score: int = Field(default=0, ge=0)
+    # Snapshot of the template's grading_price at assignment-creation time.
+    # Lets the tutor change their template later without retroactively
+    # changing what already-issued students owe.
+    grading_price_cents: int = Field(default=0, ge=0)
+    grading_currency: str = Field(default="eur", max_length=3)
     status: HomeworkAssignmentStatus = Field(
         default=HomeworkAssignmentStatus.OPEN, index=True
     )
@@ -1023,6 +1096,11 @@ class HomeworkSubmission(SQLModel, table=True):
     max_score: int = Field(default=0, ge=0)
     needs_manual_review: bool = Field(default=False, index=True)
     feedback: str | None = Field(default=None, max_length=4000)
+    # True when the tutor can proceed to grade — either the assignment had
+    # no grading_price, OR the student paid, OR they spent a credit. The
+    # tutor's "needs review" queue filters to grading_paid=True so unpaid
+    # submissions don't ambient-pressure them to grade for free.
+    grading_paid: bool = Field(default=True, index=True)
     submitted_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     graded_at: datetime | None = Field(default=None)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

@@ -332,9 +332,62 @@ def _handle_premium_homework_checkout(
         description=template.description,
         questions_snapshot_json=template.questions_json,
         max_score=homework_grading.compute_max_score(questions),
+        grading_price_cents=template.grading_price_cents,
+        grading_currency=template.currency,
         status=HomeworkAssignmentStatus.OPEN,
     )
     session.add(assignment)
+    session.commit()
+    return True
+
+
+def _handle_grading_checkout(session: Session, data_object: dict) -> bool:
+    """Mark the homework submission as grading_paid on a successful
+    Stripe checkout. Idempotent via the unique constraint on
+    (submission_id) — a duplicate webhook returns True without
+    inserting."""
+    metadata = data_object.get("metadata", {})
+    if metadata.get("type") != "homework_grading":
+        return False
+    try:
+        submission_id = int(metadata.get("submission_id"))
+        tutor_id = int(metadata.get("tutor_id"))
+        student_user_id = int(metadata.get("student_user_id"))
+        fee = int(metadata.get("platform_fee_cents") or 0)
+    except (TypeError, ValueError):
+        logger.warning("Grading checkout missing metadata: %s", metadata)
+        return True
+    from ..models import (
+        HomeworkAssignment,
+        HomeworkGradingPayment,
+        HomeworkGradingPaymentKind,
+        HomeworkSubmission,
+    )
+
+    sub = session.get(HomeworkSubmission, submission_id)
+    if sub is None:
+        logger.warning("Grading checkout: submission %s missing", submission_id)
+        return True
+    if sub.grading_paid:
+        return True
+    assignment = session.get(HomeworkAssignment, sub.assignment_id)
+    currency = assignment.grading_currency if assignment else "eur"
+    sub.grading_paid = True
+    sub.updated_at = datetime.now(UTC)
+    session.add(sub)
+    session.add(
+        HomeworkGradingPayment(
+            submission_id=sub.id,
+            tutor_id=tutor_id,
+            student_user_id=student_user_id,
+            kind=HomeworkGradingPaymentKind.STRIPE,
+            amount_cents=int(data_object.get("amount_total") or 0),
+            platform_fee_cents=fee,
+            currency=currency,
+            stripe_checkout_session_id=data_object.get("id"),
+            stripe_payment_intent_id=data_object.get("payment_intent"),
+        )
+    )
     session.commit()
     return True
 
@@ -398,6 +451,16 @@ def _handle_tutor_subscription_checkout(session: Session, data_object: dict) -> 
     existing.updated_at = datetime.now(UTC)
     session.add(existing)
     session.commit()
+    # Grant initial grading credits per the tutor's plan.
+    from ..services import grading_credits
+
+    grading_credits.refill_for_subscription(
+        session=session,
+        tutor_id=tutor_id,
+        student_user_id=student_user_id,
+        period_end=existing.current_period_end,
+        is_initial=True,
+    )
     return True
 
 
@@ -428,6 +491,7 @@ def handle_subscription_event(session: Session, data_object: dict) -> bool:
     ).first()
     if row is None:
         return False
+    previous_period_end = row.current_period_end
     row.status = _stripe_status_to_local(data_object.get("status"))
     period_end = data_object.get("current_period_end")
     if period_end is not None:
@@ -440,6 +504,26 @@ def handle_subscription_event(session: Session, data_object: dict) -> bool:
     row.updated_at = datetime.now(UTC)
     session.add(row)
     session.commit()
+    # Detect renewal: current_period_end advanced AND status is active.
+    # On renewal, refill grading credits according to plan + rollover.
+    from ..models import TutorSubscriptionStatus
+
+    renewed = (
+        row.status == TutorSubscriptionStatus.ACTIVE
+        and row.current_period_end is not None
+        and previous_period_end is not None
+        and row.current_period_end > previous_period_end
+    )
+    if renewed:
+        from ..services import grading_credits
+
+        grading_credits.refill_for_subscription(
+            session=session,
+            tutor_id=row.tutor_id,
+            student_user_id=row.student_user_id,
+            period_end=row.current_period_end,
+            is_initial=False,
+        )
     return True
 
 
@@ -450,6 +534,8 @@ def handle_checkout_session_completed(session: Session, data_object: dict):
     if _handle_module_checkout(session, data_object):
         return
     if _handle_premium_homework_checkout(session, data_object):
+        return
+    if _handle_grading_checkout(session, data_object):
         return
     if _handle_tutor_subscription_checkout(session, data_object):
         return

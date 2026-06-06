@@ -9,6 +9,7 @@ Two distinct route groups:
 from __future__ import annotations
 
 import json
+import logging
 from datetime import UTC, datetime
 from typing import Annotated, Any
 
@@ -29,6 +30,7 @@ from ..models import (
 from ..services import homework_grading
 from ..tenancy import CurrentTutor
 
+log = logging.getLogger(__name__)
 router = APIRouter(tags=["homework"])
 
 # --- Helpers --------------------------------------------------------
@@ -104,6 +106,7 @@ class HomeworkTemplateRead(BaseModel):
     is_premium: bool
     price_cents: int
     currency: str
+    grading_price_cents: int
     max_score: int
     created_at: datetime
     updated_at: datetime
@@ -118,6 +121,7 @@ class HomeworkTemplateCreate(BaseModel):
     is_premium: bool = False
     price_cents: int = Field(default=0, ge=0, le=10_000_00)
     currency: str = Field(default="eur", min_length=3, max_length=3)
+    grading_price_cents: int = Field(default=0, ge=0, le=10_000_00)
 
 
 class HomeworkTemplateUpdate(BaseModel):
@@ -129,6 +133,7 @@ class HomeworkTemplateUpdate(BaseModel):
     is_premium: bool | None = None
     price_cents: int | None = Field(default=None, ge=0, le=10_000_00)
     currency: str | None = Field(default=None, min_length=3, max_length=3)
+    grading_price_cents: int | None = Field(default=None, ge=0, le=10_000_00)
 
 
 def _template_to_read(t: HomeworkTemplate) -> HomeworkTemplateRead:
@@ -143,6 +148,7 @@ def _template_to_read(t: HomeworkTemplate) -> HomeworkTemplateRead:
         is_premium=t.is_premium,
         price_cents=t.price_cents,
         currency=t.currency,
+        grading_price_cents=t.grading_price_cents,
         max_score=homework_grading.compute_max_score(questions),
         created_at=t.created_at,
         updated_at=t.updated_at,
@@ -187,6 +193,7 @@ def create_template(
         is_premium=payload.is_premium,
         price_cents=payload.price_cents,
         currency=payload.currency,
+        grading_price_cents=payload.grading_price_cents,
     )
     session.add(row)
     session.commit()
@@ -220,6 +227,7 @@ def update_template(
         "is_premium",
         "price_cents",
         "currency",
+        "grading_price_cents",
     ):
         if field in changes:
             setattr(row, field, changes[field])
@@ -267,9 +275,12 @@ class HomeworkAssignmentRead(BaseModel):
     status: HomeworkAssignmentStatus
     due_at: datetime | None
     assigned_at: datetime
+    grading_price_cents: int
+    grading_currency: str
     submission_id: int | None
     submission_score: int | None  # uses manual_score if set else auto_score
     submission_needs_review: bool
+    submission_awaiting_payment: bool
     submission_submitted_at: datetime | None
 
 
@@ -292,6 +303,8 @@ def _assignment_to_read(
         status=a.status,
         due_at=a.due_at,
         assigned_at=a.assigned_at,
+        grading_price_cents=a.grading_price_cents,
+        grading_currency=a.grading_currency,
         submission_id=submission.id if submission else None,
         submission_score=(
             submission.manual_score
@@ -299,7 +312,13 @@ def _assignment_to_read(
             else (submission.auto_score if submission else None)
         ),
         submission_needs_review=bool(
-            submission and submission.needs_manual_review and submission.manual_score is None
+            submission
+            and submission.needs_manual_review
+            and submission.manual_score is None
+            and submission.grading_paid
+        ),
+        submission_awaiting_payment=bool(
+            submission and submission.needs_manual_review and not submission.grading_paid
         ),
         submission_submitted_at=submission.submitted_at if submission else None,
     )
@@ -412,6 +431,11 @@ def assign_homework(
         description=description,
         questions_snapshot_json=json.dumps(questions),
         max_score=homework_grading.compute_max_score(questions),
+        # Snapshot the template's per-grading price at clone time so a
+        # later edit doesn't change what already-issued students owe.
+        # Inline assignments default to 0 (free grading).
+        grading_price_cents=template.grading_price_cents if template else 0,
+        grading_currency=template.currency if template else "eur",
         due_at=payload.due_at,
     )
     session.add(a)
@@ -477,6 +501,7 @@ student_router = APIRouter(prefix="/users/me/assignments")
 
 class StudentAssignmentRead(BaseModel):
     id: int
+    tutor_id: int
     tutor_slug: str | None
     tutor_display_name: str | None
     title: str
@@ -485,6 +510,8 @@ class StudentAssignmentRead(BaseModel):
     status: HomeworkAssignmentStatus
     due_at: datetime | None
     assigned_at: datetime
+    grading_price_cents: int
+    grading_currency: str
     # When fetching the detail (single) endpoint, questions are included;
     # the list endpoint returns an empty list to keep payloads small.
     questions: list[dict[str, Any]]
@@ -494,6 +521,11 @@ class StudentAssignmentRead(BaseModel):
     submission_feedback: str | None
     submission_per_question: dict[str, Any] | None
     submission_submitted_at: datetime | None
+    # True when there's a submission but it's blocked behind a grading
+    # payment. UI shows "Pay €X" / "Use credit" actions.
+    submission_awaiting_payment: bool = False
+    # How many grading credits the student has banked for this tutor.
+    credit_balance: int = 0
 
 
 def _serialize_for_student(
@@ -503,6 +535,7 @@ def _serialize_for_student(
     submission: HomeworkSubmission | None,
     include_questions: bool,
     include_correct_answers: bool,
+    credit_balance: int = 0,
 ) -> StudentAssignmentRead:
     questions = (
         homework_grading.parse_questions(a.questions_snapshot_json)
@@ -525,6 +558,7 @@ def _serialize_for_student(
             per_q = None
     return StudentAssignmentRead(
         id=a.id,
+        tutor_id=a.tutor_id,
         tutor_slug=tutor.tutor_slug if tutor else None,
         tutor_display_name=tutor.display_name if tutor else None,
         title=a.title,
@@ -533,6 +567,8 @@ def _serialize_for_student(
         status=a.status,
         due_at=a.due_at,
         assigned_at=a.assigned_at,
+        grading_price_cents=a.grading_price_cents,
+        grading_currency=a.grading_currency,
         questions=questions,
         submission_id=submission.id if submission else None,
         submission_score=(
@@ -544,6 +580,10 @@ def _serialize_for_student(
         submission_feedback=submission.feedback if submission else None,
         submission_per_question=per_q,
         submission_submitted_at=submission.submitted_at if submission else None,
+        submission_awaiting_payment=bool(
+            submission and submission.needs_manual_review and not submission.grading_paid
+        ),
+        credit_balance=credit_balance,
     )
 
 
@@ -563,9 +603,18 @@ def list_my_assignments(
     tutors = {
         t.id: t for t in session.exec(select(Tutor).where(Tutor.id.in_(tutor_ids))).all()
     }
+    from ..services import grading_credits
+
     out: list[StudentAssignmentRead] = []
+    # Cache balances per tutor — students with many assignments hit the
+    # same tutor multiple times.
+    balances: dict[int, int] = {}
     for a in rows:
         sub = _load_submission(session, a.id)
+        if a.tutor_id not in balances:
+            balances[a.tutor_id] = grading_credits.current_balance(
+                session, tutor_id=a.tutor_id, student_user_id=current.id
+            )
         out.append(
             _serialize_for_student(
                 a,
@@ -573,6 +622,7 @@ def list_my_assignments(
                 submission=sub,
                 include_questions=False,
                 include_correct_answers=False,
+                credit_balance=balances[a.tutor_id],
             )
         )
     return out
@@ -595,12 +645,17 @@ def read_my_assignment(
     # response so the results page can show them with their work. Pre-
     # submit, hide them so the form can't be cheated.
     include_correct = sub is not None
+    from ..services import grading_credits
+
     return _serialize_for_student(
         a,
         tutor=tutor,
         submission=sub,
         include_questions=True,
         include_correct_answers=include_correct,
+        credit_balance=grading_credits.current_balance(
+            session, tutor_id=a.tutor_id, student_user_id=current.id
+        ),
     )
 
 
@@ -633,6 +688,11 @@ def submit_my_assignment(
         )
     questions = homework_grading.parse_questions(a.questions_snapshot_json)
     result = homework_grading.grade_submission(questions, payload.answers)
+    # Decide grading_paid: free if no manual review needed OR the
+    # assignment has no per-grading fee. Otherwise the student needs to
+    # either pay or spend a credit before the tutor sees the row.
+    needs_review = result["needs_manual_review"]
+    grading_paid = not needs_review or a.grading_price_cents <= 0
     sub = HomeworkSubmission(
         assignment_id=a.id,
         student_user_id=current.id,
@@ -640,19 +700,80 @@ def submit_my_assignment(
         per_question_results_json=json.dumps(result["per_question"]),
         auto_score=result["auto_score"],
         max_score=result["max_score"],
-        needs_manual_review=result["needs_manual_review"],
+        needs_manual_review=needs_review,
+        grading_paid=grading_paid,
     )
     session.add(sub)
-    a.status = (
-        HomeworkAssignmentStatus.SUBMITTED
-        if result["needs_manual_review"]
-        else HomeworkAssignmentStatus.GRADED
-    )
+    if not needs_review:
+        a.status = HomeworkAssignmentStatus.GRADED
+    else:
+        a.status = HomeworkAssignmentStatus.SUBMITTED
     a.updated_at = datetime.now(UTC)
     session.add(a)
     session.commit()
     session.refresh(sub)
     session.refresh(a)
+    tutor = session.get(Tutor, a.tutor_id)
+    from ..services import grading_credits
+
+    return _serialize_for_student(
+        a,
+        tutor=tutor,
+        submission=sub,
+        include_questions=True,
+        include_correct_answers=True,
+        credit_balance=grading_credits.current_balance(
+            session, tutor_id=a.tutor_id, student_user_id=current.id
+        ),
+    )
+
+
+@student_router.post(
+    "/{assignment_id}/use-grading-credit",
+    response_model=StudentAssignmentRead,
+)
+def use_grading_credit(
+    assignment_id: int,
+    current: CurrentUser,
+    session: Annotated[Session, Depends(get_session)],
+) -> StudentAssignmentRead:
+    """Spend one grading credit to mark this submission paid. 409 if no
+    credit available; 400 if not awaiting payment."""
+    from ..models import HomeworkGradingPayment, HomeworkGradingPaymentKind
+    from ..services import grading_credits
+
+    a = session.get(HomeworkAssignment, assignment_id)
+    if a is None or a.student_user_id != current.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assignment not found.")
+    sub = _load_submission(session, a.id)
+    if sub is None or sub.grading_paid or not sub.needs_manual_review:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This submission isn't waiting on a grading payment.",
+        )
+    if not grading_credits.spend_credit(
+        session, tutor_id=a.tutor_id, student_user_id=current.id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="You don't have any grading credits available.",
+        )
+    sub.grading_paid = True
+    sub.updated_at = datetime.now(UTC)
+    session.add(sub)
+    session.add(
+        HomeworkGradingPayment(
+            submission_id=sub.id,
+            tutor_id=a.tutor_id,
+            student_user_id=current.id,
+            kind=HomeworkGradingPaymentKind.CREDIT,
+            amount_cents=0,
+            platform_fee_cents=0,
+            currency=a.grading_currency,
+        )
+    )
+    session.commit()
+    session.refresh(sub)
     tutor = session.get(Tutor, a.tutor_id)
     return _serialize_for_student(
         a,
@@ -660,7 +781,108 @@ def submit_my_assignment(
         submission=sub,
         include_questions=True,
         include_correct_answers=True,
+        credit_balance=grading_credits.current_balance(
+            session, tutor_id=a.tutor_id, student_user_id=current.id
+        ),
     )
+
+
+class GradingCheckoutResponse(BaseModel):
+    checkout_url: str
+
+
+@student_router.post(
+    "/{assignment_id}/grading-checkout",
+    response_model=GradingCheckoutResponse,
+)
+def start_grading_checkout(
+    assignment_id: int,
+    current: CurrentUser,
+    session: Annotated[Session, Depends(get_session)],
+) -> GradingCheckoutResponse:
+    """Stripe Connect checkout to pay for grading on this submission.
+    Webhook flips grading_paid on success."""
+    import os
+
+    import stripe
+
+    from ..services.platform_fees import content_platform_fee
+
+    a = session.get(HomeworkAssignment, assignment_id)
+    if a is None or a.student_user_id != current.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assignment not found.")
+    sub = _load_submission(session, a.id)
+    if sub is None or sub.grading_paid or not sub.needs_manual_review:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This submission isn't waiting on a grading payment.",
+        )
+    if a.grading_price_cents <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This homework doesn't charge for grading.",
+        )
+    tutor = session.get(Tutor, a.tutor_id)
+    if tutor is None or not tutor.stripe_connect_account_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This tutor hasn't finished Stripe setup yet.",
+        )
+
+    fee = content_platform_fee(tutor.user, a.grading_price_cents)
+    from ..config import settings
+
+    frontend = settings.frontend_url.rstrip("/")
+    if "localhost" in frontend:
+        base = f"http://{tutor.tutor_slug}.localhost:5173"
+    elif "://" in frontend:
+        scheme, rest = frontend.split("://", 1)
+        base = f"{scheme}://{tutor.tutor_slug}.{rest}"
+    else:
+        base = f"https://{tutor.tutor_slug}.{frontend}"
+    try:
+        stripe_sess = stripe.checkout.Session.create(
+            api_key=os.environ.get("STRIPE_SECRET_KEY"),
+            mode="payment",
+            line_items=[
+                {
+                    "quantity": 1,
+                    "price_data": {
+                        "currency": a.grading_currency,
+                        "product_data": {
+                            "name": f"Grading: {a.title}",
+                        },
+                        "unit_amount": a.grading_price_cents,
+                    },
+                }
+            ],
+            payment_intent_data={
+                "application_fee_amount": fee,
+                "transfer_data": {"destination": tutor.stripe_connect_account_id},
+            },
+            success_url=f"{base}/student/assignments/{a.id}?graded=1",
+            cancel_url=f"{base}/student/assignments/{a.id}",
+            customer_email=current.email,
+            metadata={
+                "type": "homework_grading",
+                "submission_id": str(sub.id),
+                "tutor_id": str(a.tutor_id),
+                "student_user_id": str(current.id),
+                "platform_fee_cents": str(fee),
+            },
+        )
+    except stripe.error.StripeError as exc:
+        log.exception("Stripe error creating grading checkout")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Stripe error: {exc.user_message or 'try again later.'}",
+        ) from exc
+    if not stripe_sess.url:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Stripe didn't return a checkout URL.",
+        )
+    return GradingCheckoutResponse(checkout_url=stripe_sess.url)
 
 
 router.include_router(student_router)

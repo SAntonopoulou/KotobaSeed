@@ -87,6 +87,49 @@ const TakeAssignment = () => {
 
   const submitted = Boolean(assignment.submission_id);
   const per = assignment.submission_per_question || {};
+  const awaitingPayment = Boolean(assignment.submission_awaiting_payment);
+  const creditBalance = assignment.credit_balance ?? 0;
+  const gradingPriceCents = assignment.grading_price_cents ?? 0;
+  const formatGradingPrice = () => {
+    try {
+      return new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency: (assignment.grading_currency || 'eur').toUpperCase(),
+      }).format(gradingPriceCents / 100);
+    } catch {
+      return `€${(gradingPriceCents / 100).toFixed(2)}`;
+    }
+  };
+
+  const useCredit = async () => {
+    setSubmitting(true);
+    setError('');
+    try {
+      const res = await client.post(`/users/me/assignments/${id}/use-grading-credit`);
+      setAssignment(res.data);
+    } catch (err) {
+      setError(err?.response?.data?.detail || 'Could not use credit.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const payForGrading = async () => {
+    setSubmitting(true);
+    setError('');
+    try {
+      const res = await client.post(`/users/me/assignments/${id}/grading-checkout`);
+      if (res.data?.checkout_url) {
+        window.location.href = res.data.checkout_url;
+        return;
+      }
+      setError('Could not start payment.');
+    } catch (err) {
+      setError(err?.response?.data?.detail || 'Could not start payment.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <div className="bg-kotoba-background min-h-screen">
@@ -115,7 +158,39 @@ const TakeAssignment = () => {
           </div>
         )}
 
-        {submitted && (
+        {submitted && awaitingPayment && (
+          <section className="bg-kotoba-secondary/30 border border-kotoba-secondary rounded-2xl p-6">
+            <p className="text-sm uppercase tracking-wider text-kotoba-text/70 font-medium">
+              Grading pending
+            </p>
+            <p className="mt-1 text-kotoba-text">
+              Your short answer needs a human review. {assignment.tutor_display_name || 'Your tutor'} charges <strong>{formatGradingPrice()}</strong> per grading. Spend a credit or pay to send it to them.
+            </p>
+            <div className="mt-4 flex items-center gap-3 flex-wrap">
+              <button
+                type="button"
+                onClick={useCredit}
+                disabled={submitting || creditBalance <= 0}
+                className="px-5 py-2.5 rounded-lg bg-kotoba-primary text-white font-semibold hover:bg-kotoba-primary/90 disabled:opacity-50"
+              >
+                {creditBalance > 0 ? `Use 1 credit (${creditBalance} left)` : 'No credits available'}
+              </button>
+              <button
+                type="button"
+                onClick={payForGrading}
+                disabled={submitting}
+                className="px-5 py-2.5 rounded-lg bg-kotoba-secondary text-kotoba-text font-semibold hover:bg-kotoba-secondary-dark disabled:opacity-60"
+              >
+                {submitting ? 'Loading…' : `Pay ${formatGradingPrice()}`}
+              </button>
+            </div>
+            <p className="mt-3 text-xs text-kotoba-text/60">
+              Your auto-graded score so far: {assignment.submission_score ?? 0} / {assignment.submission_max_score ?? assignment.max_score}. The short-answer points get added once your tutor reviews.
+            </p>
+          </section>
+        )}
+
+        {submitted && !awaitingPayment && (
           <section className="bg-kotoba-primary/10 rounded-2xl p-6">
             <p className="text-sm uppercase tracking-wider text-kotoba-primary/80 font-medium">Your score</p>
             <p className="mt-1 text-3xl font-extrabold text-kotoba-primary">

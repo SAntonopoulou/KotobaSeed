@@ -83,12 +83,16 @@ class PlanRead(BaseModel):
     price_cents: int
     currency: str
     fee_percent: float | None  # what the platform takes; null when no plan yet
+    monthly_grading_credits: int
+    credits_roll_over: bool
 
 
 class PlanUpsert(BaseModel):
     price_cents: int = Field(ge=1_00, le=100_000_00)
     currency: str = Field(default="eur", min_length=3, max_length=3)
     is_active: bool = True
+    monthly_grading_credits: int = Field(default=0, ge=0, le=10_000)
+    credits_roll_over: bool = False
 
 
 def _load_plan(tutor: Tutor, session: Session) -> TutorSubscriptionPlan | None:
@@ -100,13 +104,20 @@ def _load_plan(tutor: Tutor, session: Session) -> TutorSubscriptionPlan | None:
 def _plan_to_read(plan: TutorSubscriptionPlan | None, tutor_user: User) -> PlanRead:
     if plan is None:
         return PlanRead(
-            is_active=False, price_cents=0, currency="eur", fee_percent=None
+            is_active=False,
+            price_cents=0,
+            currency="eur",
+            fee_percent=None,
+            monthly_grading_credits=0,
+            credits_roll_over=False,
         )
     return PlanRead(
         is_active=plan.is_active,
         price_cents=plan.price_cents,
         currency=plan.currency,
         fee_percent=_fee_percent_for(tutor_user),
+        monthly_grading_credits=plan.monthly_grading_credits,
+        credits_roll_over=plan.credits_roll_over,
     )
 
 
@@ -137,11 +148,15 @@ def upsert_my_plan(
             price_cents=payload.price_cents,
             currency=payload.currency,
             is_active=payload.is_active,
+            monthly_grading_credits=payload.monthly_grading_credits,
+            credits_roll_over=payload.credits_roll_over,
         )
     else:
         plan.price_cents = payload.price_cents
         plan.currency = payload.currency
         plan.is_active = payload.is_active
+        plan.monthly_grading_credits = payload.monthly_grading_credits
+        plan.credits_roll_over = payload.credits_roll_over
         plan.updated_at = now
     session.add(plan)
     session.commit()

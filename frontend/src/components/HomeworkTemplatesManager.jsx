@@ -39,6 +39,7 @@ const HomeworkTemplatesManager = () => {
       is_premium: false,
       price_cents: 0,
       currency: 'eur',
+      grading_price_cents: 0,
     });
 
   const startEdit = (t) => setEditing({ ...t });
@@ -90,6 +91,7 @@ const HomeworkTemplatesManager = () => {
         is_premium: editing.is_premium,
         price_cents: editing.is_premium ? editing.price_cents : 0,
         currency: editing.currency || 'eur',
+        grading_price_cents: editing.grading_price_cents || 0,
       };
       if (editing.id) {
         await client.patch(`/tutor/homework/templates/${editing.id}`, payload);
@@ -229,6 +231,31 @@ const HomeworkTemplatesManager = () => {
                 </span>
               </div>
             )}
+          </div>
+
+          <div className="border-t border-kotoba-text/10 pt-3">
+            <p className="text-sm font-medium text-kotoba-text mb-1">Per-grading fee</p>
+            <p className="text-xs text-kotoba-text/60 mb-2">
+              When a homework has short-answer questions you need to grade yourself, charge per submission. Subscribers spend a monthly credit instead (set on your subscription plan). 0 = free grading.
+            </p>
+            <div className="flex items-center gap-2 max-w-xs">
+              <span className="text-sm text-kotoba-text/70">€</span>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={(editing.grading_price_cents || 0) / 100}
+                onChange={(e) =>
+                  setEditing({
+                    ...editing,
+                    grading_price_cents: Math.max(0, Math.round(parseFloat(e.target.value || '0') * 100)),
+                  })
+                }
+                disabled={busy}
+                className="w-32 px-3 py-1.5 border border-kotoba-text/20 rounded text-sm focus:outline-none focus:ring-2 focus:ring-kotoba-primary"
+              />
+              <span className="text-xs text-kotoba-text/60">per grading</span>
+            </div>
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-2 border-t border-kotoba-text/10">

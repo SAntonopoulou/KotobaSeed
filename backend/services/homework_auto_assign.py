@@ -57,6 +57,8 @@ def assign_for_completed_booking(
                 description=template.description,
                 questions_snapshot_json=json.dumps(questions),
                 max_score=homework_grading.compute_max_score(questions),
+                grading_price_cents=template.grading_price_cents,
+                grading_currency=template.currency,
                 status=HomeworkAssignmentStatus.OPEN,
                 assigned_at=now,
             )

@@ -20,6 +20,8 @@ const formatPrice = (cents, currency = 'eur') => {
 const SubscriptionPlanManager = () => {
   const [plan, setPlan] = useState(null);
   const [draftEuros, setDraftEuros] = useState('');
+  const [draftCredits, setDraftCredits] = useState(0);
+  const [draftRollover, setDraftRollover] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -31,6 +33,8 @@ const SubscriptionPlanManager = () => {
       const res = await client.get('/tutor/subscription-plan');
       setPlan(res.data);
       setDraftEuros(res.data.price_cents > 0 ? (res.data.price_cents / 100).toString() : '');
+      setDraftCredits(res.data.monthly_grading_credits || 0);
+      setDraftRollover(Boolean(res.data.credits_roll_over));
     } catch (err) {
       setError(err?.response?.data?.detail || 'Could not load subscription plan.');
     } finally {
@@ -53,6 +57,8 @@ const SubscriptionPlanManager = () => {
       const res = await client.put('/tutor/subscription-plan', {
         price_cents: cents,
         is_active: true,
+        monthly_grading_credits: Math.max(0, parseInt(draftCredits || '0', 10)),
+        credits_roll_over: draftRollover,
       });
       setPlan(res.data);
       setInfo(plan?.is_active ? 'Updated. New subscribers will pay this price.' : 'Subscription is live.');
@@ -139,13 +145,47 @@ const SubscriptionPlanManager = () => {
             </p>
           )}
         </div>
+      </div>
+
+      <div className="border-t border-kotoba-text/10 pt-3">
+        <p className="text-sm font-medium text-kotoba-text mb-1">Grading credits</p>
+        <p className="text-xs text-kotoba-text/60 mb-2">
+          How many free gradings each subscriber gets per month. Credits cover the per-grading fee on your homework templates. 0 = subscribers still pay per grading.
+        </p>
+        <div className="flex items-end gap-4 flex-wrap">
+          <div>
+            <label className="block text-xs text-kotoba-text/70 mb-1">Credits / month</label>
+            <input
+              type="number"
+              min="0"
+              max="500"
+              value={draftCredits}
+              onChange={(e) => setDraftCredits(e.target.value)}
+              disabled={busy}
+              className="w-24 px-3 py-1.5 border border-kotoba-text/20 rounded text-sm focus:outline-none focus:ring-2 focus:ring-kotoba-primary"
+            />
+          </div>
+          <label className="inline-flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={draftRollover}
+              onChange={(e) => setDraftRollover(e.target.checked)}
+              disabled={busy}
+              className="h-4 w-4 text-kotoba-primary border-kotoba-text/30 rounded"
+            />
+            Unused credits roll over to the next month
+          </label>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3 pt-2 border-t border-kotoba-text/10">
         <button
           type="button"
           onClick={save}
           disabled={busy}
           className="px-5 py-2 rounded-md bg-kotoba-primary text-white font-semibold hover:bg-kotoba-primary/90 disabled:opacity-50"
         >
-          {busy ? 'Saving…' : plan?.is_active ? 'Update price' : 'Start offering subscription'}
+          {busy ? 'Saving…' : plan?.is_active ? 'Update plan' : 'Start offering subscription'}
         </button>
         {plan?.is_active && (
           <button
