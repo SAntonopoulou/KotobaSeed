@@ -74,6 +74,8 @@ const Footer = () => {
           <Link to="/terms" className="hover:text-kotoba-primary">Terms</Link>
           <Link to="/refunds" className="hover:text-kotoba-primary">Refunds</Link>
           <Link to="/pricing" className="hover:text-kotoba-primary">Pricing</Link>
+          <Link to="/help" className="hover:text-kotoba-primary">Help</Link>
+          <Link to="/status" className="hover:text-kotoba-primary">Status</Link>
           {config.support_email && (
             <a
               href={`mailto:${config.support_email}`}

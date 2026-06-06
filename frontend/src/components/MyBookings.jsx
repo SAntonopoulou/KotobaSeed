@@ -219,6 +219,31 @@ const MyBookings = () => {
                         Locked in (within {cutoff}h)
                       </span>
                     )}
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          const res = await client.get(`/users/me/bookings/${b.id}/ics`, {
+                            responseType: 'blob',
+                          });
+                          const blob = new Blob([res.data], { type: 'text/calendar' });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = `kotobaseed-${b.id}.ics`;
+                          document.body.appendChild(a);
+                          a.click();
+                          document.body.removeChild(a);
+                          URL.revokeObjectURL(url);
+                        } catch {
+                          /* surface via toast in a follow-up */
+                        }
+                      }}
+                      className="text-sm text-kotoba-text/60 hover:text-kotoba-primary"
+                      title="Download a calendar invite for this lesson"
+                    >
+                      Add to calendar
+                    </button>
                     <a
                       href={`/support?booking=${b.id}&category=billing&subject=${encodeURIComponent('Help with booking #' + b.id)}`}
                       className="text-sm text-kotoba-text/60 hover:text-kotoba-primary"

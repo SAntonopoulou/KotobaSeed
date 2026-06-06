@@ -224,6 +224,9 @@ async def lifespan(_app: FastAPI):
     with Session(_database.engine) as session:
         _seed_admin_user(session)
         _sync_language_groups(session)
+        from .services import achievements_seed as _achievements_seed
+
+        _achievements_seed.seed(session)
     scheduler = _build_scheduler()
     try:
         yield

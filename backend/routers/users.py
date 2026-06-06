@@ -270,6 +270,48 @@ def list_my_bookings(
     ]
 
 
+@router.get("/me/bookings/{booking_id}/ics")
+def export_booking_ics(
+    booking_id: int,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Calendar export for a single booking — drops into Apple Calendar /
+    Google Calendar / Outlook on import."""
+    from fastapi.responses import Response
+
+    from ..services import ics as _ics
+
+    booking = session.get(Booking, booking_id)
+    if booking is None or booking.student_user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Booking not found.")
+    tutor = session.get(Tutor, booking.tutor_id)
+    pack = session.get(LessonPack, booking.lesson_pack_id)
+    summary = f"Lesson with {tutor.display_name if tutor else 'your tutor'}"
+    description = pack.name if pack else None
+    url = None
+    if tutor and tutor.tutor_slug:
+        frontend = os.environ.get("FRONTEND_URL", "https://kotobaseed.net").rstrip("/")
+        if "://" in frontend:
+            scheme, rest = frontend.split("://", 1)
+            url = f"{scheme}://{tutor.tutor_slug}.{rest}/classroom/{booking.id}"
+    body = _ics.booking_to_ics(
+        uid=f"booking-{booking.id}@kotobaseed",
+        summary=summary,
+        description=description,
+        start=booking.scheduled_at,
+        duration_minutes=booking.duration_minutes,
+        url=url,
+    )
+    return Response(
+        content=body,
+        media_type="text/calendar",
+        headers={
+            "Content-Disposition": f'attachment; filename="kotobaseed-{booking.id}.ics"',
+        },
+    )
+
+
 @router.post("/me/bookings/{booking_id}/cancel", response_model=StudentBookingRead)
 def cancel_my_booking(
     booking_id: int,

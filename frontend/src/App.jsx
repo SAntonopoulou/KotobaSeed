@@ -71,6 +71,8 @@ const StaffSupport = lazy(() => import('./pages/staff/StaffSupport'));
 const Referrals = lazy(() => import('./pages/Referrals'));
 const AffiliateApply = lazy(() => import('./pages/AffiliateApply'));
 const AdminAffiliates = lazy(() => import('./pages/admin/AdminAffiliates'));
+const Help = lazy(() => import('./pages/Help'));
+const Status = lazy(() => import('./pages/Status'));
 
 const RouteFallback = () => (
   <div className="min-h-[60vh] flex items-center justify-center">
@@ -100,6 +102,8 @@ const TutorShell = () => (
     <Route path="/refunds" element={<Refunds />} />
     <Route path="/forgot-password" element={<ForgotPassword />} />
     <Route path="/reset-password" element={<ResetPassword />} />
+    <Route path="/help" element={<Help />} />
+    <Route path="/status" element={<Status />} />
     <Route path="/login" element={<Login />} />
     <Route path="/register" element={<Register />} />
     <Route path="/booking/success" element={<BookingSuccess />} />
@@ -134,6 +138,8 @@ const ApexShell = () => {
           <Route path="/refunds" element={<Refunds />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/help" element={<Help />} />
+          <Route path="/status" element={<Status />} />
 
           {/* Protected Routes */}
           <Route element={<ProtectedRoute />}>
