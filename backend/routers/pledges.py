@@ -231,6 +231,41 @@ def _handle_booking_checkout(session: Session, data_object: dict) -> bool:
     return True
 
 
+def _handle_group_booking_checkout(session: Session, data_object: dict) -> bool:
+    """Group lessons hold seats in PENDING_GROUP_MIN until the threshold
+    cron evaluates min_students. We mark paid + capture payment_intent so
+    the cron can refund later if minimum isn't met.
+    """
+    metadata = data_object.get("metadata", {})
+    if metadata.get("type") != "group_booking":
+        return False
+    booking_id = metadata.get("booking_id")
+    if not booking_id:
+        logger.warning(
+            "Group booking webhook missing booking_id; metadata=%s", metadata
+        )
+        return True
+    booking = session.get(Booking, int(booking_id))
+    if not booking:
+        logger.warning("Group booking #%s not found on webhook", booking_id)
+        return True
+    if booking.status != BookingStatus.PENDING_PAYMENT:
+        logger.info(
+            "Group booking #%s already in %s state; webhook duplicate",
+            booking_id,
+            booking.status,
+        )
+        return True
+    now = datetime.now(UTC)
+    booking.status = BookingStatus.PENDING_GROUP_MIN
+    booking.paid_at = now
+    booking.stripe_payment_intent_id = data_object.get("payment_intent")
+    booking.updated_at = now
+    session.add(booking)
+    session.commit()
+    return True
+
+
 def _handle_module_checkout(session: Session, data_object: dict) -> bool:
     """Grant a LessonModule purchase on successful checkout. Idempotent —
     a duplicate webhook for the same (module_id, student_user_id) returns
@@ -530,6 +565,8 @@ def handle_subscription_event(session: Session, data_object: dict) -> bool:
 def handle_checkout_session_completed(session: Session, data_object: dict):
     metadata = data_object.get("metadata", {})
     if _handle_booking_checkout(session, data_object):
+        return
+    if _handle_group_booking_checkout(session, data_object):
         return
     if _handle_module_checkout(session, data_object):
         return

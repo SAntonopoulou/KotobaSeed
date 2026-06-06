@@ -23,6 +23,7 @@ import SubscriptionPlanManager from '../components/SubscriptionPlanManager';
 import PageBuilder from '../components/PageBuilder';
 import ThemePicker from '../components/ThemePicker';
 import GradingQueue from '../components/GradingQueue';
+import GroupClassesPanel from '../components/GroupClassesPanel';
 import { apexUrl } from '../hooks/useTenant';
 
 import DashboardSidebar, { SECTION_KEYS } from '../components/dashboard/DashboardSidebar';
@@ -158,6 +159,7 @@ const TutorDashboard = () => {
             <AvailabilityEditor />
             <SingleLessonQuickSet />
             <LessonPackManager />
+            <GroupClassesPanel />
             <TrialSettings />
             <CancellationPolicy />
           </>

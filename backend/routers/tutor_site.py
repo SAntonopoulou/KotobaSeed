@@ -268,6 +268,10 @@ class LessonPackRead(BaseModel):
     currency: str
     is_active: bool
     is_default_single: bool
+    is_group: bool = False
+    max_students: int | None = None
+    min_students: int | None = None
+    group_min_threshold_hours: int = 24
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -280,6 +284,11 @@ class LessonPackCreate(BaseModel):
     duration_minutes: int = Field(ge=15, le=240)
     price_cents: int = Field(ge=0, le=10_000_00)  # max €10 000
     currency: str = Field(default="eur", min_length=3, max_length=3)
+    # Group lesson fields (all optional — 1:1 packs leave them null/false).
+    is_group: bool = False
+    max_students: int | None = Field(default=None, ge=2, le=200)
+    min_students: int | None = Field(default=None, ge=2, le=200)
+    group_min_threshold_hours: int | None = Field(default=None, ge=1, le=168)
 
 
 class LessonPackUpdate(BaseModel):
@@ -1176,6 +1185,14 @@ def create_lesson_pack(
         duration_minutes=payload.duration_minutes,
         price_cents=payload.price_cents,
         currency=payload.currency.lower(),
+        is_group=payload.is_group,
+        max_students=payload.max_students,
+        min_students=payload.min_students,
+        group_min_threshold_hours=(
+            payload.group_min_threshold_hours
+            if payload.group_min_threshold_hours is not None
+            else 24
+        ),
     )
     session.add(pack)
     session.commit()

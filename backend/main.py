@@ -29,6 +29,7 @@ from .routers import (
     modules,
     newsletters,
     notifications,
+    group_sessions,
     onboarding,
     placement,
     platform,
@@ -97,6 +98,19 @@ def _run_reminder_sweep() -> None:
             log.exception("Booking reminder sweep failed")
 
 
+def _run_group_evaluation_sweep() -> None:
+    """Hourly job — evaluate group sessions whose threshold has passed."""
+    from .services import group_lessons
+
+    with Session(_database.engine) as session:
+        try:
+            n = group_lessons.sweep_due_evaluations(session)
+            if n:
+                log.info("Group lesson sweep evaluated %d session(s).", n)
+        except Exception:
+            log.exception("Group lesson evaluation sweep failed")
+
+
 def _build_scheduler():
     """Return a started AsyncIOScheduler with the dormant-pause + booking-
     reminder jobs, or None if scheduling is disabled. Importing APScheduler
@@ -121,6 +135,13 @@ def _build_scheduler():
         _run_reminder_sweep,
         trigger=CronTrigger(minute=5, timezone="UTC"),
         id="booking_reminders",
+        replace_existing=True,
+        misfire_grace_time=1800,
+    )
+    scheduler.add_job(
+        _run_group_evaluation_sweep,
+        trigger=CronTrigger(minute=10, timezone="UTC"),
+        id="group_evaluations",
         replace_existing=True,
         misfire_grace_time=1800,
     )
@@ -189,6 +210,7 @@ for router in (
     platform.router,
     support.router,
     support.staff_router,
+    group_sessions.router,
 ):
     app.include_router(router)
 

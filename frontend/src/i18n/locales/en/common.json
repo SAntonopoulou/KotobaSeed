@@ -1,0 +1,73 @@
+{
+  "actions": {
+    "save": "Save",
+    "saving": "Saving…",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "close": "Close",
+    "back": "Back",
+    "continue": "Continue",
+    "submit": "Submit",
+    "send": "Send",
+    "loading": "Loading…",
+    "retry": "Try again",
+    "confirm": "Confirm",
+    "remove": "Remove",
+    "add": "Add",
+    "search": "Search"
+  },
+  "nav": {
+    "home": "Home",
+    "dashboard": "Dashboard",
+    "bookings": "Bookings",
+    "messages": "Messages",
+    "support": "Support",
+    "settings": "Settings",
+    "log_in": "Log in",
+    "log_out": "Log out",
+    "register": "Create an account",
+    "find_a_tutor": "Find a tutor",
+    "pricing": "Pricing"
+  },
+  "auth": {
+    "email": "Email",
+    "password": "Password",
+    "forgot_password": "Forgot your password?",
+    "sign_in": "Sign in",
+    "register_title": "Create your Kotobaseed account",
+    "already_have_account": "Already have an account?",
+    "new_here": "New here?"
+  },
+  "booking": {
+    "book_a_lesson": "Book a lesson",
+    "single_lesson": "Single lesson",
+    "lesson_packs": "Lesson packs",
+    "free_trial": "Free trial",
+    "cancellation": "Cancellation",
+    "duration_minutes_one": "{{count}} minute",
+    "duration_minutes_other": "{{count}} minutes"
+  },
+  "support": {
+    "title": "Support",
+    "open_a_ticket": "Open a support ticket",
+    "subject": "Subject",
+    "details": "Details",
+    "your_tickets": "Your tickets"
+  },
+  "gdpr": {
+    "privacy": "Privacy",
+    "terms": "Terms",
+    "refunds": "Refunds",
+    "download_my_data": "Download my data",
+    "delete_my_account": "Delete my account"
+  },
+  "errors": {
+    "generic": "Something went wrong. Please try again.",
+    "network": "Network problem. Check your connection and retry.",
+    "unauthorized": "You need to be signed in to do that.",
+    "forbidden": "You don't have permission for that action.",
+    "not_found": "We couldn't find that.",
+    "validation": "Some of the details look wrong — check the highlighted fields."
+  }
+}

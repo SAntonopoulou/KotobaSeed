@@ -579,8 +579,45 @@ class AuditLog(SQLModel, table=True):
     )
 
 
+class GroupSession(SQLModel, table=True):
+    """One scheduled instance of a group-lesson LessonPack.
+
+    The tutor creates these at chosen times; multiple students each book a
+    seat (each gets their own Booking row linked via Booking.group_session_id).
+    A single Daily.co room is shared by every seat.
+
+    Lifecycle is the same minimum-evaluation flow that drives individual
+    Booking.PENDING_GROUP_MIN → CONFIRMED / REFUNDED transitions. We track
+    `min_evaluated_at` so the cron sweep is idempotent.
+    """
+
+    __tablename__ = "group_session"
+
+    id: int | None = Field(default=None, primary_key=True)
+    tutor_id: int = Field(foreign_key="tutor.id", index=True)
+    lesson_pack_id: int = Field(foreign_key="lesson_pack.id", index=True)
+    scheduled_at: datetime = Field(index=True)
+    duration_minutes: int = Field(ge=15, le=240)
+    threshold_eval_at: datetime = Field(
+        index=True,
+        description="scheduled_at minus group_min_threshold_hours",
+    )
+    min_evaluated_at: datetime | None = Field(default=None)
+    is_cancelled: bool = Field(default=False, index=True)
+    classroom_room_url: str | None = Field(default=None, max_length=512)
+    classroom_room_name: str | None = Field(default=None, max_length=128)
+    notes: str | None = Field(default=None, max_length=2000)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
 class BookingStatus(str, Enum):
     PENDING_PAYMENT = "pending_payment"  # Stripe Checkout created, awaiting webhook
+    # Group bookings sit here after payment until the minimum-attendance
+    # threshold time passes. At threshold:
+    #   - count >= min_students → all flip to CONFIRMED
+    #   - count <  min_students → all flip to REFUNDED + Stripe refund issued
+    PENDING_GROUP_MIN = "pending_group_min"
     CONFIRMED = "confirmed"  # paid, scheduled, waiting for the lesson
     COMPLETED = "completed"  # tutor marked the lesson done
     CANCELLED = "cancelled"  # before the lesson; pre-refund-window
@@ -603,6 +640,17 @@ class Booking(SQLModel, table=True):
     tutor_id: int = Field(foreign_key="tutor.id", index=True)
     student_user_id: int = Field(foreign_key="user.id", index=True)
     lesson_pack_id: int = Field(foreign_key="lesson_pack.id", index=True)
+    # For group lessons every booking points at the same GroupSession;
+    # the cron evaluates seats by counting bookings with this id. Null
+    # for 1:1 lessons.
+    group_session_id: int | None = Field(
+        default=None, foreign_key="group_session.id", index=True
+    )
+    # Backreference to a recurring plan that generated this booking, if any.
+    # Null for ad-hoc bookings.
+    recurring_plan_id: int | None = Field(
+        default=None, foreign_key="recurring_booking_plan.id", index=True
+    )
     scheduled_at: datetime = Field(index=True)
     duration_minutes: int = Field(ge=15, le=240)
     # Snapshot price + currency from the pack at purchase time so later edits
@@ -626,6 +674,51 @@ class Booking(SQLModel, table=True):
     # reminder so we don't double-send if the job runs more than once in
     # the window.
     reminder_sent_at: datetime | None = Field(default=None)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class RecurringBookingPlan(SQLModel, table=True):
+    """A standing weekly lesson commitment — a slot reserved for a specific
+    student that auto-generates child Booking rows.
+
+    A plan blocks the matching slot from regular availability for any
+    other student. Cancel any time; cancellation stops generation but
+    leaves already-generated future bookings standalone (the student can
+    cancel those individually under the normal rules).
+
+    Billing is Stripe Subscription on Connect. Each successful invoice
+    payment triggers the cron that generates the next batch of child
+    bookings — guarantees we never bill ahead of seats reserved.
+    """
+
+    __tablename__ = "recurring_booking_plan"
+
+    id: int | None = Field(default=None, primary_key=True)
+    tutor_id: int = Field(foreign_key="tutor.id", index=True)
+    student_user_id: int = Field(foreign_key="user.id", index=True)
+    lesson_pack_id: int = Field(foreign_key="lesson_pack.id", index=True)
+    # Cadence + slot. day_of_week 0=Monday … 6=Sunday matching Python's
+    # datetime.weekday(). start_minute is minutes from midnight UTC; the
+    # frontend converts to/from local time using the tutor's timezone.
+    day_of_week: int = Field(ge=0, le=6)
+    start_minute: int = Field(ge=0, le=1439)
+    duration_minutes: int = Field(ge=15, le=240)
+    # Snapshot price + currency at signup so later pack edits don't
+    # rewrite the price the student is billed.
+    price_cents: int = Field(ge=0)
+    currency: str = Field(default="eur", max_length=3)
+    status: str = Field(default="active", max_length=32, index=True)
+    # Generation horizon — we never have more than `lookahead_weeks` of
+    # child bookings on the books at once. 4 weeks is enough buffer for
+    # the student to cancel an individual lesson without surprise.
+    lookahead_weeks: int = Field(default=4, ge=1, le=12)
+    # First lesson date — used to anchor the weekly cadence.
+    start_date: datetime = Field(index=True)
+    cancelled_at: datetime | None = Field(default=None)
+    # Stripe Subscription wiring
+    stripe_subscription_id: str | None = Field(default=None, max_length=128, index=True)
+    stripe_customer_id: str | None = Field(default=None, max_length=128, index=True)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
@@ -699,6 +792,24 @@ class LessonPack(SQLModel, table=True):
     # common case simple. Public site renders this pack (and any other
     # num_lessons=1 packs) inline above the multi-lesson packs.
     is_default_single: bool = Field(default=False, index=True)
+
+    # ----- Group classes ----------------------------------------------
+    # When `is_group=True`, this pack represents a group lesson that
+    # multiple students share. `max_students` caps capacity. If by the
+    # `group_min_threshold_hours` mark before lesson start the booked
+    # count is below `min_students`, the auto-cancel cron refunds
+    # everyone and cancels the lesson. Otherwise the bookings flip from
+    # PENDING_GROUP_MIN to CONFIRMED at threshold time.
+    is_group: bool = Field(default=False, index=True)
+    max_students: int | None = Field(default=None, ge=2, le=200)
+    min_students: int | None = Field(default=None, ge=2, le=200)
+    group_min_threshold_hours: int = Field(
+        default=24,
+        ge=1,
+        le=168,
+        description="Hours before lesson when minimum-attendance is evaluated",
+    )
+
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
