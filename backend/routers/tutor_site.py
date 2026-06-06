@@ -1903,9 +1903,13 @@ def _ensure_room(booking: Booking, session: Session) -> tuple[str, str]:
         return booking.daily_room_name, booking.daily_room_url
 
     name = _generate_room_name(booking)
+    # Cloud recording is on by default — the tutor can press record from
+    # the in-call controls. No PII surfaces in the recording metadata
+    # (just timestamps + duration) until the tutor explicitly downloads.
     room = create_room(
         name=name,
         expires_at=default_room_expiry(booking.scheduled_at, booking.duration_minutes),
+        enable_recording=settings.classroom_enable_recording,
     )
     booking.daily_room_name = room["name"]
     booking.daily_room_url = room["url"]
@@ -1961,6 +1965,68 @@ def _mint_classroom_token(
     return ClassroomTokenResponse(
         room_url=room_url, token=token, role="tutor" if is_owner else "student"
     )
+
+
+class RecordingItem(BaseModel):
+    id: str
+    started_at: datetime | None
+    duration_seconds: int
+    download_url: str | None
+
+
+@router.get(
+    "/bookings/{booking_id}/recordings", response_model=list[RecordingItem]
+)
+def tutor_list_recordings(
+    booking_id: int,
+    current: CurrentUser,
+    tutor: CurrentTutor,
+    session: Annotated[Session, Depends(get_session)],
+) -> list[RecordingItem]:
+    """Tutor-only — recordings for a completed booking. Mints a short-lived
+    download link per recording. Returns [] if Daily.co isn't configured."""
+    _require_owner(tutor, current)
+    booking = session.get(Booking, booking_id)
+    if booking is None or booking.tutor_id != tutor.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found."
+        )
+    if not booking.daily_room_name:
+        return []
+    from ..services import daily as _daily
+
+    try:
+        rows = _daily.list_recordings(room_name=booking.daily_room_name)
+    except _daily.DailyNotConfiguredError:
+        return []
+    except Exception:
+        log.exception(
+            "Could not list Daily recordings for booking %s", booking_id
+        )
+        return []
+    out: list[RecordingItem] = []
+    for r in rows:
+        rid = r.get("id")
+        if not rid:
+            continue
+        link = None
+        try:
+            link = _daily.recording_access_link(recording_id=rid)
+        except Exception:
+            log.exception("Recording link mint failed for %s", rid)
+        started = r.get("start_ts")
+        started_at = (
+            datetime.fromtimestamp(int(started), tz=UTC) if started else None
+        )
+        out.append(
+            RecordingItem(
+                id=rid,
+                started_at=started_at,
+                duration_seconds=int(r.get("duration") or 0),
+                download_url=link,
+            )
+        )
+    return out
 
 
 @router.post("/bookings/{booking_id}/classroom-token", response_model=ClassroomTokenResponse)

@@ -69,6 +69,39 @@ const MyBookings = () => {
   const [reschedulingFor, setReschedulingFor] = useState(null);
   const [rescheduleAt, setRescheduleAt] = useState('');
   const [submittingReschedule, setSubmittingReschedule] = useState(false);
+  // Bulk selection of cancellable bookings. Keyed by booking id.
+  const [selected, setSelected] = useState(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+
+  const toggleSelect = (id) => {
+    setSelected((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleBulkCancel = async () => {
+    if (selected.size === 0) return;
+    if (!(await confirm({
+      title: `Cancel ${selected.size} booking${selected.size === 1 ? '' : 's'}?`,
+      message: 'Eligible bookings will be cancelled and refunded. Any inside the cancellation window stay as they are.',
+      confirmText: `Cancel ${selected.size}`,
+      destructive: true,
+    }))) return;
+    setBulkBusy(true);
+    try {
+      const ids = [...selected];
+      await client.post('/users/me/bookings/bulk-cancel', { booking_ids: ids });
+      setSelected(new Set());
+      await load();
+    } catch (err) {
+      setError(err?.response?.data?.detail || 'Bulk cancel failed.');
+    } finally {
+      setBulkBusy(false);
+    }
+  };
 
   const load = async () => {
     setLoading(true);
@@ -163,6 +196,31 @@ const MyBookings = () => {
         </div>
       )}
 
+      {selected.size > 0 && (
+        <div className="mb-3 flex items-center justify-between gap-3 bg-kotoba-secondary/20 border border-kotoba-secondary/40 px-4 py-2 rounded-md text-sm">
+          <span>
+            <strong>{selected.size}</strong> booking{selected.size === 1 ? '' : 's'} selected
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setSelected(new Set())}
+              className="text-kotoba-text/70 hover:text-kotoba-text"
+            >
+              Clear
+            </button>
+            <button
+              type="button"
+              onClick={handleBulkCancel}
+              disabled={bulkBusy}
+              className="px-4 py-1.5 rounded-md bg-red-600 text-white font-semibold hover:bg-red-700 disabled:opacity-50"
+            >
+              {bulkBusy ? 'Cancelling…' : `Cancel ${selected.size}`}
+            </button>
+          </div>
+        </div>
+      )}
+
       {bookings.length === 0 ? (
         <p className="text-sm text-gray-500">
           No bookings yet. Visit a tutor's site to book your first lesson.
@@ -173,9 +231,19 @@ const MyBookings = () => {
             const meta = STATUS_LABELS[b.status] || { label: b.status, tone: 'bg-gray-100 text-gray-700' };
             const cutoff = b.cancellation_cutoff_hours ?? 48;
             const tooLate = b.status === 'confirmed' && withinCancellationCutoff(b);
+            const isCancellable = b.status === 'confirmed' && !tooLate;
             return (
               <li key={b.id} className="px-4 py-3 flex flex-col gap-2">
                 <div className="flex items-center justify-between gap-3 flex-wrap">
+                  {isCancellable && (
+                    <input
+                      type="checkbox"
+                      checked={selected.has(b.id)}
+                      onChange={() => toggleSelect(b.id)}
+                      className="h-4 w-4 text-kotoba-primary border-kotoba-text/30 rounded focus:ring-kotoba-primary"
+                      aria-label={`Select booking ${b.id} for bulk action`}
+                    />
+                  )}
                   <div>
                     <div className="font-medium text-gray-900">
                       {b.tutor_display_name || 'Tutor'} · {b.pack_name || 'Lesson pack'}

@@ -71,6 +71,13 @@ class Settings(BaseSettings):
     # the delay (legacy behaviour).
     connect_payout_delay_days: int = 14
 
+    # ----- Classroom ------------------------------------------------------
+    # Cloud recording (Daily.co Premium). When True, every new classroom
+    # room has cloud-recording enabled — the tutor can press record from
+    # the in-call UI to capture the session for later download. Defaults
+    # off so accidental Premium-tier charges don't sneak in pre-launch.
+    classroom_enable_recording: bool = False
+
     # ----- Observability --------------------------------------------------
     # SENTRY_DSN absent → no Sentry SDK init; SDK calls are no-ops.
     sentry_dsn: str | None = None

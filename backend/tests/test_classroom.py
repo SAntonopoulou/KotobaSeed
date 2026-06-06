@@ -21,7 +21,9 @@ def daily_configured(monkeypatch):
     monkeypatch.setattr(settings, "daily_api_key", "test_key", raising=False)
     rooms_created = []
 
-    def fake_create_room(*, name: str, expires_at, enable_chat: bool = True):
+    def fake_create_room(
+        *, name: str, expires_at, enable_chat: bool = True, enable_recording: bool = False
+    ):
         # Stubs honor the unconfigured state — production helpers raise
         # `DailyNotConfiguredError` when api_key is unset; we mirror that
         # here so tests can flip api_key=None mid-fixture to exercise the

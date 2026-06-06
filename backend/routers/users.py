@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 import stripe
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import selectinload
 from sqlmodel import Session, func, select
@@ -310,6 +310,41 @@ def export_booking_ics(
             "Content-Disposition": f'attachment; filename="kotobaseed-{booking.id}.ics"',
         },
     )
+
+
+class BulkCancelRequest(BaseModel):
+    booking_ids: list[int] = Field(min_length=1, max_length=50)
+
+
+class BulkCancelResult(BaseModel):
+    succeeded: list[int]
+    failed: list[dict]
+
+
+@router.post("/me/bookings/bulk-cancel", response_model=BulkCancelResult)
+def bulk_cancel_my_bookings(
+    payload: BulkCancelRequest,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> BulkCancelResult:
+    """Cancel many bookings in one round trip. Each booking goes through
+    the same cancellation rules as the single-cancel endpoint — invalid
+    ones land in `failed[]` so the caller can surface them per-row."""
+    succeeded: list[int] = []
+    failed: list[dict] = []
+    for booking_id in payload.booking_ids:
+        try:
+            cancel_my_booking(  # type: ignore[name-defined]
+                booking_id=booking_id,
+                current_user=current_user,
+                session=session,
+            )
+            succeeded.append(booking_id)
+        except HTTPException as exc:
+            failed.append({"booking_id": booking_id, "detail": exc.detail})
+        except Exception as exc:  # noqa: BLE001
+            failed.append({"booking_id": booking_id, "detail": str(exc)})
+    return BulkCancelResult(succeeded=succeeded, failed=failed)
 
 
 @router.post("/me/bookings/{booking_id}/cancel", response_model=StudentBookingRead)

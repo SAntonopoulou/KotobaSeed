@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import client from '../api/client';
+import { useToast } from '../context/ToastContext';
 
 // Dashboard module: tutor's articles with text search + status filter +
 // visibility filter so a tutor with a long backlog can find what they're
@@ -30,6 +31,7 @@ const VISIBILITY_TONE = {
 };
 
 const ArticlesManager = () => {
+  const { addToast } = useToast();
   const [articles, setArticles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -55,11 +57,30 @@ const ArticlesManager = () => {
   const togglePublish = async (article) => {
     setBusy(article.id);
     setError('');
+    const wasPublished = article.is_published;
     try {
       await client.patch(`/articles/${article.id}`, {
-        is_published: !article.is_published,
+        is_published: !wasPublished,
       });
       await load();
+      addToast({
+        message: wasPublished
+          ? `Unpublished "${article.title}".`
+          : `Published "${article.title}".`,
+        type: 'success',
+        undo: {
+          onUndo: async () => {
+            try {
+              await client.patch(`/articles/${article.id}`, {
+                is_published: wasPublished,
+              });
+              await load();
+            } catch (err) {
+              setError(err?.response?.data?.detail || 'Undo failed.');
+            }
+          },
+        },
+      });
     } catch (err) {
       setError(err?.response?.data?.detail || 'Could not change publish state.');
     } finally {

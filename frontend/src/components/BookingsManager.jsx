@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import client from '../api/client';
 import { useConfirm } from '../context/ModalContext';
+import { SkeletonCard } from './Skeleton';
 
 const CLASSROOM_LEAD_MIN = 15;
 const CLASSROOM_GRACE_MIN = 30;
@@ -99,31 +100,89 @@ const BookingsManager = () => {
 
   const Row = ({ booking, action }) => {
     const meta = STATUS_LABELS[booking.status] || { label: booking.status, tone: 'bg-gray-100 text-gray-700' };
+    const [recordings, setRecordings] = useState(null);
+    const [loadingRec, setLoadingRec] = useState(false);
+    const showRecordingButton = booking.status === 'completed';
+
+    const loadRecordings = async () => {
+      if (recordings !== null) {
+        setRecordings(null);
+        return;
+      }
+      setLoadingRec(true);
+      try {
+        const res = await client.get(`/tutor/bookings/${booking.id}/recordings`);
+        setRecordings(res.data || []);
+      } catch {
+        setRecordings([]);
+      } finally {
+        setLoadingRec(false);
+      }
+    };
+
     return (
-      <li className="px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
-        <div>
-          <div className="font-medium text-kotoba-text">
-            {booking.student_name || 'Student'} · {booking.pack_name || `Pack #${booking.lesson_pack_id}`}
+      <li className="px-4 py-3 flex flex-col gap-2">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <div className="font-medium text-kotoba-text">
+              {booking.student_name || 'Student'} · {booking.pack_name || `Pack #${booking.lesson_pack_id}`}
+            </div>
+            <div className="text-xs text-kotoba-text/60">
+              {formatDate(booking.scheduled_at)} · {booking.duration_minutes} min · {formatPrice(booking.price_cents, booking.currency)}
+            </div>
           </div>
-          <div className="text-xs text-kotoba-text/60">
-            {formatDate(booking.scheduled_at)} · {booking.duration_minutes} min · {formatPrice(booking.price_cents, booking.currency)}
+          <div className="flex items-center gap-3">
+            {showRecordingButton && (
+              <button
+                type="button"
+                onClick={loadRecordings}
+                className="text-sm text-kotoba-text/60 hover:text-kotoba-primary"
+              >
+                {recordings === null ? 'Show recordings' : 'Hide'}
+              </button>
+            )}
+            <span className={`px-2 py-0.5 rounded text-xs font-medium ${meta.tone}`}>{meta.label}</span>
+            {action}
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <span className={`px-2 py-0.5 rounded text-xs font-medium ${meta.tone}`}>{meta.label}</span>
-          {action}
-        </div>
+        {recordings !== null && (
+          <div className="ml-4 mt-1 text-xs text-kotoba-text/70 border-l-2 border-kotoba-primary/30 pl-3">
+            {loadingRec ? (
+              <p>Loading recordings…</p>
+            ) : recordings.length === 0 ? (
+              <p className="italic">No recordings — Daily.co's record button wasn't pressed during this lesson.</p>
+            ) : (
+              <ul className="space-y-1">
+                {recordings.map((r) => {
+                  const mins = Math.round((r.duration_seconds || 0) / 60);
+                  return (
+                    <li key={r.id}>
+                      {r.started_at && new Date(r.started_at).toLocaleString()} · {mins} min ·{' '}
+                      {r.download_url ? (
+                        <a
+                          href={r.download_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-kotoba-primary underline"
+                        >
+                          Download
+                        </a>
+                      ) : (
+                        <span className="text-kotoba-text/50">link expired — refresh</span>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        )}
       </li>
     );
   };
 
   if (loading) {
-    return (
-      <section className="bg-white rounded-2xl shadow-sm p-6">
-        <h2 className="text-lg font-bold text-kotoba-primary mb-2">Bookings</h2>
-        <p className="text-sm text-kotoba-text/70">Loading…</p>
-      </section>
-    );
+    return <SkeletonCard rows={4} />;
   }
 
   return (
