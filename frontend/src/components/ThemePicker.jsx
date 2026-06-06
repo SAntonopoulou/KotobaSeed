@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import client from '../api/client';
+import { SkeletonCard } from './Skeleton';
 
 // Pro+ feature. We render the picker for everyone so free tutors can see
 // what they'd unlock; save calls 402 for non-Pro and we show the upgrade
@@ -78,12 +79,7 @@ const ThemePicker = ({ tutor, onSaved }) => {
   };
 
   if (loading) {
-    return (
-      <section className="bg-white rounded-2xl shadow-sm p-6">
-        <h2 className="text-lg font-bold text-kotoba-primary mb-2">Theme</h2>
-        <p className="text-sm text-kotoba-text/70">Loading…</p>
-      </section>
-    );
+    return <SkeletonCard />;
   }
 
   const dirty = selected !== (tutor?.theme || 'sage');

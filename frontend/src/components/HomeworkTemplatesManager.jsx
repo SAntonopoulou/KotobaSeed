@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import client from '../api/client';
 import { useConfirm } from '../context/ModalContext';
 import QuestionBuilder, { makeQuestion } from './homework/QuestionBuilder';
+import { SkeletonCard } from './Skeleton';
 
 // Tutor-side template CRUD. Inline editor — for v1 we keep templates
 // modest enough that an inline form works better than a dedicated route.

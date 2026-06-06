@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import client from '../api/client';
+import { SkeletonCard } from './Skeleton';
 
 // Business summary panel — first thing the tutor sees on their dashboard.
 // Three metric clusters: this month, lifetime, upcoming. Plus a six-month
@@ -55,12 +56,7 @@ const TutorAnalytics = () => {
   }, []);
 
   if (loading) {
-    return (
-      <section className="bg-white rounded-2xl shadow-sm p-6">
-        <h2 className="text-lg font-bold text-kotoba-primary mb-2">Your business</h2>
-        <p className="text-sm text-kotoba-text/70">Loading…</p>
-      </section>
-    );
+    return <SkeletonCard />;
   }
 
   if (error) {

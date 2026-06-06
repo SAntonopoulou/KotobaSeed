@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import client from '../api/client';
 import { useToast } from '../context/ToastContext';
+import { SkeletonCard } from './Skeleton';
 
 // Dashboard module: tutor's articles with text search + status filter +
 // visibility filter so a tutor with a long backlog can find what they're

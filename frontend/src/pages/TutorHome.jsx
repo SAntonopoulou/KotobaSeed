@@ -90,6 +90,7 @@ const TutorHome = () => {
 
   const visibleSections = (sections || []).filter((s) => s.is_visible !== false);
   const themeClass = `theme-${tutor.theme || 'sage'}`;
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   return (
     <div className={`${themeClass} bg-kotoba-background min-h-screen`}>
@@ -147,8 +148,34 @@ const TutorHome = () => {
             >
               Book a lesson
             </a>
+            {/* Mobile menu trigger — replaces the hidden links */}
+            <button
+              type="button"
+              onClick={() => setMobileNavOpen(v => !v)}
+              aria-label={mobileNavOpen ? 'Close menu' : 'Open menu'}
+              className="sm:hidden p-2 text-kotoba-text/70 hover:text-kotoba-primary"
+            >
+              {mobileNavOpen ? '✕' : '☰'}
+            </button>
           </div>
         </div>
+        {mobileNavOpen && (
+          <nav className="sm:hidden border-t border-kotoba-text/10 px-4 py-3 space-y-1">
+            <Link onClick={() => setMobileNavOpen(false)} to="/articles" className="block px-2 py-2 rounded text-base text-kotoba-text hover:bg-kotoba-primary/5">Articles</Link>
+            <Link onClick={() => setMobileNavOpen(false)} to="/placement-test" className="block px-2 py-2 rounded text-base text-kotoba-text hover:bg-kotoba-primary/5">Placement test</Link>
+            <Link onClick={() => setMobileNavOpen(false)} to="/modules" className="block px-2 py-2 rounded text-base text-kotoba-text hover:bg-kotoba-primary/5">Modules</Link>
+            {isOwner && (
+              <a onClick={() => setMobileNavOpen(false)} href={apexUrl('/messages')} className="block px-2 py-2 rounded text-base text-kotoba-text hover:bg-kotoba-primary/5">Messages</a>
+            )}
+            <a
+              onClick={() => setMobileNavOpen(false)}
+              href="#book"
+              className="block px-2 py-2 rounded text-base font-semibold text-kotoba-text bg-kotoba-secondary/30 hover:bg-kotoba-secondary/50"
+            >
+              Book a lesson
+            </a>
+          </nav>
+        )}
       </header>
 
       {isPaused && (

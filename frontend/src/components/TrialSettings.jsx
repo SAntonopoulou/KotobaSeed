@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import client from '../api/client';
+import { SkeletonCard } from './Skeleton';
 
 const TrialSettings = () => {
   const [config, setConfig] = useState(null);
@@ -40,12 +41,7 @@ const TrialSettings = () => {
   };
 
   if (loading || !config) {
-    return (
-      <section className="bg-white rounded-2xl shadow-sm p-6">
-        <h2 className="text-lg font-bold text-kotoba-primary mb-2">Free trial</h2>
-        <p className="text-sm text-kotoba-text/70">Loading…</p>
-      </section>
-    );
+    return <SkeletonCard />;
   }
 
   const handleToggle = (e) => {

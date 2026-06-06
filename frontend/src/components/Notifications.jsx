@@ -68,7 +68,7 @@ const Notifications = () => {
 
   return (
     <div className="relative" ref={dropdownRef}>
-      <button onClick={() => setIsOpen(!isOpen)} className="relative">
+      <button onClick={() => setIsOpen(!isOpen)} aria-label="Notifications" className="relative">
         <FaBell className="h-6 w-6 text-gray-500 hover:text-gray-700" />
         {unreadCount > 0 && (
           <span className="absolute top-0 right-0 block h-2 w-2 rounded-full bg-red-500 ring-2 ring-white" />

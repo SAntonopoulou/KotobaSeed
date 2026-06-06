@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import client from '../api/client';
+import { SkeletonCard } from './Skeleton';
 
 // Focused grading view: only submissions awaiting tutor review, oldest
 // first. We deliberately show ONE submission expanded at a time so the
@@ -118,12 +119,7 @@ const GradingQueue = () => {
   };
 
   if (loading) {
-    return (
-      <section className="bg-white rounded-2xl shadow-sm p-6">
-        <h2 className="text-lg font-bold text-kotoba-primary mb-2">Grading queue</h2>
-        <p className="text-sm text-kotoba-text/70">Loading…</p>
-      </section>
-    );
+    return <SkeletonCard />;
   }
 
   return (

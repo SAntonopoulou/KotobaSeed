@@ -5,7 +5,7 @@ import logo from '../assets/Logo - Rectangle.png';
 import Notifications from './Notifications';
 import InboxDropdown from './InboxDropdown'; // Import InboxDropdown
 import { useInbox } from '../context/InboxContext'; // Import useInbox
-import { FaEnvelope } from 'react-icons/fa'; // Import an icon
+import { FaEnvelope, FaBars, FaTimes } from 'react-icons/fa';
 import { tutorSiteUrl } from '../hooks/useTenant';
 
 const Navbar = () => {
@@ -14,6 +14,20 @@ const Navbar = () => {
   const [user, setUser] = useState(null);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showInbox, setShowInbox] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  // ESC closes whichever menu is open. Cheap keyboard hygiene that
+  // matches modal behaviour elsewhere.
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key !== 'Escape') return;
+      setShowUserMenu(false);
+      setShowInbox(false);
+      setMobileOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
   const [searchQuery, setSearchQuery] = useState('');
   const userMenuRef = useRef(null);
   const inboxMenuRef = useRef(null);
@@ -195,7 +209,65 @@ const Navbar = () => {
               </div>
             )}
           </div>
+
+          {/* Mobile menu trigger — visible below sm breakpoint */}
+          <div className="flex items-center sm:hidden">
+            <button
+              type="button"
+              onClick={() => setMobileOpen((v) => !v)}
+              aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
+              className="p-2 text-gray-600 hover:text-kotoba-primary"
+            >
+              {mobileOpen ? <FaTimes size={20} /> : <FaBars size={20} />}
+            </button>
+          </div>
         </div>
+
+        {/* Mobile drawer — full-width inline panel under the bar */}
+        {mobileOpen && (
+          <div className="sm:hidden border-t border-gray-200 py-3 space-y-1">
+            {user ? (
+              <>
+                <Link to="/projects" onClick={() => setMobileOpen(false)} className="block px-2 py-2 rounded text-base text-gray-700 hover:bg-gray-50">Projects</Link>
+                <Link to="/requests" onClick={() => setMobileOpen(false)} className="block px-2 py-2 rounded text-base text-gray-700 hover:bg-gray-50">Requests</Link>
+                <Link to="/library" onClick={() => setMobileOpen(false)} className="block px-2 py-2 rounded text-base text-gray-700 hover:bg-gray-50">Find a tutor</Link>
+                <Link to="/messages" onClick={() => setMobileOpen(false)} className="block px-2 py-2 rounded text-base text-gray-700 hover:bg-gray-50">Messages</Link>
+                <Link to="/support" onClick={() => setMobileOpen(false)} className="block px-2 py-2 rounded text-base text-gray-700 hover:bg-gray-50">Support</Link>
+                <Link to="/referrals" onClick={() => setMobileOpen(false)} className="block px-2 py-2 rounded text-base text-gray-700 hover:bg-gray-50">Referrals</Link>
+                <Link to="/pricing" onClick={() => setMobileOpen(false)} className="block px-2 py-2 rounded text-base text-gray-700 hover:bg-gray-50">Pricing</Link>
+                {user.role === 'creator' && (
+                  <Link to="/teacher/dashboard" onClick={() => setMobileOpen(false)} className="block px-2 py-2 rounded text-base text-gray-700 hover:bg-gray-50">Dashboard</Link>
+                )}
+                {user.role === 'student' && (
+                  <Link to="/student/dashboard" onClick={() => setMobileOpen(false)} className="block px-2 py-2 rounded text-base text-gray-700 hover:bg-gray-50">My pledges</Link>
+                )}
+                {user.role === 'admin' && (
+                  <Link to="/admin/dashboard" onClick={() => setMobileOpen(false)} className="block px-2 py-2 rounded text-base text-gray-700 hover:bg-gray-50">Admin</Link>
+                )}
+                {['support', 'manager', 'admin', 'moderator'].includes(user.role) && (
+                  <Link to="/staff/support" onClick={() => setMobileOpen(false)} className="block px-2 py-2 rounded text-base text-gray-700 hover:bg-gray-50">Support queue</Link>
+                )}
+                <div className="border-t border-gray-100 my-2" />
+                <Link to={`/profile/${user.id}`} onClick={() => setMobileOpen(false)} className="block px-2 py-2 rounded text-base text-gray-700 hover:bg-gray-50">Your profile</Link>
+                <Link to="/settings" onClick={() => setMobileOpen(false)} className="block px-2 py-2 rounded text-base text-gray-700 hover:bg-gray-50">Settings</Link>
+                {user.tutor_slug && (
+                  <>
+                    <a href={tutorSiteUrl(user.tutor_slug, '/')} className="block px-2 py-2 rounded text-base text-gray-700 hover:bg-gray-50">Visit your site</a>
+                    <a href={tutorSiteUrl(user.tutor_slug, '/dashboard')} className="block px-2 py-2 rounded text-base text-gray-700 hover:bg-gray-50">Manage your site</a>
+                  </>
+                )}
+                <button onClick={() => { setMobileOpen(false); handleLogout(); }} className="block w-full text-left px-2 py-2 rounded text-base text-gray-700 hover:bg-gray-50">Log out</button>
+              </>
+            ) : (
+              <>
+                <Link to="/library" onClick={() => setMobileOpen(false)} className="block px-2 py-2 rounded text-base text-gray-700 hover:bg-gray-50">Find a tutor</Link>
+                <Link to="/pricing" onClick={() => setMobileOpen(false)} className="block px-2 py-2 rounded text-base text-gray-700 hover:bg-gray-50">Pricing</Link>
+                <Link to="/login" onClick={() => setMobileOpen(false)} className="block px-2 py-2 rounded text-base text-gray-700 hover:bg-gray-50">Log in</Link>
+                <Link to="/register" onClick={() => setMobileOpen(false)} className="block px-2 py-2 rounded text-base font-semibold text-kotoba-primary hover:bg-kotoba-primary/5">Create an account</Link>
+              </>
+            )}
+          </div>
+        )}
       </div>
     </nav>
   );

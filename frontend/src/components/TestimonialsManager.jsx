@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import client from '../api/client';
 import { useConfirm } from '../context/ModalContext';
+import { SkeletonCard } from './Skeleton';
 
 // Per-tutor testimonials manager. Tutor types in their own student
 // testimonials (no public submission flow in v1). Each row has student

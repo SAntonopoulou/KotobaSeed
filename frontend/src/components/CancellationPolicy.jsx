@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import client from '../api/client';
+import { SkeletonCard } from './Skeleton';
 
 // Tutor sets the minimum hours-before-lesson at which students can still
 // cancel. Platform floor is 48; the input enforces 48-720 (30 days).
@@ -74,12 +75,7 @@ const CancellationPolicy = () => {
   };
 
   if (loading) {
-    return (
-      <section className="bg-white rounded-2xl shadow-sm p-6">
-        <h2 className="text-lg font-bold text-kotoba-primary mb-2">Cancellation policy</h2>
-        <p className="text-sm text-kotoba-text/70">Loading…</p>
-      </section>
-    );
+    return <SkeletonCard />;
   }
 
   return (

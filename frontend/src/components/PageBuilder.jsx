@@ -7,6 +7,7 @@ import {
   SECTION_LABELS,
 } from './tutor_sections';
 import PageSectionEditor from './page_builder/PageSectionEditor';
+import { SkeletonCard } from './Skeleton';
 
 // Pro+ feature. The dashboard renders this regardless of tier and the
 // component itself shows the gate prompt for non-Pro tutors — keeps the
@@ -141,12 +142,7 @@ const PageBuilder = () => {
   };
 
   if (loading) {
-    return (
-      <section className="bg-white rounded-2xl shadow-sm p-6">
-        <h2 className="text-lg font-bold text-kotoba-primary mb-2">Site builder</h2>
-        <p className="text-sm text-kotoba-text/70">Loading…</p>
-      </section>
-    );
+    return <SkeletonCard />;
   }
 
   return (

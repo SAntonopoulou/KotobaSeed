@@ -322,9 +322,9 @@ const ModulesManager = () => {
                         {found?.title || `(deleted #${it.ref_id})`}
                       </span>
                       <div className="flex items-center gap-1 flex-shrink-0">
-                        <button type="button" onClick={() => moveItem(idx, -1)} className="text-kotoba-text/50 hover:text-kotoba-text px-1">↑</button>
-                        <button type="button" onClick={() => moveItem(idx, 1)} className="text-kotoba-text/50 hover:text-kotoba-text px-1">↓</button>
-                        <button type="button" onClick={() => removeItem(idx)} className="text-red-500 hover:text-red-700 text-lg px-1">×</button>
+                        <button type="button" onClick={() => moveItem(idx, -1)} aria-label="Move item up" title="Move up" className="text-kotoba-text/50 hover:text-kotoba-text px-1">↑</button>
+                        <button type="button" onClick={() => moveItem(idx, 1)} aria-label="Move item down" title="Move down" className="text-kotoba-text/50 hover:text-kotoba-text px-1">↓</button>
+                        <button type="button" onClick={() => removeItem(idx)} aria-label="Remove item" title="Remove" className="text-red-500 hover:text-red-700 text-lg px-1">×</button>
                       </div>
                     </li>
                   );

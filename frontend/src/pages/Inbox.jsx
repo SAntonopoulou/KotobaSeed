@@ -485,7 +485,7 @@ const Inbox = () => {
                             )}
                             
                             <span className="block text-xs text-right opacity-75 mt-1">{formatDateTime(message.created_at)}</span>
-                            {message.message_type === 'text' && currentConversation.status === 'open' && <button onClick={() => setReplyingToMessage(message)} className={`absolute -bottom-2 ${message.sender_id === user.id ? '-left-8' : '-right-8'} p-1 rounded-full bg-gray-200 text-gray-600 hover:bg-gray-300`} title="Reply"><FaReply size={12} /></button>}
+                            {message.message_type === 'text' && currentConversation.status === 'open' && <button onClick={() => setReplyingToMessage(message)} aria-label="Reply to message" className={`absolute -bottom-2 ${message.sender_id === user.id ? '-left-8' : '-right-8'} p-1 rounded-full bg-gray-200 text-gray-600 hover:bg-gray-300`} title="Reply"><FaReply size={12} /></button>}
                           </div>
                         </div>
                       )}
@@ -494,7 +494,7 @@ const Inbox = () => {
                 })}
               </div>
               {currentConversation.status === 'open' ? <div className="bg-white p-4 border-t border-gray-200">
-                {replyingToMessage && <div className="mb-2 p-2 rounded-md bg-gray-100 border-l-4 border-kotoba-primary flex justify-between items-center"><div><p className="text-sm font-semibold text-gray-700">Replying to {replyingToMessage.sender_full_name}</p><p className="text-sm text-gray-600 truncate">{replyingToMessage.content}</p></div><button onClick={() => setReplyingToMessage(null)} className="text-gray-500 hover:text-gray-700"><FaTimes /></button></div>}
+                {replyingToMessage && <div className="mb-2 p-2 rounded-md bg-gray-100 border-l-4 border-kotoba-primary flex justify-between items-center"><div><p className="text-sm font-semibold text-gray-700">Replying to {replyingToMessage.sender_full_name}</p><p className="text-sm text-gray-600 truncate">{replyingToMessage.content}</p></div><button onClick={() => setReplyingToMessage(null)} aria-label="Cancel reply" className="text-gray-500 hover:text-gray-700"><FaTimes /></button></div>}
                 
                 {user.id === currentConversation.student_id && currentConversation.demo_video_requested && !currentConversation.student_demo_video_url && (
                   <div className="mb-4">

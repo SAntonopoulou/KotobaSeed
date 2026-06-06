@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import client from '../api/client';
 import { useConfirm } from '../context/ModalContext';
+import { SkeletonCard } from './Skeleton';
 
 // Student's recurring lessons — list current plans + cancel.
 // Plan creation happens on the tutor's site via BookingDialog where the
@@ -63,12 +64,7 @@ const MyRecurringPlans = () => {
   };
 
   if (loading) {
-    return (
-      <section className="bg-white rounded-2xl shadow-sm p-6">
-        <h2 className="text-lg font-bold text-kotoba-primary mb-2">Recurring lessons</h2>
-        <p className="text-sm text-kotoba-text/70">Loading…</p>
-      </section>
-    );
+    return <SkeletonCard />;
   }
 
   if (plans.length === 0) return null;

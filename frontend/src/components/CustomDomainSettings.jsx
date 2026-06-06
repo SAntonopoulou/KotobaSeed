@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import client from '../api/client';
 import { useConfirm } from '../context/ModalContext';
+import { SkeletonCard } from './Skeleton';
 
 // Pro+ feature: point your own domain at the platform. Backend gates the
 // PUT on user.is_pro_subscriber; this widget renders an upgrade nudge when
@@ -190,12 +191,7 @@ const CustomDomainSettings = () => {
   };
 
   if (loading || !state) {
-    return (
-      <section className="bg-white rounded-2xl shadow-sm p-6">
-        <h2 className="text-lg font-bold text-kotoba-primary mb-2">Custom domain</h2>
-        <p className="text-sm text-kotoba-text/70">Loading…</p>
-      </section>
-    );
+    return <SkeletonCard />;
   }
 
   return (

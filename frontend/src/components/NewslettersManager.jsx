@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import client from '../api/client';
 import { useConfirm } from '../context/ModalContext';
+import { SkeletonCard } from './Skeleton';
 
 // Per-tutor newsletter compose + history. Two panes: top is the compose
 // form (drafts + editing one); below is a list of past sends + current

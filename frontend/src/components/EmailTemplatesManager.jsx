@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import client from '../api/client';
 import { useConfirm } from '../context/ModalContext';
+import { SkeletonCard } from './Skeleton';
 
 // Dashboard module for editing transactional email subjects + markdown
 // bodies. Each template shows: label + description, current subject,
@@ -280,12 +281,7 @@ const EmailTemplatesManager = () => {
   };
 
   if (loading) {
-    return (
-      <section className="bg-white rounded-2xl shadow-sm p-6">
-        <h2 className="text-lg font-bold text-kotoba-primary mb-2">Email customization</h2>
-        <p className="text-sm text-kotoba-text/70">Loading…</p>
-      </section>
-    );
+    return <SkeletonCard />;
   }
 
   return (
