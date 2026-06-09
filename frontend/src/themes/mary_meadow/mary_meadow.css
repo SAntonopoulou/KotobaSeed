@@ -1,0 +1,1136 @@
+/* Mary's Meadow — bespoke cottagecore theme for Mary's tenant only.
+ *
+ * Visual signature commitments (the bits that have to stay distinctive):
+ *   - Big floral wreath SVG framing the hero portrait
+ *   - Sleeping cat decoration tucked into the hero's lower-left corner
+ *   - Section-level color washes: blush hero band, cream features, soft
+ *     sage levels, honey pricing, lavender about, dotted scrapbook reviews
+ *   - Postage-stamp numbered badges on feature postcards (perforated edges)
+ *   - Multicolor washi-tape headers on review cards
+ *   - Caveat handwriting used MORE than just for the wordmark — eyebrows,
+ *     sign-offs, level names, "Booking now" pill all in Caveat
+ *
+ * Every selector is scoped under `.theme-mary-meadow-site` so styles do
+ * not leak. Palette tokens come in via inline style from CustomThemeSite;
+ * the values here are fallback for editor previews.
+ */
+
+.theme-mary-meadow-site {
+  --brand: #c66578;
+  --brand-hover: #a84d60;
+  --brand-soft: #f3d4dc;
+  --accent: #d9a856;
+  --accent-hover: #bd8a3a;
+  --accent-soft: #f6e8c8;
+  --bg: #faf3e7;
+  --bg-blush: #fbe5e9;
+  --bg-sage: #e6ece1;
+  --bg-honey: #faecd8;
+  --bg-lavender: #ece6f4;
+  --surface: #ffffff;
+  --fg: #3a4733;
+  --fg-muted: #6d7665;
+  --border: #cdd6c4;
+  --lavender: #b5a4d4;
+  --sage: #93a88f;
+  --sage-deep: #6c8068;
+  --display: 'DM Serif Display', 'Cormorant Garamond', Georgia, serif;
+  --body: 'Quicksand', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --logo: 'Caveat', 'Brush Script MT', cursive;
+
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--body);
+  font-weight: 500;
+  font-size: 17px;
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+.theme-mary-meadow-site * { box-sizing: border-box; }
+
+/* Subtle paper grain — a tiled SVG noise, kept very soft so it doesn't
+ * compete with the content. Applied to .m-paper sections that want a
+ * letter-from-grandma feel. */
+.theme-mary-meadow-site .m-paper {
+  background-image:
+    radial-gradient(circle at 18% 22%, rgba(217, 168, 86, 0.06) 0 1.5px, transparent 2px),
+    radial-gradient(circle at 78% 64%, rgba(198, 101, 120, 0.05) 0 1.5px, transparent 2px),
+    radial-gradient(circle at 42% 86%, rgba(147, 168, 143, 0.05) 0 1.5px, transparent 2px);
+  background-size: 240px 240px;
+}
+
+/* ----- shared wrap + utilities ----------------------------------- */
+
+.theme-mary-meadow-site .m-wrap {
+  max-width: 1140px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+.theme-mary-meadow-site .m-section {
+  padding: 96px 0;
+  position: relative;
+  overflow: hidden;
+}
+.theme-mary-meadow-site .m-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--logo);
+  font-size: 26px;
+  color: var(--brand);
+  margin-bottom: 14px;
+  line-height: 1;
+}
+.theme-mary-meadow-site .m-eyebrow::before,
+.theme-mary-meadow-site .m-eyebrow::after {
+  content: '';
+  width: 24px;
+  height: 2px;
+  background: currentColor;
+  opacity: 0.45;
+  border-radius: 2px;
+}
+.theme-mary-meadow-site .m-title {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: clamp(34px, 4.4vw, 56px);
+  line-height: 1.05;
+  color: var(--fg);
+  margin: 0 0 18px;
+  letter-spacing: -0.005em;
+}
+.theme-mary-meadow-site .m-title em {
+  font-style: italic;
+  color: var(--brand);
+}
+.theme-mary-meadow-site .m-sub {
+  color: var(--fg-muted);
+  font-size: 18px;
+  max-width: 640px;
+  margin: 0;
+}
+.theme-mary-meadow-site .m-sub-center { margin: 0 auto; text-align: center; }
+
+/* Hand-drawn underline used to mark the eyebrow on hero + about. */
+.theme-mary-meadow-site .m-underline {
+  color: var(--accent);
+  display: block;
+  margin-top: 4px;
+}
+
+/* ----- buttons --------------------------------------------------- */
+
+.theme-mary-meadow-site .m-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 13px 22px;
+  border-radius: 999px;
+  font-family: var(--body);
+  font-weight: 600;
+  font-size: 15px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform 140ms ease, box-shadow 180ms ease, background 160ms ease, color 160ms ease;
+  border: none;
+}
+.theme-mary-meadow-site .m-btn-primary {
+  background: var(--brand);
+  color: var(--surface);
+  box-shadow: 0 10px 24px rgba(198, 101, 120, 0.28);
+}
+.theme-mary-meadow-site .m-btn-primary:hover {
+  background: var(--brand-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 14px 30px rgba(168, 77, 96, 0.34);
+}
+.theme-mary-meadow-site .m-btn-outline {
+  background: transparent;
+  color: var(--brand);
+  border: 1.5px solid var(--brand);
+}
+.theme-mary-meadow-site .m-btn-outline:hover {
+  background: rgba(198, 101, 120, 0.08);
+  transform: translateY(-1px);
+}
+.theme-mary-meadow-site .m-btn-ghost {
+  background: transparent;
+  color: var(--fg);
+  padding: 10px 14px;
+}
+.theme-mary-meadow-site .m-btn-ghost:hover { color: var(--brand); }
+.theme-mary-meadow-site .m-btn-lg { padding: 15px 28px; font-size: 16px; }
+
+/* ----- header / chrome ------------------------------------------- */
+
+.theme-mary-meadow-site .m-hd {
+  background: rgba(250, 243, 231, 0.88);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+.theme-mary-meadow-site .m-hd-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px 0;
+}
+.theme-mary-meadow-site .m-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  text-decoration: none;
+}
+.theme-mary-meadow-site .m-logo-mark {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--brand) 0%, var(--accent) 100%);
+  color: var(--surface);
+  font-family: var(--logo);
+  font-size: 26px;
+  line-height: 1;
+  box-shadow: 0 8px 16px rgba(198, 101, 120, 0.3);
+}
+.theme-mary-meadow-site .m-logo-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1;
+}
+.theme-mary-meadow-site .m-logo-l1 {
+  font-family: var(--body);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--fg-muted);
+}
+.theme-mary-meadow-site .m-logo-l2 {
+  font-family: var(--logo);
+  font-size: 30px;
+  color: var(--brand);
+  margin-top: 2px;
+}
+.theme-mary-meadow-site .m-nav { display: flex; gap: 26px; align-items: center; }
+.theme-mary-meadow-site .m-nav a {
+  font-family: var(--body);
+  font-weight: 600;
+  font-size: 14.5px;
+  color: var(--fg);
+  text-decoration: none;
+  position: relative;
+  transition: color 140ms ease;
+}
+.theme-mary-meadow-site .m-nav a:hover { color: var(--brand); }
+.theme-mary-meadow-site .m-nav a:hover::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--brand);
+  border-radius: 2px;
+}
+.theme-mary-meadow-site .m-hd-right { display: flex; align-items: center; gap: 10px; }
+.theme-mary-meadow-site .m-burger {
+  display: none;
+  background: transparent;
+  border: none;
+  padding: 8px;
+  color: var(--fg);
+  cursor: pointer;
+}
+@media (max-width: 880px) {
+  .theme-mary-meadow-site .m-nav { display: none; }
+  .theme-mary-meadow-site .m-hd-right .m-btn-ghost { display: none; }
+  .theme-mary-meadow-site .m-burger { display: grid; place-items: center; }
+}
+
+.theme-mary-meadow-site .m-mob-ov {
+  position: fixed;
+  inset: 0;
+  background: rgba(58, 71, 51, 0.45);
+  z-index: 40;
+}
+.theme-mary-meadow-site .m-mob-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(360px, 86vw);
+  background: var(--surface);
+  z-index: 41;
+  display: flex;
+  flex-direction: column;
+  padding: 18px;
+}
+.theme-mary-meadow-site .m-mob-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border);
+}
+.theme-mary-meadow-site .m-mob-nav { display: flex; flex-direction: column; gap: 4px; padding-top: 14px; }
+.theme-mary-meadow-site .m-mob-nav a {
+  padding: 10px 6px;
+  font-family: var(--body);
+  font-weight: 600;
+  font-size: 17px;
+  color: var(--fg);
+  text-decoration: none;
+}
+.theme-mary-meadow-site .m-mob-foot { margin-top: auto; display: flex; flex-direction: column; gap: 8px; }
+
+/* ----- footer ---------------------------------------------------- */
+
+.theme-mary-meadow-site .m-ft {
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding: 0 0 28px;
+  margin-top: 0;
+  position: relative;
+}
+.theme-mary-meadow-site .m-ft::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: 0;
+  right: 0;
+  height: 18px;
+  background:
+    radial-gradient(circle at 12px 18px, var(--surface) 12px, transparent 12px),
+    repeating-linear-gradient(90deg, var(--surface) 0 24px, var(--surface) 24px 24px);
+  background-size: 24px 18px;
+}
+.theme-mary-meadow-site .m-ft-top {
+  display: grid;
+  grid-template-columns: 1.6fr repeat(3, 1fr);
+  gap: 36px;
+  padding: 60px 0 36px;
+  align-items: start;
+}
+.theme-mary-meadow-site .m-ft-tagline {
+  margin: 12px 0 0;
+  color: var(--fg-muted);
+  font-size: 15px;
+  max-width: 320px;
+  line-height: 1.55;
+}
+.theme-mary-meadow-site .m-ft-top h4 {
+  font-family: var(--display);
+  font-size: 18px;
+  margin: 0 0 14px;
+  color: var(--fg);
+  font-weight: 400;
+}
+.theme-mary-meadow-site .m-ft-top a {
+  display: block;
+  padding: 5px 0;
+  font-size: 14px;
+  color: var(--fg-muted);
+  text-decoration: none;
+}
+.theme-mary-meadow-site .m-ft-top a:hover { color: var(--brand); }
+.theme-mary-meadow-site .m-ft-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 22px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--fg-muted);
+}
+.theme-mary-meadow-site .m-ft-bottom a {
+  color: var(--fg-muted);
+  text-decoration: none;
+  margin-left: 14px;
+}
+.theme-mary-meadow-site .m-ft-bottom a:hover { color: var(--brand); }
+.theme-mary-meadow-site .m-ft-cross { font-weight: 600; }
+@media (max-width: 720px) {
+  .theme-mary-meadow-site .m-ft-top { grid-template-columns: 1fr 1fr; }
+  .theme-mary-meadow-site .m-ft-bottom { flex-direction: column; gap: 12px; align-items: flex-start; }
+}
+
+/* ===== HERO (love letter) ======================================== */
+
+.theme-mary-meadow-site .m-hero {
+  background: linear-gradient(180deg, var(--bg-blush) 0%, var(--bg) 100%);
+  padding: 110px 0 90px;
+  position: relative;
+  overflow: hidden;
+}
+.theme-mary-meadow-site .m-hero-vine {
+  position: absolute;
+  top: 0;
+  left: -40px;
+  right: -40px;
+  pointer-events: none;
+  color: var(--sage-deep);
+  opacity: 0.55;
+  height: 320px;
+}
+.theme-mary-meadow-site .m-hero-cat {
+  position: absolute;
+  bottom: 22px;
+  left: 28px;
+  width: 160px;
+  color: var(--brand);
+  opacity: 0.85;
+  pointer-events: none;
+}
+@media (max-width: 880px) {
+  .theme-mary-meadow-site .m-hero-cat { width: 110px; bottom: 12px; left: 12px; opacity: 0.65; }
+}
+.theme-mary-meadow-site .m-hero-wrap {
+  display: grid;
+  grid-template-columns: 1.05fr 0.95fr;
+  gap: 56px;
+  align-items: center;
+  position: relative;
+  z-index: 1;
+}
+.theme-mary-meadow-site .m-hero-copy { position: relative; }
+.theme-mary-meadow-site .m-hero-greeting {
+  font-family: var(--logo);
+  color: var(--brand);
+  font-size: 36px;
+  display: block;
+  margin-bottom: 4px;
+  line-height: 1.1;
+  transform: rotate(-1.5deg);
+  transform-origin: 0 50%;
+}
+.theme-mary-meadow-site .m-hero-headline {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: clamp(40px, 5.6vw, 70px);
+  line-height: 1.04;
+  color: var(--fg);
+  margin: 0 0 22px;
+  letter-spacing: -0.01em;
+}
+.theme-mary-meadow-site .m-hero-headline em {
+  font-style: italic;
+  color: var(--brand);
+}
+.theme-mary-meadow-site .m-hero-sub {
+  font-size: 18px;
+  color: var(--fg-muted);
+  max-width: 560px;
+  margin: 0 0 30px;
+}
+.theme-mary-meadow-site .m-hero-cta { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 22px; }
+.theme-mary-meadow-site .m-hero-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--fg);
+  font-family: var(--body);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 10px rgba(58, 71, 51, 0.06);
+}
+.theme-mary-meadow-site .m-hero-chip-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--sage);
+  border-radius: 50%;
+  box-shadow: 0 0 0 4px rgba(147, 168, 143, 0.25);
+}
+.theme-mary-meadow-site .m-hero-signature {
+  margin-top: 18px;
+  font-family: var(--logo);
+  font-size: 32px;
+  color: var(--brand);
+  transform: rotate(-2deg);
+  transform-origin: 0 50%;
+  display: inline-block;
+}
+
+/* Hero portrait — floral wreath frame, oval portrait, honey ribbon. */
+.theme-mary-meadow-site .m-hero-portrait {
+  position: relative;
+  display: grid;
+  place-items: center;
+  padding: 30px;
+}
+.theme-mary-meadow-site .m-hero-wreath {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--sage-deep);
+  opacity: 0.85;
+  pointer-events: none;
+}
+.theme-mary-meadow-site .m-hero-wreath svg {
+  width: min(440px, 100%);
+  height: auto;
+}
+.theme-mary-meadow-site .m-hero-portrait-frame {
+  position: relative;
+  z-index: 1;
+  width: min(280px, 70%);
+  aspect-ratio: 4 / 5;
+  border-radius: 50% / 42%;
+  overflow: hidden;
+  background: linear-gradient(180deg, var(--brand-soft) 0%, var(--accent-soft) 100%);
+  border: 5px solid var(--surface);
+  box-shadow: 0 26px 60px -18px rgba(58, 71, 51, 0.34), 0 0 0 1px var(--border);
+}
+.theme-mary-meadow-site .m-hero-portrait-frame img {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+}
+.theme-mary-meadow-site .m-hero-portrait-fb {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  font-family: var(--display);
+  font-size: 96px;
+  color: var(--brand);
+  background: linear-gradient(135deg, var(--brand-soft) 0%, var(--accent-soft) 100%);
+}
+/* Honey ribbon with subtle fishtail edges */
+.theme-mary-meadow-site .m-hero-ribbon {
+  position: absolute;
+  z-index: 2;
+  bottom: -8px;
+  left: 50%;
+  transform: translateX(-50%) rotate(-2deg);
+  padding: 8px 32px 8px;
+  background: var(--accent);
+  color: var(--surface);
+  font-family: var(--logo);
+  font-size: 28px;
+  line-height: 1;
+  clip-path: polygon(8% 0, 92% 0, 100% 50%, 92% 100%, 8% 100%, 0 50%);
+  box-shadow: 0 10px 22px rgba(217, 168, 86, 0.38);
+}
+.theme-mary-meadow-site .m-hero-stamp {
+  position: absolute;
+  z-index: 2;
+  top: 6px;
+  right: -4px;
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  background: var(--surface);
+  display: grid;
+  place-items: center;
+  padding: 8px;
+  text-align: center;
+  border: 1.5px dashed var(--brand);
+  box-shadow: 0 8px 16px rgba(58, 71, 51, 0.14);
+  transform: rotate(-14deg);
+}
+.theme-mary-meadow-site .m-hero-stamp b {
+  display: block;
+  font-family: var(--display);
+  font-size: 13.5px;
+  color: var(--brand);
+  line-height: 1.05;
+  margin-bottom: 2px;
+}
+.theme-mary-meadow-site .m-hero-stamp small {
+  font-family: var(--logo);
+  font-size: 17px;
+  color: var(--fg-muted);
+  line-height: 1.05;
+}
+@media (max-width: 880px) {
+  .theme-mary-meadow-site .m-hero-wrap { grid-template-columns: 1fr; gap: 36px; }
+  .theme-mary-meadow-site .m-hero-portrait { order: -1; padding: 16px; }
+  .theme-mary-meadow-site .m-hero-wreath svg { width: 320px; }
+}
+
+/* ===== FEATURES (postcard stack) ================================= */
+
+.theme-mary-meadow-site .m-feat { background: var(--bg); }
+.theme-mary-meadow-site .m-feat-head { text-align: center; margin-bottom: 56px; }
+.theme-mary-meadow-site .m-feat-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 32px;
+}
+.theme-mary-meadow-site .m-feat-card {
+  position: relative;
+  background: var(--surface);
+  padding: 36px 28px 32px;
+  border-radius: 6px;
+  box-shadow: 0 18px 40px rgba(58, 71, 51, 0.11), 0 0 0 1px var(--border);
+  transition: transform 260ms ease, box-shadow 260ms ease;
+}
+.theme-mary-meadow-site .m-feat-card:nth-child(1) { transform: rotate(-3.2deg); }
+.theme-mary-meadow-site .m-feat-card:nth-child(2) { transform: rotate(1.6deg) translateY(-18px); }
+.theme-mary-meadow-site .m-feat-card:nth-child(3) { transform: rotate(-1.4deg); }
+.theme-mary-meadow-site .m-feat-card:hover {
+  transform: rotate(0) translateY(-6px);
+  box-shadow: 0 26px 50px rgba(58, 71, 51, 0.18), 0 0 0 1px var(--border);
+}
+.theme-mary-meadow-site .m-feat-stamp {
+  position: absolute;
+  top: -22px;
+  right: 22px;
+  transform: rotate(-12deg);
+  z-index: 1;
+  filter: drop-shadow(0 4px 10px rgba(58, 71, 51, 0.16));
+}
+.theme-mary-meadow-site .m-feat-icon {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--brand-soft) 0%, var(--accent-soft) 100%);
+  color: var(--brand);
+  margin-bottom: 18px;
+}
+.theme-mary-meadow-site .m-feat-card h3 {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 24px;
+  margin: 0 0 12px;
+  color: var(--fg);
+}
+.theme-mary-meadow-site .m-feat-card p {
+  font-size: 15px;
+  color: var(--fg-muted);
+  line-height: 1.65;
+  margin: 0;
+}
+@media (max-width: 880px) {
+  .theme-mary-meadow-site .m-feat-cards { grid-template-columns: 1fr; gap: 40px; }
+  .theme-mary-meadow-site .m-feat-card { transform: none !important; }
+}
+
+/* ===== LEVELS (garden beds) ====================================== */
+
+.theme-mary-meadow-site .m-levels { background: var(--bg-sage); }
+.theme-mary-meadow-site .m-levels-head { text-align: center; margin-bottom: 56px; }
+.theme-mary-meadow-site .m-levels-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 28px;
+}
+.theme-mary-meadow-site .m-level {
+  position: relative;
+  background: var(--surface);
+  border-radius: 18px;
+  padding: 40px 28px 32px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+  box-shadow: 0 14px 30px rgba(58, 71, 51, 0.08);
+}
+.theme-mary-meadow-site .m-level::before {
+  content: '';
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 14px;
+  background:
+    radial-gradient(circle at 6px 8px, var(--sage-deep) 1.6px, transparent 2px),
+    radial-gradient(circle at 18px 6px, var(--accent) 1.4px, transparent 2px),
+    repeating-linear-gradient(45deg, var(--sage) 0 5px, transparent 5px 10px);
+  background-size: 28px 14px, 28px 14px, 14px 14px;
+  opacity: 0.55;
+}
+.theme-mary-meadow-site .m-level-tulip {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  color: var(--brand);
+  opacity: 0.6;
+}
+.theme-mary-meadow-site .m-level-glyph {
+  width: 76px;
+  height: 76px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, var(--brand-soft), var(--accent-soft));
+  color: var(--brand);
+  font-family: var(--display);
+  font-size: 42px;
+  line-height: 1;
+  margin-bottom: 20px;
+  border: 2px solid var(--surface);
+  box-shadow: 0 6px 16px rgba(198, 101, 120, 0.18);
+}
+.theme-mary-meadow-site .m-level-name {
+  font-family: var(--logo);
+  font-size: 16px;
+  color: var(--sage-deep);
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+  display: block;
+}
+.theme-mary-meadow-site .m-level h3 {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 26px;
+  color: var(--fg);
+  margin: 0 0 10px;
+}
+.theme-mary-meadow-site .m-level p {
+  font-size: 15px;
+  color: var(--fg-muted);
+  line-height: 1.65;
+  margin: 0 0 18px;
+}
+.theme-mary-meadow-site .m-level ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.theme-mary-meadow-site .m-level li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 15px;
+  color: var(--fg);
+}
+.theme-mary-meadow-site .m-level li svg { flex-shrink: 0; margin-top: 2px; color: var(--sage-deep); }
+@media (max-width: 880px) {
+  .theme-mary-meadow-site .m-levels-grid { grid-template-columns: 1fr; }
+}
+
+/* ===== PRICING (tea party) ======================================= */
+
+.theme-mary-meadow-site .m-pricing {
+  background: var(--bg-honey);
+  position: relative;
+}
+.theme-mary-meadow-site .m-pricing::before,
+.theme-mary-meadow-site .m-pricing::after {
+  content: '';
+  position: absolute;
+  width: 200px;
+  height: 200px;
+  pointer-events: none;
+  background-image: radial-gradient(circle, var(--accent) 1.5px, transparent 2px);
+  background-size: 18px 18px;
+  opacity: 0.18;
+}
+.theme-mary-meadow-site .m-pricing::before { top: 40px; left: 40px; }
+.theme-mary-meadow-site .m-pricing::after  { bottom: 40px; right: 40px; }
+.theme-mary-meadow-site .m-pricing-head {
+  text-align: center;
+  margin-bottom: 56px;
+  position: relative;
+  z-index: 1;
+}
+.theme-mary-meadow-site .m-pricing-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 28px;
+  align-items: start;
+  position: relative;
+  z-index: 1;
+}
+.theme-mary-meadow-site .m-pack {
+  position: relative;
+  background: var(--surface);
+  border-radius: 20px;
+  padding: 38px 30px 32px;
+  border: 1px solid var(--border);
+  box-shadow: 0 12px 32px rgba(58, 71, 51, 0.08);
+  display: flex;
+  flex-direction: column;
+  transition: transform 220ms ease, box-shadow 220ms ease;
+}
+.theme-mary-meadow-site .m-pack:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 22px 44px rgba(58, 71, 51, 0.12);
+}
+.theme-mary-meadow-site .m-pack-featured {
+  border: 2px solid var(--brand);
+  background: linear-gradient(180deg, var(--surface) 0%, var(--brand-soft) 200%);
+  transform: translateY(-12px) scale(1.02);
+}
+.theme-mary-meadow-site .m-pack-featured:hover { transform: translateY(-18px) scale(1.025); }
+.theme-mary-meadow-site .m-pack-teacup {
+  display: grid;
+  place-items: center;
+  margin: -10px auto 14px;
+  color: var(--brand);
+}
+.theme-mary-meadow-site .m-pack-ribbon {
+  position: absolute;
+  top: -16px;
+  left: 50%;
+  transform: translateX(-50%) rotate(-3deg);
+  padding: 7px 24px;
+  background: var(--accent);
+  color: var(--surface);
+  font-family: var(--logo);
+  font-size: 22px;
+  border-radius: 4px;
+  white-space: nowrap;
+  box-shadow: 0 8px 16px rgba(217, 168, 86, 0.36);
+  clip-path: polygon(6% 0, 94% 0, 100% 50%, 94% 100%, 6% 100%, 0 50%);
+}
+.theme-mary-meadow-site .m-pack-name {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 24px;
+  color: var(--fg);
+  margin: 0 0 8px;
+  text-align: center;
+}
+.theme-mary-meadow-site .m-pack-blurb {
+  font-size: 14px;
+  color: var(--fg-muted);
+  text-align: center;
+  margin: 0 0 18px;
+}
+.theme-mary-meadow-site .m-pack-price {
+  font-family: var(--display);
+  font-size: 46px;
+  text-align: center;
+  color: var(--fg);
+  line-height: 1;
+}
+.theme-mary-meadow-site .m-pack-price-sub {
+  font-family: var(--body);
+  font-size: 13px;
+  color: var(--fg-muted);
+  text-align: center;
+  margin: 4px 0 20px;
+}
+.theme-mary-meadow-site .m-pack-feats {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 14.5px;
+}
+.theme-mary-meadow-site .m-pack-feats li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.theme-mary-meadow-site .m-pack-feats svg { flex-shrink: 0; color: var(--brand); margin-top: 3px; }
+.theme-mary-meadow-site .m-pack-cta { margin-top: auto; width: 100%; justify-content: center; }
+.theme-mary-meadow-site .m-pricing-soon {
+  text-align: center;
+  font-family: var(--logo);
+  font-size: 26px;
+  color: var(--brand);
+  padding: 40px 0;
+}
+
+/* ===== ABOUT (letter box) ======================================== */
+
+.theme-mary-meadow-site .m-about {
+  background: var(--bg-lavender);
+  position: relative;
+}
+.theme-mary-meadow-site .m-about-cat {
+  position: absolute;
+  bottom: 16px;
+  right: 24px;
+  width: 200px;
+  color: var(--lavender);
+  opacity: 0.7;
+  pointer-events: none;
+}
+@media (max-width: 880px) {
+  .theme-mary-meadow-site .m-about-cat { width: 130px; opacity: 0.55; }
+}
+.theme-mary-meadow-site .m-about-wrap {
+  max-width: 880px;
+  margin: 0 auto;
+  background: var(--surface);
+  padding: 60px 60px 64px;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  box-shadow: 0 22px 56px rgba(58, 71, 51, 0.14);
+  position: relative;
+  z-index: 1;
+}
+.theme-mary-meadow-site .m-about-wrap::before {
+  content: '';
+  position: absolute;
+  top: 22px;
+  right: 22px;
+  width: 78px;
+  height: 78px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, var(--brand-soft) 0 38%, transparent 38%);
+  border: 1.5px dashed var(--brand);
+  opacity: 0.6;
+  transform: rotate(8deg);
+}
+.theme-mary-meadow-site .m-about-portrait {
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  overflow: hidden;
+  margin: 0 auto 22px;
+  border: 4px solid var(--surface);
+  box-shadow: 0 0 0 1px var(--border), 0 14px 28px rgba(58, 71, 51, 0.16);
+}
+.theme-mary-meadow-site .m-about-portrait img { width: 100%; height: 100%; object-fit: cover; }
+.theme-mary-meadow-site .m-about-portrait-fb {
+  display: grid; place-items: center; width: 100%; height: 100%;
+  font-family: var(--display); font-size: 56px; color: var(--brand);
+  background: linear-gradient(135deg, var(--brand-soft) 0%, var(--accent-soft) 100%);
+}
+.theme-mary-meadow-site .m-about-title {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: clamp(32px, 4vw, 44px);
+  text-align: center;
+  color: var(--fg);
+  margin: 0 0 24px;
+  position: relative;
+}
+.theme-mary-meadow-site .m-about-title em { font-style: italic; color: var(--brand); }
+.theme-mary-meadow-site .m-about-body {
+  font-size: 17px;
+  line-height: 1.78;
+  color: var(--fg);
+  text-align: left;
+  white-space: pre-line;
+}
+.theme-mary-meadow-site .m-about-body::first-letter {
+  font-family: var(--display);
+  font-size: 76px;
+  float: left;
+  line-height: 0.88;
+  padding-right: 12px;
+  padding-top: 4px;
+  color: var(--brand);
+  font-style: italic;
+}
+.theme-mary-meadow-site .m-about-signoff {
+  margin-top: 32px;
+  font-family: var(--logo);
+  font-size: 36px;
+  color: var(--brand);
+  text-align: right;
+  line-height: 1.1;
+  transform: rotate(-1.5deg);
+  transform-origin: 100% 50%;
+}
+.theme-mary-meadow-site .m-about-cta {
+  display: flex;
+  justify-content: center;
+  margin-top: 30px;
+}
+@media (max-width: 720px) {
+  .theme-mary-meadow-site .m-about-wrap { padding: 36px 24px 40px; }
+}
+
+/* ===== REVIEWS (scrapbook) ======================================= */
+
+.theme-mary-meadow-site .m-reviews {
+  background:
+    radial-gradient(circle at 12% 24%, rgba(217, 168, 86, 0.10) 0 2px, transparent 2.5px),
+    radial-gradient(circle at 76% 36%, rgba(198, 101, 120, 0.10) 0 2px, transparent 2.5px),
+    radial-gradient(circle at 42% 78%, rgba(147, 168, 143, 0.10) 0 2px, transparent 2.5px),
+    var(--bg);
+  background-size: 80px 80px, 100px 100px, 90px 90px, auto;
+}
+.theme-mary-meadow-site .m-rev-head { text-align: center; margin-bottom: 56px; }
+.theme-mary-meadow-site .m-rev-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 32px;
+}
+.theme-mary-meadow-site .m-rev {
+  position: relative;
+  background: var(--surface);
+  padding: 36px 26px 28px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  box-shadow: 0 14px 32px rgba(58, 71, 51, 0.11);
+  transition: transform 240ms ease, box-shadow 240ms ease;
+}
+.theme-mary-meadow-site .m-rev:nth-child(3n+1) { transform: rotate(-2.6deg); }
+.theme-mary-meadow-site .m-rev:nth-child(3n+2) { transform: rotate(1.4deg) translateY(-10px); }
+.theme-mary-meadow-site .m-rev:nth-child(3n+3) { transform: rotate(-1.2deg); }
+.theme-mary-meadow-site .m-rev:hover {
+  transform: rotate(0) translateY(-6px);
+  box-shadow: 0 24px 44px rgba(58, 71, 51, 0.16);
+}
+.theme-mary-meadow-site .m-rev-tape {
+  position: absolute;
+  top: -14px;
+  left: 50%;
+  transform: translateX(-50%) rotate(-3deg);
+  z-index: 1;
+}
+.theme-mary-meadow-site .m-rev-stars {
+  display: flex;
+  gap: 2px;
+  color: var(--accent);
+  margin-bottom: 14px;
+}
+.theme-mary-meadow-site .m-rev-quote {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 18px;
+  font-style: italic;
+  color: var(--fg);
+  line-height: 1.55;
+  margin: 0 0 20px;
+}
+.theme-mary-meadow-site .m-rev-author { display: flex; align-items: center; gap: 12px; }
+.theme-mary-meadow-site .m-rev-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, var(--brand) 0%, var(--accent) 100%);
+  color: var(--surface);
+  font-family: var(--display);
+  font-size: 18px;
+}
+.theme-mary-meadow-site .m-rev-name {
+  font-family: var(--body);
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--fg);
+}
+.theme-mary-meadow-site .m-rev-meta {
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+.theme-mary-meadow-site .m-rev-see-all { text-align: center; margin-top: 36px; }
+.theme-mary-meadow-site .m-rev-see-all a {
+  font-family: var(--logo);
+  font-size: 26px;
+  color: var(--brand);
+  text-decoration: none;
+}
+.theme-mary-meadow-site .m-rev-see-all a:hover { color: var(--brand-hover); }
+@media (max-width: 880px) {
+  .theme-mary-meadow-site .m-rev-grid { grid-template-columns: 1fr; gap: 44px; }
+  .theme-mary-meadow-site .m-rev { transform: none !important; }
+}
+
+/* ===== BOOKING DIALOG ============================================ */
+
+.theme-mary-meadow-site .m-dlg-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(58, 71, 51, 0.5);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  z-index: 80;
+}
+.theme-mary-meadow-site .m-dlg {
+  background: var(--surface);
+  border-radius: 18px;
+  padding: 32px;
+  width: 100%;
+  max-width: 540px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 28px 80px rgba(58, 71, 51, 0.32);
+  border: 1px solid var(--border);
+}
+.theme-mary-meadow-site .m-dlg h2 {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 28px;
+  color: var(--fg);
+  margin: 0 0 6px;
+}
+.theme-mary-meadow-site .m-dlg-sub {
+  color: var(--fg-muted);
+  font-size: 14px;
+  margin: 0 0 22px;
+}
+.theme-mary-meadow-site .m-dlg-label {
+  display: block;
+  font-family: var(--body);
+  font-weight: 600;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--fg-muted);
+  margin: 18px 0 8px;
+}
+.theme-mary-meadow-site .m-dlg-input,
+.theme-mary-meadow-site .m-dlg-select {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  font-family: var(--body);
+  font-size: 15px;
+  color: var(--fg);
+  background: var(--surface);
+}
+.theme-mary-meadow-site .m-dlg-input:focus,
+.theme-mary-meadow-site .m-dlg-select:focus {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+}
+.theme-mary-meadow-site .m-dlg-slot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(98px, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.theme-mary-meadow-site .m-dlg-slot {
+  padding: 9px 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 8px;
+  font-family: var(--body);
+  font-size: 14px;
+  cursor: pointer;
+  text-align: center;
+  transition: all 140ms ease;
+}
+.theme-mary-meadow-site .m-dlg-slot:hover { border-color: var(--brand); color: var(--brand); }
+.theme-mary-meadow-site .m-dlg-slot.selected {
+  background: var(--brand);
+  color: var(--surface);
+  border-color: var(--brand);
+}
+.theme-mary-meadow-site .m-dlg-actions { display: flex; gap: 10px; margin-top: 26px; }
+.theme-mary-meadow-site .m-dlg-err {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--brand-soft);
+  color: var(--brand-hover);
+  font-size: 13.5px;
+}
+.theme-mary-meadow-site .m-dlg-empty {
+  padding: 22px 14px;
+  text-align: center;
+  color: var(--fg-muted);
+  font-size: 14px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  margin-top: 8px;
+}

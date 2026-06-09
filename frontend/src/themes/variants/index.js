@@ -56,6 +56,27 @@ import ReviewsQuietQuotes, {
   contentSchema as ReviewsQuietQuotesSchema,
 } from '../dafni_botanical/variants/ReviewsQuietQuotes';
 
+// --- Mary's bespoke pack (Meadow) ------------------------------------
+
+import HeroLoveLetter, {
+  contentSchema as HeroLoveLetterSchema,
+} from '../mary_meadow/variants/HeroLoveLetter';
+import FeaturesPostcardStack, {
+  contentSchema as FeaturesPostcardStackSchema,
+} from '../mary_meadow/variants/FeaturesPostcardStack';
+import LevelsGardenBeds, {
+  contentSchema as LevelsGardenBedsSchema,
+} from '../mary_meadow/variants/LevelsGardenBeds';
+import PricingTeaParty, {
+  contentSchema as PricingTeaPartySchema,
+} from '../mary_meadow/variants/PricingTeaParty';
+import AboutLetterBox, {
+  contentSchema as AboutLetterBoxSchema,
+} from '../mary_meadow/variants/AboutLetterBox';
+import ReviewsScrapbook, {
+  contentSchema as ReviewsScrapbookSchema,
+} from '../mary_meadow/variants/ReviewsScrapbook';
+
 // --- Sophia's bespoke pack (Inkwell) ---------------------------------
 
 import HeroInkwellLiterary, {
@@ -115,6 +136,13 @@ export const VARIANT_REGISTRY = {
       label: 'Inkwell literary',
       description: "Sophia's bespoke hero — Playfair display, deep navy + coral palette, hand-drawn calligraphic ink-stroke flourish behind the portrait, floating level + booking pills.",
     },
+    mary_love_letter: {
+      component: HeroLoveLetter,
+      contentSchema: HeroLoveLetterSchema,
+      owner: 'mary',
+      label: 'Love letter',
+      description: "Mary's bespoke hero — handwritten Caveat greeting, oval-frame portrait with a honey ribbon + dashed cottagecore stamp, garden-vine SVG sweeping behind the columns.",
+    },
   },
   features_grid: {
     vasso_numbered_cards: {
@@ -137,6 +165,13 @@ export const VARIANT_REGISTRY = {
       owner: 'sophia',
       label: 'Editorial three-up cards',
       description: "Sophia's bespoke features — three editorial cards side by side with italic coral Playfair numerals.",
+    },
+    mary_postcard_stack: {
+      component: FeaturesPostcardStack,
+      contentSchema: FeaturesPostcardStackSchema,
+      owner: 'mary',
+      label: 'Postcard stack',
+      description: "Mary's bespoke features — three gently tilted postcards with honey-coloured numbered stamps and a soft cottage palette.",
     },
   },
   levels_alphabet: {
@@ -161,6 +196,13 @@ export const VARIANT_REGISTRY = {
       label: 'Deep inkwell glass cards',
       description: "Sophia's bespoke levels — three glass-effect cards on a dramatic deep navy section with italic coral CEFR glyphs.",
     },
+    mary_garden_beds: {
+      component: LevelsGardenBeds,
+      contentSchema: LevelsGardenBedsSchema,
+      owner: 'mary',
+      label: 'Garden bed cards',
+      description: "Mary's bespoke levels — three cottage cards with a blush-honey glyph circle on top, sprout bullets, and a striped-soil bottom border.",
+    },
   },
   pricing_grid: {
     vasso_gold_ribbon: {
@@ -183,6 +225,13 @@ export const VARIANT_REGISTRY = {
       owner: 'sophia',
       label: 'Inkwell three-up trio',
       description: "Sophia's bespoke pricing — three editorial cards side by side, membership plan lifted as a deep coral panel.",
+    },
+    mary_tea_party: {
+      component: PricingTeaParty,
+      contentSchema: PricingTeaPartySchema,
+      owner: 'mary',
+      label: 'Tea-party cards',
+      description: "Mary's bespoke pricing — soft cottagecore cards with a honey ribbon on the featured plan and an inviting tea-party feel.",
     },
   },
   about_portrait: {
@@ -207,6 +256,13 @@ export const VARIANT_REGISTRY = {
       label: 'Essay with coral drop cap',
       description: "Sophia's bespoke about — centred circular portrait above a long-form essay with a large italic coral Playfair drop cap.",
     },
+    mary_letter_box: {
+      component: AboutLetterBox,
+      contentSchema: AboutLetterBoxSchema,
+      owner: 'mary',
+      label: 'Letter-box bio',
+      description: "Mary's bespoke about — centred circular portrait above a letter-styled bio with a blush DM Serif drop cap and a handwritten Caveat sign-off.",
+    },
   },
   reviews_grid: {
     vasso_avatar_cards: {
@@ -229,6 +285,13 @@ export const VARIANT_REGISTRY = {
       owner: 'sophia',
       label: 'Inkwell italic quotes',
       description: "Sophia's bespoke reviews — single column of large italic Playfair quotes with giant coral opening quote-marks and coral left-rules.",
+    },
+    mary_scrapbook: {
+      component: ReviewsScrapbook,
+      contentSchema: ReviewsScrapbookSchema,
+      owner: 'mary',
+      label: 'Scrapbook grid',
+      description: "Mary's bespoke reviews — a grid of gently tilted scrapbook cards with washi-tape headers and italic DM Serif quotes.",
     },
   },
   newsletter_signup: {

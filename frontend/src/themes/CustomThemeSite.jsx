@@ -6,12 +6,15 @@ import DafniLayout from './dafni_botanical/DafniLayout';
 import DafniBookingDialog from './dafni_botanical/DafniBookingDialog';
 import SophiaLayout from './sophia_inkwell/SophiaLayout';
 import SophiaBookingDialog from './sophia_inkwell/SophiaBookingDialog';
+import MaryLayout from './mary_meadow/MaryLayout';
+import MaryBookingDialog from './mary_meadow/MaryBookingDialog';
 import { getVariant } from './variants';
 import NewsletterSignupCard from '../components/NewsletterSignupCard';
 import { SECTION_COMPONENTS } from '../components/tutor_sections';
 import './vasso_greek/vasso_greek.css';
 import './dafni_botanical/dafni_botanical.css';
 import './sophia_inkwell/sophia_inkwell.css';
+import './mary_meadow/mary_meadow.css';
 
 // Per-customer layout components. Each paying customer's bespoke pack
 // includes its own chrome (header + footer + scope class) AND its own
@@ -22,11 +25,13 @@ const LAYOUT_BY_THEME_KEY = {
   'custom-vasso': VassoLayout,
   'custom-dafni': DafniLayout,
   'custom-sophia': SophiaLayout,
+  'custom-mary': MaryLayout,
 };
 const BOOKING_DIALOG_BY_THEME_KEY = {
   'custom-vasso': VassoBookingDialog,
   'custom-dafni': DafniBookingDialog,
   'custom-sophia': SophiaBookingDialog,
+  'custom-mary': MaryBookingDialog,
 };
 const DEFAULT_LAYOUT = VassoLayout;
 const DEFAULT_BOOKING_DIALOG = VassoBookingDialog;
