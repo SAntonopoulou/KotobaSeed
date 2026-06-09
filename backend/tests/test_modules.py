@@ -240,6 +240,7 @@ def test_module_checkout_creates_session(
     student = _student(db_session)
     r = client.post(
         f"/tutor/modules/{mid}/checkout",
+        json={"waive_withdrawal": True},
         headers={"Host": HOST, **auth_headers_for(student)},
     )
     assert r.status_code == 200
@@ -270,6 +271,7 @@ def test_module_checkout_pro_pays_5_percent(
     student = _student(db_session)
     client.post(
         f"/tutor/modules/{mid}/checkout",
+        json={"waive_withdrawal": True},
         headers={"Host": HOST, **auth_headers_for(student)},
     )
     assert stub_stripe[0]["payment_intent_data"]["application_fee_amount"] == 50
@@ -290,6 +292,7 @@ def test_module_checkout_business_pays_zero(
     student = _student(db_session, "biz@x.com")
     client.post(
         f"/tutor/modules/{mid}/checkout",
+        json={"waive_withdrawal": True},
         headers={"Host": HOST, **auth_headers_for(student)},
     )
     assert stub_stripe[0]["payment_intent_data"]["application_fee_amount"] == 0
@@ -316,6 +319,7 @@ def test_module_checkout_rejects_existing_purchase(
     db_session.commit()
     r = client.post(
         f"/tutor/modules/{mid}/checkout",
+        json={"waive_withdrawal": True},
         headers={"Host": HOST, **auth_headers_for(student)},
     )
     assert r.status_code == 409

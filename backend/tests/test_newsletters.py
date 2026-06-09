@@ -28,7 +28,13 @@ def _headers(user):
     return {"Host": HOST, **auth_headers_for(user)}
 
 
-def _make_student(db_session, email: str, verified: bool = True, active: bool = True) -> User:
+def _make_student(
+    db_session,
+    email: str,
+    verified: bool = True,
+    active: bool = True,
+    newsletter_opt_in: bool = True,
+) -> User:
     user = User(
         email=email,
         hashed_password=get_password_hash("password123"),
@@ -36,6 +42,10 @@ def _make_student(db_session, email: str, verified: bool = True, active: bool = 
         role=UserRole.STUDENT,
         is_active=active,
         email_verified_at=datetime.now(UTC) if verified else None,
+        # Audience filter requires explicit opt-in per the GDPR consent
+        # layer; helper defaults True so most audience tests don't have
+        # to thread it. Tests that exercise opt-out override to False.
+        newsletter_opt_in=newsletter_opt_in,
     )
     db_session.add(user)
     db_session.commit()

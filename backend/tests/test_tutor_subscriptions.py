@@ -390,6 +390,7 @@ def test_access_via_individual_purchase(active_tutor, db_session):
     )
 
 
+@pytest.mark.skip(reason="Per-tutor StudentTutorSubscription model retired in favour of platform Plus tier — see project_piecemeal_articles_shipped.md memory; content_access.has_module_access now keys off User.subscription_tier only")
 def test_access_via_active_subscription(active_tutor, db_session):
     module = LessonModule(
         tutor_id=active_tutor.id, slug="ms", title="MS", items_json="[]", is_published=True
@@ -444,6 +445,7 @@ def test_expired_subscription_does_not_grant_access(active_tutor, db_session):
     )
 
 
+@pytest.mark.skip(reason="Per-tutor StudentTutorSubscription model retired (see project_piecemeal_articles_shipped.md)")
 def test_past_due_still_grants_access(active_tutor, db_session):
     """PAST_DUE counts as active so a slow renewal doesn't lock students out."""
     module = LessonModule(
@@ -475,6 +477,7 @@ def test_past_due_still_grants_access(active_tutor, db_session):
 # --- Block double-purchase when already subscribed ----------------
 
 
+@pytest.mark.skip(reason="Per-tutor StudentTutorSubscription model retired (see project_piecemeal_articles_shipped.md)")
 def test_module_checkout_blocked_if_subscribed(
     client, active_tutor, teacher_user, db_session, stub_stripe
 ):
@@ -503,11 +506,13 @@ def test_module_checkout_blocked_if_subscribed(
     db_session.commit()
     r = client.post(
         f"/tutor/modules/{mid}/checkout",
+        json={"waive_withdrawal": True},
         headers={"Host": HOST, **auth_headers_for(student)},
     )
     assert r.status_code == 409
 
 
+@pytest.mark.skip(reason="Per-tutor StudentTutorSubscription model retired (see project_piecemeal_articles_shipped.md)")
 def test_premium_homework_checkout_blocked_if_subscribed(
     client, active_tutor, teacher_user, db_session, stub_stripe
 ):
