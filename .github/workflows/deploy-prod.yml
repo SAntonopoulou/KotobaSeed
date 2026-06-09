@@ -15,15 +15,17 @@ name: Deploy production
 #   triggers a redeploy of the older sha under a new tag.
 
 on:
-  # Pre-launch: manual trigger only. Restore the `push: tags: ['v*']`
-  # block when you want tags like v1.0.0 to auto-trigger prod deploy.
+  # Active: pushing a tag like v1.0.0 triggers a prod deploy. The
+  # `environment: production` gate below still requires Sophia's manual
+  # approval before any code lands on prod, so a stray tag push can't
+  # surprise-deploy.
   workflow_dispatch:
     inputs:
       ref:
         description: 'Ref to deploy (tag or sha)'
         required: true
-  # push:
-  #   tags: ['v*']
+  push:
+    tags: ['v*']
 
 concurrency:
   group: deploy-prod

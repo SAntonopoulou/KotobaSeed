@@ -7,11 +7,12 @@ name: Deploy staging
 # to pass on the same SHA before shipping anything.
 
 on:
-  # Pre-launch: manual trigger only. Restore `push: branches: [main]`
-  # below when you want merges to main to auto-deploy staging.
+  # Active: every merge to main auto-deploys to staging after CI passes.
+  # Keep workflow_dispatch alongside so we can also kick a manual deploy
+  # from the Actions UI when needed (e.g. re-trying after a hiccup).
   workflow_dispatch: {}
-  # push:
-  #   branches: [main]
+  push:
+    branches: [main]
 
 concurrency:
   group: deploy-staging
