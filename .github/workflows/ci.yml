@@ -24,7 +24,9 @@ jobs:
       SECRET_KEY: ci-secret
       STRIPE_WEBHOOK_SECRET: whsec_ci
       DATABASE_URL: sqlite:///./test.db
-      ENVIRONMENT: ci
+      # `test` matches the Literal type the Settings model accepts —
+      # `ci` was rejected with a Pydantic validation error.
+      ENVIRONMENT: test
 
     steps:
       - uses: actions/checkout@v4
