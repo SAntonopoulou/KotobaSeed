@@ -204,6 +204,34 @@ const CustomDomainSettings = () => {
         </p>
       </div>
 
+      {state.status === 'not_set' && (
+        <details className="rounded-lg bg-kotoba-primary/[0.04] border border-kotoba-primary/15 mb-4">
+          <summary className="cursor-pointer px-4 py-3 font-semibold text-sm text-kotoba-primary">
+            How it works (4 steps · ~10 min)
+          </summary>
+          <div className="px-4 pb-4 pt-1 text-sm text-kotoba-text/80 space-y-2">
+            <p>
+              <strong>1. Buy or already own a domain.</strong> Any registrar works — Namecheap, GoDaddy, Google Domains, or Cloudflare Registrar. Even if your domain is on Cloudflare, the setup below works.
+            </p>
+            <p>
+              <strong>2. Enter your domain below.</strong> We'll save it as your custom domain and show you the exact DNS record to add at your registrar.
+            </p>
+            <p>
+              <strong>3. Add the DNS record.</strong> Log in to your registrar's DNS panel and add the A record we tell you (it points your domain at our server's IP). You'll see two options once you save — direct A record, or proxied through Cloudflare. Either works.
+            </p>
+            <p>
+              <strong>4. Click "Verify now."</strong> Once DNS has propagated (usually 5–15 min, sometimes up to 24 hours), we'll check the record and switch your site over to your new domain. HTTPS is handled automatically — you don't manage certificates.
+            </p>
+            <p className="text-xs text-kotoba-text/60 mt-3">
+              Want a longer read?{' '}
+              <a href="/help/tutor-getting-started#custom-domain" className="underline text-kotoba-primary">
+                Full custom-domain guide →
+              </a>
+            </p>
+          </div>
+        </details>
+      )}
+
       <StatusBanner state={state} />
 
       {error && (
@@ -251,17 +279,56 @@ const CustomDomainSettings = () => {
         <div className="rounded-lg bg-kotoba-background/50 p-4 text-sm">
           <p className="font-semibold text-kotoba-text mb-2">DNS setup</p>
           <p className="text-kotoba-text/80 mb-3">
-            Add this record at your domain registrar (Cloudflare, Namecheap, etc.):
+            Pick the path that matches how you manage your DNS. Either works — pick whichever your registrar/CDN supports best.
           </p>
-          <div className="font-mono text-xs bg-white border border-kotoba-text/10 rounded p-3 mb-3">
-            <div><span className="text-kotoba-text/60">Type:</span> A</div>
-            <div><span className="text-kotoba-text/60">Name:</span> {state.domain}</div>
-            <div>
-              <span className="text-kotoba-text/60">Value:</span>{' '}
-              {state.target_ip || <em className="text-kotoba-text/60">— platform IP not configured —</em>}
+
+          <details className="bg-white border border-kotoba-text/10 rounded mb-3" open>
+            <summary className="cursor-pointer px-3 py-2 font-semibold text-sm text-kotoba-primary">
+              Option 1 · Direct A record (most registrars)
+            </summary>
+            <div className="px-3 pb-3 pt-1 text-xs space-y-2">
+              <p>
+                Use this if you bought your domain at Namecheap, GoDaddy, Google Domains, or you're using Cloudflare DNS-only (grey cloud).
+              </p>
+              <div className="font-mono text-xs bg-kotoba-background/50 border border-kotoba-text/10 rounded p-3">
+                <div><span className="text-kotoba-text/60">Type:</span> A</div>
+                <div><span className="text-kotoba-text/60">Name:</span> {state.domain} (or <code className="font-mono">@</code> for the root)</div>
+                <div>
+                  <span className="text-kotoba-text/60">Value:</span>{' '}
+                  {state.target_ip || <em className="text-kotoba-text/60">— platform IP not configured —</em>}
+                </div>
+                <div><span className="text-kotoba-text/60">TTL:</span> 300 (5 min) or Auto</div>
+              </div>
+              <p className="text-kotoba-text/70">
+                HTTPS gets provisioned automatically the first time someone visits your domain — we issue a Let's Encrypt certificate via Caddy's on-demand TLS. No work for you.
+              </p>
             </div>
-            <div><span className="text-kotoba-text/60">TTL:</span> 300 (5 min)</div>
-          </div>
+          </details>
+
+          <details className="bg-white border border-kotoba-text/10 rounded mb-3">
+            <summary className="cursor-pointer px-3 py-2 font-semibold text-sm text-kotoba-primary">
+              Option 2 · Cloudflare-proxied (DDoS protection, caching, free)
+            </summary>
+            <div className="px-3 pb-3 pt-1 text-xs space-y-2">
+              <p>
+                Use this if your domain is on Cloudflare and you want the orange-cloud proxy benefits (CDN, DDoS shielding, bot filtering).
+              </p>
+              <ol className="list-decimal list-inside space-y-1 text-kotoba-text/80">
+                <li>In Cloudflare → DNS, add an A record:
+                  <div className="font-mono text-[11px] bg-kotoba-background/50 border border-kotoba-text/10 rounded p-2 mt-1">
+                    <div><span className="text-kotoba-text/60">Type:</span> A · <span className="text-kotoba-text/60">Name:</span> {state.domain} or @ · <span className="text-kotoba-text/60">Value:</span> {state.target_ip || '—'}</div>
+                    <div><span className="text-kotoba-text/60">Proxy:</span> <strong>Proxied (orange cloud)</strong></div>
+                  </div>
+                </li>
+                <li>In Cloudflare → SSL/TLS → Overview, set SSL mode to <strong>Flexible</strong>. (This is required — Cloudflare terminates HTTPS at the edge and forwards plain HTTP to us, so we don't need a per-domain certificate.)</li>
+                <li>Cloudflare → SSL/TLS → Edge Certificates: turn ON <strong>Always Use HTTPS</strong>.</li>
+              </ol>
+              <p className="text-kotoba-text/70">
+                You get HTTPS from Cloudflare's universal SSL cert. No cert work on either end.
+              </p>
+            </div>
+          </details>
+
           <div className="flex gap-2 flex-wrap">
             <button
               type="button"
@@ -269,7 +336,7 @@ const CustomDomainSettings = () => {
               disabled={verifying}
               className="px-4 py-2 rounded-md border-2 border-kotoba-primary text-kotoba-primary font-medium hover:bg-kotoba-primary hover:text-white disabled:opacity-50 transition-colors"
             >
-              {verifying ? 'Checking DNS…' : state.status === 'verified' ? 'Re-verify' : 'Verify now'}
+              {verifying ? 'Checking…' : state.status === 'verified' ? 'Re-verify' : 'Verify now'}
             </button>
             <button
               type="button"
@@ -282,7 +349,7 @@ const CustomDomainSettings = () => {
           </div>
           <VerifyResult result={verifyResult} />
           <p className="mt-3 text-xs text-kotoba-text/60">
-            DNS changes usually take a few minutes — if verification fails, wait 5 minutes and try again.
+            DNS changes usually take a few minutes — if verification fails, wait 5 minutes and try again. Verification works for both options (we check the A record first, then probe the domain over HTTPS as a fallback for CDN-proxied setups).
           </p>
         </div>
       )}

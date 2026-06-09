@@ -49,7 +49,16 @@ const ProjectList = () => {
           level: searchParams.get('level'),
         },
       });
-      setProjectData(response.data);
+      // Only adopt the response when the shape matches. A partial payload
+      // (e.g. backend hiccup, intermediary, or future endpoint drift) would
+      // otherwise wipe the initial `{ projects: [], total_count: 0 }` shape
+      // and crash the render path below.
+      const data = response?.data;
+      if (data && Array.isArray(data.projects)) {
+        setProjectData(data);
+      } else {
+        setProjectData({ projects: [], total_count: 0 });
+      }
     } catch (err) {
       console.error("Failed to fetch projects", err);
       setError("Could not load projects. Please try again later.");
@@ -82,7 +91,7 @@ const ProjectList = () => {
       await client.post(`/users/${teacherId}/follow`);
       setProjectData(prevData => ({
         ...prevData,
-        projects: prevData.projects.map(p => 
+        projects: (prevData?.projects ?? []).map(p =>
           p.teacher_id === teacherId ? { ...p, is_following_teacher: true } : p
         )
       }));
@@ -98,7 +107,7 @@ const ProjectList = () => {
       await client.delete(`/users/${teacherId}/follow`);
       setProjectData(prevData => ({
         ...prevData,
-        projects: prevData.projects.map(p => 
+        projects: (prevData?.projects ?? []).map(p =>
           p.teacher_id === teacherId ? { ...p, is_following_teacher: false } : p
         )
       }));
@@ -148,7 +157,7 @@ const ProjectList = () => {
           />
           <select value={language} onChange={handleLanguageChange} className={inputCls}>
             <option value="">All languages</option>
-            {availableFilters.languages.map(lang => <option key={lang.language} value={lang.language}>{lang.language}</option>)}
+            {(availableFilters?.languages ?? []).map(lang => <option key={lang.language} value={lang.language}>{lang.language}</option>)}
           </select>
           <select value={level} onChange={(e) => setLevel(e.target.value)} className={inputCls} disabled={!language}>
             <option value="">All levels</option>
@@ -159,7 +168,7 @@ const ProjectList = () => {
 
       {loading ? (
         <div className="text-center py-12 text-kotoba-text/60">Loading projects…</div>
-      ) : projectData.projects.length === 0 ? (
+      ) : (projectData?.projects?.length ?? 0) === 0 ? (
         <div className="text-center py-12 bg-white rounded-3xl shadow-soft">
           <p className="text-kotoba-text/70 text-lg mb-5">No projects found matching your criteria.</p>
           <Link
@@ -177,7 +186,7 @@ const ProjectList = () => {
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {projectData.projects.map((project) => (
+          {(projectData?.projects ?? []).map((project) => (
             <ProjectCard
               key={project.id}
               project={project}

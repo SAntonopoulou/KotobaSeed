@@ -42,7 +42,10 @@ const Archive = () => {
           level: searchParams.get('level'),
         },
       });
-      setProjectData(response.data);
+      // Match the initial-state shape so downstream `.length` / `.map`
+      // can't crash if the API drifts.
+      const d = response?.data;
+      setProjectData(d && Array.isArray(d.projects) ? d : { projects: [], total_count: 0 });
     } catch (err) {
       console.error("Failed to fetch archived projects", err);
       setError("Could not load the project archive. Please try again later.");
@@ -95,7 +98,7 @@ const Archive = () => {
           />
           <select value={language} onChange={handleLanguageChange} className="p-2 border border-kotoba-text/20 rounded-md focus:ring-kotoba-primary focus:border-kotoba-primary">
             <option value="">All Languages</option>
-            {availableFilters.languages.map(lang => <option key={lang.language} value={lang.language}>{lang.language}</option>)}
+            {(availableFilters?.languages ?? []).map(lang => <option key={lang.language} value={lang.language}>{lang.language}</option>)}
           </select>
           <select value={level} onChange={(e) => setLevel(e.target.value)} className="p-2 border border-kotoba-text/20 rounded-md focus:ring-kotoba-primary focus:border-kotoba-primary" disabled={!language}>
             <option value="">All Levels</option>
@@ -106,13 +109,13 @@ const Archive = () => {
 
       {loading ? (
         <div className="text-center py-10">Loading projects...</div>
-      ) : projectData.projects.length === 0 ? (
+      ) : (projectData?.projects?.length ?? 0) === 0 ? (
         <div className="text-center py-10">
           <p className="text-kotoba-text/60">No completed projects found for the selected filters.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-          {projectData.projects.map((project) => (
+          {(projectData?.projects ?? []).map((project) => (
             <ProjectCard key={project.id} project={project} />
           ))}
         </div>

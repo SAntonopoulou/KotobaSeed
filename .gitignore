@@ -52,4 +52,5 @@ backend/uploads/
 # Test output + local artefacts
 frontend/test-results/
 frontend/playwright-report/
+frontend/.playwright-data/
 *.db.backup-*

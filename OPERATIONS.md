@@ -393,3 +393,96 @@ Things that aren't urgent but matter:
 If your laptop is lost and you need to start over, you need access to
 the Hetzner + Cloudflare consoles to recover. Everything else can be
 rebuilt from those two.
+
+---
+
+## 10. Custom domains — what tutors do, what we do
+
+A tutor on Pro or Business can point their own domain at their tutor
+site. The dashboard's "Custom domain" panel (Site → Custom domain) walks
+them through it. Here's the system-level picture.
+
+### What the tutor does on their side
+
+Two paths — both shown in the dashboard panel; tutor picks whichever
+their registrar/CDN supports best.
+
+**Option 1 — Direct A record (simplest).** Tutor logs in to their
+domain registrar and adds an A record:
+
+| Field | Value |
+| --- | --- |
+| Type | A |
+| Name | their full domain (or `@` for the root) |
+| Value | platform IP shown in their dashboard (currently 167.233.29.52) |
+| TTL | 300 or Auto |
+| Proxy / CDN | OFF (DNS-only) |
+
+First time someone visits the domain, Caddy's `on_demand_tls` issues a
+Let's Encrypt cert. No tutor action needed for HTTPS.
+
+**Option 2 — Cloudflare-proxied (free DDoS + CDN).** Tutor's domain is
+on Cloudflare and they want the orange-cloud proxy. They add an A record
+like above but leave proxy ON, then set Cloudflare → SSL/TLS → Overview
+to **Flexible**. Cloudflare terminates HTTPS at the edge with its
+universal SSL cert; we accept plain HTTP on port 80. No per-tutor cert
+on our origin needed.
+
+### What we do on our side — automatic (no ops on new tutors)
+
+1. **Backend endpoints** — `/tutor/custom-domain` (PUT/GET) and
+   `/tutor/custom-domain/verify` (POST). Verify tries the A-record
+   match first; if that fails (CDN-proxied case) it falls back to an
+   HTTP probe at `https://{domain}/api/healthz`. Either path stamps
+   `tutor.custom_domain_verified_at`.
+
+2. **Tenancy middleware** — sees the Host header on every request,
+   looks up `Tutor.custom_domain == host AND
+   custom_domain_verified_at != NULL`, attaches that tutor to the
+   request. Same code path that powers `*.kotobaseed.net` subdomains.
+
+3. **Caddy catch-all block** — listens on both `:80` (CDN-proxied
+   path) and `:443` (direct-DNS path). For port 443 it uses
+   `on_demand_tls` to provision Let's Encrypt certs automatically.
+
+4. **`on_demand_tls.ask` gate** — Caddy calls
+   `http://backend:8000/internal/caddy/check-domain?domain=X` before
+   attempting cert issuance. Backend returns 200 only when the domain
+   maps to a verified tutor row. Without this gate, anyone could DOS
+   our Let's Encrypt rate-limit budget by pointing arbitrary DNS at us.
+
+### What we do on our side — manual (one-off polish only)
+
+These only come up when a tutor has an unusual ask:
+
+- **Multiple TLDs / canonical redirects** — e.g. Vasso owns both
+  `greekwithvasso.com` and `greekwithvasso.eu` and wants `.eu` and
+  `www.*` to all 301 to `.com`. Add a dedicated Caddy block above the
+  catch-all (see the existing `greekwithvasso.eu, ...` block in
+  `Caddyfile` for the pattern). Restart caddy.
+- **Tutor is also on Cloudflare and wants help configuring their zone**
+  — see the cutover memo for the basic toggles (SSL mode Flexible,
+  Always Use HTTPS on, WebSockets on).
+- **Verification keeps failing** — they're proxying through CF with
+  Full Strict mode (origin cert mismatch — has to be Flexible) or DNS
+  hasn't propagated yet. Tell them to wait 30 min and retry, or
+  temporarily switch CF to DNS-only (grey cloud) for the verify step,
+  then re-enable orange-cloud once verified.
+
+### Reverting a custom domain
+
+Tutor clicks "Remove domain" in the dashboard. Their
+`{slug}.kotobaseed.net` subdomain keeps working. Caddy lets the Let's
+Encrypt cert expire naturally (no renewal because the ask endpoint now
+returns 404 for that hostname). No manual cleanup needed.
+
+### Storage of provisioned certs
+
+Let's Encrypt certs land in the `caddy_data` Docker volume
+(`/data/caddy/...` inside the container). Survives container rebuilds.
+Renewal happens automatically ~30 days before expiry. If you ever need
+to audit which certs Caddy holds:
+
+```bash
+docker compose exec caddy ls /data/caddy/certificates/acme-v02.api.letsencrypt.org-directory/
+```

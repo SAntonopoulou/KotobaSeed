@@ -14,6 +14,14 @@
 {
     # Email Let's Encrypt uses for expiry notifications.
     email {$LETSENCRYPT_EMAIL}
+
+    # On-demand TLS — gates cert issuance through the backend so we
+    # only ever attempt Let's Encrypt for hostnames that have been
+    # verified as a tutor's custom domain. Without the ask gate, anyone
+    # could DOS our cert pipeline by pointing arbitrary DNS at us.
+    on_demand_tls {
+        ask http://backend:8000/internal/caddy/check-domain
+    }
 }
 
 # --- API host (apex.api.) --------------------------------------------
@@ -78,6 +86,69 @@ api.{$PLATFORM_APEX} {
     reverse_proxy frontend:80 {
         header_up Host {host}
         header_up X-Forwarded-Proto {scheme}
+        header_up X-Forwarded-For {remote_host}
+    }
+}
+
+# --- Canonical-domain redirects (per-tutor) --------------------------
+# Tutors that own multiple TLDs / www variants and want one canonical
+# brand URL set up redirects here. Specific blocks beat the catchall
+# below.
+#
+# Vasso: .eu + www.* fold into the .com apex.
+http://greekwithvasso.eu, http://www.greekwithvasso.eu, http://www.greekwithvasso.com {
+    redir https://greekwithvasso.com{uri} 301
+}
+
+# --- Tutor custom domains (catch-all) --------------------------------
+# Any hostname that didn't match the blocks above is treated as a
+# potential custom-domain tutor site. Two ways tutors can wire it up:
+#
+#   1) DNS-only (no CDN):   they add an A record pointing here.
+#                           Caddy provisions a Let's Encrypt cert via
+#                           on-demand TLS, and they get HTTPS for free.
+#   2) Cloudflare proxied:  they put their domain on CF with SSL mode
+#                           "Flexible". CF terminates HTTPS at the edge
+#                           and forwards plain HTTP to us. We accept on
+#                           :80 with no cert needed.
+#
+# `on_demand_tls.ask` calls the backend to confirm the hostname is a
+# verified `tutor.custom_domain` row before we ever attempt cert
+# issuance. Without this, anyone could trigger Let's Encrypt issuance
+# for arbitrary hostnames by pointing DNS at us — fast path to LE rate
+# limits and to looking like an open relay.
+:443, :80 {
+    tls {
+        on_demand
+    }
+    encode zstd gzip
+
+    # Maintenance fallback — same as the apex block.
+    handle_errors {
+        @5xx expression `int({err.status_code}) >= 500`
+        @notClassroom not path /classroom/*
+        handle @5xx {
+            handle @notClassroom {
+                reverse_proxy maintenance:80
+            }
+        }
+    }
+
+    # API proxy. We honour the upstream X-Forwarded-Proto so the
+    # backend can still tell HTTPS originals from CF-Flexible HTTP hops.
+    handle_path /api/* {
+        reverse_proxy backend:8000 {
+            header_up X-Forwarded-Proto {http.request.header.X-Forwarded-Proto}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Real-IP {remote_host}
+        }
+    }
+
+    # SPA shell. Host preserved so the tenancy middleware resolves it
+    # to the right tutor via `tutor.custom_domain`.
+    reverse_proxy frontend:80 {
+        header_up Host {host}
+        header_up X-Forwarded-Proto {http.request.header.X-Forwarded-Proto}
         header_up X-Forwarded-For {remote_host}
     }
 }

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import ClassroomLessonPanel from '../components/curriculum/ClassroomLessonPanel';
 import { Link, useParams } from 'react-router-dom';
 import client from '../api/client';
 import { useTenant } from '../hooks/useTenant';
@@ -19,6 +20,9 @@ const Classroom = () => {
   const tenant = useTenant();
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
+  // Default the presenter side-panel open for tutors — that's the
+  // signal-rich state. They can tuck it away with the Hide button.
+  const [panelOpen, setPanelOpen] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -91,15 +95,28 @@ const Classroom = () => {
 
   // Daily's prebuilt UI accepts ?t=<token> on the room URL.
   const src = `${data.room_url}?t=${encodeURIComponent(data.token)}`;
+  const isTutor = data.role === 'tutor';
 
   return (
-    <div className="fixed inset-0 bg-black flex flex-col">
+    <div className="fixed inset-0 bg-black flex">
       <iframe
         title="Classroom"
         src={src}
         allow="camera; microphone; fullscreen; speaker; display-capture; autoplay"
-        className="flex-1 w-full border-0"
+        className="flex-1 w-full border-0 min-w-0"
       />
+      {isTutor && panelOpen && (
+        <ClassroomLessonPanel bookingId={bookingId} onClose={() => setPanelOpen(false)} />
+      )}
+      {isTutor && !panelOpen && (
+        <button
+          type="button"
+          onClick={() => setPanelOpen(true)}
+          className="fixed top-4 right-4 z-30 px-3 py-2 rounded-lg bg-kotoba-primary text-white text-sm font-semibold shadow-soft hover:shadow-soft-lg"
+        >
+          Lesson plan →
+        </button>
+      )}
     </div>
   );
 };

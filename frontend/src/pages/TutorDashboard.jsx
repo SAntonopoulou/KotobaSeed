@@ -24,6 +24,8 @@ import HomeworkTemplatesManager from '../components/HomeworkTemplatesManager';
 import HomeworkAssignmentsManager from '../components/HomeworkAssignmentsManager';
 import PlacementTestManager from '../components/PlacementTestManager';
 import ModulesManager from '../components/ModulesManager';
+import CurriculumManager from '../components/curriculum/CurriculumManager';
+import StudentPlansManager from '../components/curriculum/StudentPlansManager';
 import CohortsManager from '../components/CohortsManager';
 import SubscriptionPlanManager from '../components/SubscriptionPlanManager';
 import MinuteUsageCard from '../components/MinuteUsageCard';
@@ -333,6 +335,7 @@ const TutorDashboard = () => {
               description="Articles, modules, and your monthly subscription. Build the library that brings students to you."
             />
             <div data-tour="tutor-content" className="space-y-6">
+              <CurriculumManager />
               <ArticlesManager />
               <ModulesManager />
               <CohortsManager />
@@ -346,8 +349,9 @@ const TutorDashboard = () => {
           <>
             <SectionHeader
               title="Students"
-              description="Roster, homework, placement test, and the testimonials students leave you."
+              description="Roster, lesson plans, homework, placement test, and testimonials."
             />
+            <StudentPlansManager />
             <MyStudentsManager />
             <GradingQueue />
             <PlacementTestManager />

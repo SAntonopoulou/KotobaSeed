@@ -1,10 +1,12 @@
-import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useCallback, useEffect, useState } from 'react';
 import client from '../../api/client';
 import TutorAnalytics from '../TutorAnalytics';
 import NextLessonCard from './NextLessonCard';
 import SectionHeader from './SectionHeader';
-import { MODULE_COUNT, MODULES, moduleByKey } from '../../onboarding/modules';
+
+// Source of truth for tour completion is the same localStorage key
+// TutorTour itself uses. Keep them aligned.
+const TOUR_DONE_KEY = 'koto:tutor-tour-completed';
 
 // Stripe Connect dashboard button with a visible loading state. Both
 // the login-link and onboarding-link endpoints can take a couple of
@@ -148,31 +150,36 @@ const KycStatusSection = ({ tutor, isPaused }) => {
 
 const OverviewPanel = ({ tutor, onJumpTo }) => {
   const isPaused = tutor.account_status !== 'active';
-  const [progress, setProgress] = useState(null);
+
+  // Tour completion lives in localStorage — that's what TutorTour
+  // itself writes when the last step's "Done" button is clicked or the
+  // tour is skipped. We listen for changes via storage events + a
+  // custom restart event so the banner flips immediately when the tour
+  // is replayed without a page refresh.
+  const readTourDone = () => {
+    try { return localStorage.getItem(TOUR_DONE_KEY) === '1'; } catch { return false; }
+  };
+  const [tourDone, setTourDone] = useState(readTourDone);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await client.get('/tutor/onboarding/progress');
-        if (!cancelled) setProgress(res.data);
-      } catch {
-        /* not fatal — onboarding card just hides itself */
-      }
-    })();
+    const refresh = () => setTourDone(readTourDone());
+    window.addEventListener('storage', refresh);
+    window.addEventListener('koto:tutor-tour-restart', refresh);
+    // Poll once per second while the tour is running; cheap, and saves
+    // us from threading a more elaborate event from TutorTour.
+    const t = setInterval(refresh, 1000);
     return () => {
-      cancelled = true;
+      window.removeEventListener('storage', refresh);
+      window.removeEventListener('koto:tutor-tour-restart', refresh);
+      clearInterval(t);
     };
   }, []);
 
-  const doneCount = progress?.completed_module_keys?.length || 0;
-  const remaining = MODULE_COUNT - doneCount;
-  const resumeKey =
-    progress?.last_viewed_module_key && moduleByKey(progress.last_viewed_module_key)
-      ? progress.last_viewed_module_key
-      : MODULES[0].key;
-  const resumeModule = moduleByKey(resumeKey);
-  const onboardingDone = progress?.completed_at != null;
+  const restartTour = useCallback(() => {
+    try { localStorage.removeItem(TOUR_DONE_KEY); } catch { /* ignore */ }
+    setTourDone(false);
+    window.dispatchEvent(new CustomEvent('koto:tutor-tour-restart'));
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -183,43 +190,41 @@ const OverviewPanel = ({ tutor, onJumpTo }) => {
 
       <NextLessonCard />
 
-      {!onboardingDone && progress && (
+      {!tourDone && (
         <section className="rounded-2xl p-6 bg-kotoba-secondary/15 border border-kotoba-secondary/40 flex items-start justify-between gap-4 flex-wrap">
           <div className="min-w-0">
             <p className="text-xs uppercase tracking-wider font-semibold text-kotoba-text/60">
-              Onboarding · {doneCount} / {MODULE_COUNT} done
+              Quick tour · 10 steps · ~3 min
             </p>
             <h2 className="mt-1 text-lg font-bold text-kotoba-primary">
-              {doneCount === 0
-                ? 'New here? Start the tutor tour.'
-                : `Pick up where you left off: ${resumeModule?.title || 'next module'}`}
+              New here? Start the dashboard tour.
             </h2>
             <p className="mt-1 text-sm text-kotoba-text/70">
-              {remaining === 1
-                ? 'One module to go.'
-                : `${remaining} short modules left — about 15 minutes total.`}
+              Soba will show you availability, pricing, classroom, content, and getting paid. You can skip any time.
             </p>
           </div>
-          <Link
-            to={`/onboarding/tutor/${resumeKey}`}
+          <button
+            type="button"
+            onClick={restartTour}
             className="px-5 py-2 rounded-md bg-kotoba-primary text-white font-semibold hover:bg-kotoba-primary/90"
           >
-            {doneCount === 0 ? 'Start tour' : 'Resume'}
-          </Link>
+            Start tour
+          </button>
         </section>
       )}
 
-      {onboardingDone && (
+      {tourDone && (
         <section className="rounded-2xl p-4 bg-white shadow-sm flex items-center justify-between gap-3 flex-wrap">
           <p className="text-sm text-kotoba-text/70">
             You finished the tour. Run it again any time for a refresher.
           </p>
-          <Link
-            to="/onboarding/tutor"
+          <button
+            type="button"
+            onClick={restartTour}
             className="text-sm font-medium text-kotoba-primary hover:underline"
           >
-            Replay onboarding →
-          </Link>
+            Replay tour →
+          </button>
         </section>
       )}
 

@@ -464,12 +464,24 @@ export const MODULES = [
         body: `Instead of \`{slug}.kotobaseed.net\`, you can use your own domain — \`greekwithyou.com\` for example. Improves brand perception (premium tutors don't want a marketplace subdomain in their URL) and SEO. Pro + Business tier.`,
       },
       {
-        heading: 'How to set it up',
-        body: `From Site → Custom domain, enter the domain you own. The panel shows you exactly which DNS records to create at your registrar (usually a CNAME pointing to \`tenant.kotobaseed.net\`). Click "Verify" once DNS has propagated (10 minutes to 24 hours). The platform handles HTTPS cert provisioning automatically.`,
+        heading: 'Two ways to set it up',
+        body: `From Site → Custom domain, enter the domain you own. You'll see two options:
+
+**Option 1 — Direct A record (simplest).** At your registrar (Namecheap, GoDaddy, Google Domains, etc.), add an A record for your domain pointing to the platform IP shown in the panel. That's it. We auto-issue your HTTPS cert from Let's Encrypt the first time someone visits.
+
+**Option 2 — Cloudflare-proxied (free DDoS + CDN).** If your domain is on Cloudflare, you can keep it behind their proxy for the bot/DDoS shield. Add an A record pointing to the platform IP, leave the orange-cloud proxy ON, then set SSL mode to **Flexible** under SSL/TLS → Overview. Cloudflare handles HTTPS at the edge.`,
+      },
+      {
+        heading: 'Verifying',
+        body: `After DNS propagates (5–60 minutes usually), hit "Verify now" in the dashboard. We check the A record first; if you're behind Cloudflare we fall back to a functional probe over HTTPS. Once green, your site is live on your domain.`,
+      },
+      {
+        heading: 'Multiple domains / www / .eu',
+        body: `Currently one custom domain per tutor row in the dashboard. If you own multiple TLDs (a .com and a .eu, say) or want www to work too, contact Sophia — she'll set the canonical redirects so all variants land on your primary domain. Example live now: greekwithvasso.com is Vasso's primary, with greekwithvasso.eu + www.* all 301-ing to it.`,
       },
       {
         heading: 'Reverting',
-        body: `Remove the custom domain at any time and your subdomain stays live — students bookmark either, the redirects flow correctly.`,
+        body: `Remove the custom domain at any time and your \`{slug}.kotobaseed.net\` subdomain stays live — visitors with old bookmarks land correctly.`,
       },
     ],
     tryIt: { label: 'Open custom domain', path: '/dashboard#site' },

@@ -83,8 +83,18 @@ def resolve_a_record(domain: str) -> str | None:
 
 
 def verify_domain_dns(domain: str) -> bool:
-    """True iff the domain's A record resolves to the platform IP. In dev
-    with `custom_domain_auto_verify=true`, returns True unconditionally."""
+    """True iff the domain points at the platform.
+
+    Two paths:
+      - **Direct A record**: tutor's DNS resolves to the platform server
+        IP. Cheapest check, used when the tutor isn't behind a CDN.
+      - **Proxied through Cloudflare (or any CDN)**: A record resolves
+        to a CDN IP, not ours. We can't tell from DNS alone whether the
+        CDN is forwarding to us, so we make an HTTP probe to the domain
+        and look for our backend's health signature.
+
+    Dev shortcut: `custom_domain_auto_verify=true` skips both checks.
+    """
     if settings.custom_domain_auto_verify:
         return True
     target = expected_target_ip()
@@ -93,7 +103,33 @@ def verify_domain_dns(domain: str) -> bool:
             "Custom-domain verify called but kotobaseed_server_ip is not set."
         )
         return False
+
     resolved = resolve_a_record(domain)
-    if resolved is None:
+    if resolved == target:
+        return True
+    return _http_probe_says_us(domain)
+
+
+def _http_probe_says_us(domain: str) -> bool:
+    """Make a small HTTP request to the domain and confirm we get our
+    backend's healthcheck back. Used to verify CDN-proxied custom
+    domains where the A record points at the CDN."""
+    import httpx
+
+    try:
+        resp = httpx.get(
+            f"https://{domain}/api/healthz",
+            timeout=5.0,
+            follow_redirects=True,
+            headers={"User-Agent": "Kotobaseed-DomainVerify/1.0"},
+        )
+        if resp.status_code != 200:
+            return False
+        data = resp.json()
+        # /healthz returns {"ok": True, "service": "kotobaseed"} —
+        # match on the service marker so we're sure it's us, not a
+        # generic "200 ok" from somewhere unrelated.
+        return data.get("ok") is True and data.get("service") == "kotobaseed"
+    except Exception as exc:
+        log.info("HTTP probe failed for %s: %s", domain, exc)
         return False
-    return resolved == target

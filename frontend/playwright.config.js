@@ -9,6 +9,11 @@ import { defineConfig } from '@playwright/test';
 const BACKEND_PORT = Number(process.env.PLAYWRIGHT_BACKEND_PORT || 8765);
 const FRONTEND_PORT = 5174;
 
+// PROD=1 disables the local backend/frontend webServer boot — the
+// prod-readiness specs hit https://kotobaseed.net directly and don't
+// need (or want) a local dev stack stealing the port.
+const PROD = !!process.env.PROD;
+
 export default defineConfig({
   testDir: './tests/e2e',
   timeout: 30_000,
@@ -16,11 +21,11 @@ export default defineConfig({
   workers: 1,
   reporter: [['list']],
   use: {
-    baseURL: `http://localhost:${FRONTEND_PORT}`,
+    baseURL: PROD ? 'https://kotobaseed.net' : `http://localhost:${FRONTEND_PORT}`,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },
-  webServer: [
+  webServer: PROD ? undefined : [
     {
       // Run the backend through the shell script. The script sets up
       // its env, wipes the test DB, then execs uvicorn — same path a
