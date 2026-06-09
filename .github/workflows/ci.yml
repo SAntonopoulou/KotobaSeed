@@ -1,17 +1,15 @@
 name: CI
 
-# Pre-launch: manual trigger only so we don't burn GitHub Actions
-# minutes while we're still iterating locally. To re-enable automatic
-# runs on push + PR (the post-launch posture), restore the `push` and
-# `pull_request` triggers below and remove the workflow_dispatch
-# placeholder.
+# Active post-launch: lint + tests + frontend build + Playwright e2e
+# run automatically on push to main + every pull request. The staging
+# deploy workflow waits for these checks to go green before shipping.
 
 on:
   workflow_dispatch: {}
-  # push:
-  #   branches: [main]
-  # pull_request:
-  #   branches: [main]
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
