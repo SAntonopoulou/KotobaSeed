@@ -63,7 +63,7 @@ def _make_extra_teacher(db_session, email, full_name):
 
 def teacher_role():
     from backend.models import UserRole
-    return UserRole.CREATOR
+    return UserRole.TUTOR
 
 
 # --- Tests --------------------------------------------------------------

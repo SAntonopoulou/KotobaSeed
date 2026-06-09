@@ -21,7 +21,7 @@ def get_my_verifications(
     """
     Retrieves all verification requests for the current teacher.
     """
-    if current_user.role != UserRole.CREATOR:
+    if current_user.role != UserRole.TUTOR:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only teachers can view their verification requests.",

@@ -46,7 +46,7 @@ def _seed_member_tutor(
         email=email,
         hashed_password="x",
         full_name="Member " + slug.title(),
-        role=UserRole.CREATOR,
+        role=UserRole.TUTOR,
         subscription_tier=SubscriptionTier.BUSINESS,
     )
     db_session.add(u)

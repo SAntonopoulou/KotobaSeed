@@ -46,7 +46,7 @@ def _seed_secondary_tutor(
         email=email,
         hashed_password="x",
         full_name="Team Member",
-        role=UserRole.CREATOR,
+        role=UserRole.TUTOR,
     )
     db_session.add(u)
     db_session.commit()

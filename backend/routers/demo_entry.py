@@ -192,9 +192,13 @@ def enter_demo(
         )
 
     # Mint fresh.
+    # Both "tutor" and "creator" demo flows map onto the same User.role
+    # (TUTOR). They differ only in onboarding shape — the "creator" demo
+    # skips the tenant-subdomain seeding and lands the user on the apex
+    # /teacher/dashboard, useful for marketplace-only content sellers.
     role_enum = {
-        "tutor": UserRole.CREATOR,    # tutors are users on the creator role internally
-        "creator": UserRole.CREATOR,
+        "tutor": UserRole.TUTOR,
+        "creator": UserRole.TUTOR,
         "student": UserRole.STUDENT,
     }[role]
 

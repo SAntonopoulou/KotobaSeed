@@ -85,7 +85,7 @@ def test_content_fee_free_is_10_percent(db_session):
         email="free@x.com",
         hashed_password="x",
         full_name="F",
-        role=UserRole.CREATOR,
+        role=UserRole.TUTOR,
         subscription_tier=SubscriptionTier.FREE,
     )
     assert content_platform_fee(u, 10_00) == 100  # €10 → €1
@@ -96,7 +96,7 @@ def test_content_fee_plus_is_7_percent(db_session):
         email="p@x.com",
         hashed_password="x",
         full_name="P",
-        role=UserRole.CREATOR,
+        role=UserRole.TUTOR,
         subscription_tier=SubscriptionTier.PLUS,
     )
     assert content_platform_fee(u, 10_00) == 70
@@ -107,7 +107,7 @@ def test_content_fee_pro_is_5_percent(db_session):
         email="pr@x.com",
         hashed_password="x",
         full_name="P",
-        role=UserRole.CREATOR,
+        role=UserRole.TUTOR,
         subscription_tier=SubscriptionTier.PRO,
     )
     assert content_platform_fee(u, 10_00) == 50
@@ -118,7 +118,7 @@ def test_content_fee_business_is_0(db_session):
         email="b@x.com",
         hashed_password="x",
         full_name="B",
-        role=UserRole.CREATOR,
+        role=UserRole.TUTOR,
         subscription_tier=SubscriptionTier.BUSINESS,
     )
     assert content_platform_fee(u, 10_00) == 0

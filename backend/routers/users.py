@@ -1135,7 +1135,7 @@ def delete_me(
     deleted_user = _get_or_create_deleted_user(session)
 
     # If the user is a teacher, cancel their non-completed projects
-    if current_user.role == UserRole.CREATOR:
+    if current_user.role == UserRole.TUTOR:
         teacher_projects = session.exec(
             select(Project)
             .where(Project.teacher_id == current_user.id)
@@ -1179,7 +1179,7 @@ def delete_me(
         notification.user_id = deleted_user.id
         session.add(notification)
     # TeacherVerifications
-    if current_user.role == UserRole.CREATOR:
+    if current_user.role == UserRole.TUTOR:
         for verification in session.exec(
             select(TeacherVerification).where(TeacherVerification.teacher_id == current_user.id)
         ).all():
@@ -1330,7 +1330,7 @@ def get_user_profile(
     average_rating = None
     verified_languages = []
     follower_count = 0
-    if user.role == UserRole.CREATOR:
+    if user.role == UserRole.TUTOR:
         # Calculate average rating
         rating_statement = (
             select(func.avg(ProjectRating.rating))
@@ -1394,7 +1394,7 @@ def follow_teacher(
         raise HTTPException(status_code=400, detail="You cannot follow yourself.")
 
     teacher = session.get(User, teacher_id)
-    if not teacher or teacher.role != UserRole.CREATOR:
+    if not teacher or teacher.role != UserRole.TUTOR:
         raise HTTPException(status_code=404, detail="Teacher not found.")
 
     follow = session.get(TeacherFollower, (teacher_id, current_user.id))
@@ -1433,7 +1433,7 @@ def get_teacher_followers(
     teacher_id: int, limit: int = 10, offset: int = 0, session: Session = Depends(get_session)
 ):
     teacher = session.get(User, teacher_id)
-    if not teacher or teacher.role != UserRole.CREATOR:
+    if not teacher or teacher.role != UserRole.TUTOR:
         raise HTTPException(status_code=404, detail="Teacher not found.")
 
     followers_statement = (
@@ -1549,7 +1549,7 @@ def get_teacher_completed_projects(
     session: Session = Depends(get_session),
 ):
     teacher = session.get(User, user_id)
-    if not teacher or teacher.role != UserRole.CREATOR:
+    if not teacher or teacher.role != UserRole.TUTOR:
         raise HTTPException(status_code=404, detail="Teacher not found")
 
     base_query = select(Project).where(
@@ -1591,7 +1591,7 @@ def get_teacher_completed_projects_filter_options(
     user_id: int, session: Session = Depends(get_session)
 ):
     teacher = session.get(User, user_id)
-    if not teacher or teacher.role != UserRole.CREATOR:
+    if not teacher or teacher.role != UserRole.TUTOR:
         raise HTTPException(status_code=404, detail="Teacher not found")
 
     query = (
@@ -1616,7 +1616,7 @@ def get_teacher_completed_projects_filter_options(
 @router.get("/{user_id}/ratings", response_model=list[TeacherRatingRead])
 def get_teacher_ratings(user_id: int, session: Session = Depends(get_session)):
     teacher = session.get(User, user_id)
-    if not teacher or teacher.role != UserRole.CREATOR:
+    if not teacher or teacher.role != UserRole.TUTOR:
         raise HTTPException(status_code=404, detail="Teacher not found")
 
     statement = (
@@ -1652,7 +1652,7 @@ def get_teacher_ratings(user_id: int, session: Session = Depends(get_session)):
 @router.get("/teachers", response_model=list[TeacherRead])
 def search_teachers(query: str = Query(..., min_length=1), session: Session = Depends(get_session)):
     statement = (
-        select(User).where(User.role == UserRole.CREATOR).where(User.full_name.ilike(f"%{query}%"))
+        select(User).where(User.role == UserRole.TUTOR).where(User.full_name.ilike(f"%{query}%"))
     )
     teachers = session.exec(statement).all()
     return [TeacherRead(id=t.id, full_name=t.full_name) for t in teachers]
@@ -1662,7 +1662,7 @@ def search_teachers(query: str = Query(..., min_length=1), session: Session = De
 def create_stripe_onboarding_link(
     current_user: User = Depends(get_current_user), session: Session = Depends(get_session)
 ):
-    if current_user.role != UserRole.CREATOR:
+    if current_user.role != UserRole.TUTOR:
         raise HTTPException(
             status_code=403, detail="Only teachers can create Stripe onboarding links."
         )
@@ -1708,7 +1708,7 @@ def create_stripe_login_link(
     falls back to `User.stripe_account_id` (legacy field used at onboarding
     time) so we work either side of the sync.
     """
-    if current_user.role != UserRole.CREATOR:
+    if current_user.role != UserRole.TUTOR:
         raise HTTPException(
             status_code=403,
             detail="Only tutors have a Stripe Connect dashboard. Students manage saved cards from their billing settings.",

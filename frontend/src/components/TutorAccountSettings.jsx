@@ -174,7 +174,7 @@ const TutorAccountSettings = () => {
           <div className="flex flex-wrap gap-x-4 gap-y-2 mb-4">
             <dt className="text-kotoba-text/60 w-24 font-medium">Role</dt>
             <dd className="text-kotoba-text">{
-              currentUser?.role === 'creator' ? 'Tutor'
+              currentUser?.role === 'tutor' ? 'Tutor'
                 : currentUser?.role === 'admin' ? 'Administrator'
                 : currentUser?.role === 'student' ? 'Student'
                 : currentUser?.role || '—'

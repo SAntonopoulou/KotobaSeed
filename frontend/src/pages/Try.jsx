@@ -214,6 +214,11 @@ const Try = ({ role }) => {
 // bar will still mount once auth settles and they can navigate from
 // there.
 const _redirectForRole = (role) => {
+  // `role` here is the DEMO persona ('tutor' | 'creator' | 'student'),
+  // not the User.role enum. Both demo flows are backed by UserRole.TUTOR
+  // server-side after the 2026-06-09 rename, but the redirect target
+  // still differs: a "tutor" demo gets a tenant subdomain, a "creator"
+  // demo lands on the apex teacher dashboard.
   if (role === 'tutor') return '/';
   if (role === 'creator') return '/teacher/dashboard';
   return '/discover';

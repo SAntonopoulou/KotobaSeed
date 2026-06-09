@@ -129,7 +129,7 @@ def get_current_user_optional(
 
 _ROLE_RANK: dict[UserRole, int] = {
     UserRole.STUDENT: 0,
-    UserRole.CREATOR: 1,
+    UserRole.TUTOR: 1,
     UserRole.MODERATOR: 1,  # legacy peer of CREATOR — outside the new ladder
     UserRole.SUPPORT: 2,
     UserRole.MANAGER: 3,

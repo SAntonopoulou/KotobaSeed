@@ -88,7 +88,7 @@ def ensure_codes_for_user(session: Session, user: User) -> list[ReferralCode]:
         session.add(code)
         out.append(code)
     if (
-        user.role == UserRole.CREATOR
+        user.role == UserRole.TUTOR
         and ReferralCodeKind.TUTOR_PEER not in existing_kinds
     ):
         code = ReferralCode(
@@ -280,7 +280,7 @@ def evaluate_attribution(
         # Affiliate gets a flat reward when the referee completes their
         # first qualifying action — €50 if they're a tutor doing first
         # paid lesson, €10 if they're a student doing first paid lesson.
-        if referred.role == UserRole.CREATOR:
+        if referred.role == UserRole.TUTOR:
             kind = ReferralRewardKind.AFFILIATE_TUTOR
             amount = 5000
             qualified = _completed_revenue_as_tutor(session, referred.id) > 0

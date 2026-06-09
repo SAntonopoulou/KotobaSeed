@@ -12,14 +12,14 @@ import ConfirmationModal from '../../components/ConfirmationModal';
 
 const ROLE_LABELS = {
   student: 'Student',
-  creator: 'Creator / Tutor',
+  tutor: 'Tutor',
   moderator: 'Moderator (legacy)',
   support: 'Support',
   manager: 'Manager',
   admin: 'Admin',
 };
 
-const ROLE_OPTIONS = ['student', 'creator', 'support', 'manager', 'admin'];
+const ROLE_OPTIONS = ['student', 'tutor', 'support', 'manager', 'admin'];
 
 const RoleBadge = ({ role }) => {
   const tone =

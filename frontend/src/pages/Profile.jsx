@@ -84,7 +84,7 @@ const Profile = () => {
             avatar_url: profileRes.data.avatar_url || ''
         });
 
-        if (profileRes.data.role === 'creator') {
+        if (profileRes.data.role === 'tutor') {
             const projectsRes = await client.get(`/users/${id}/completed-projects`, { params: { limit: 2 } });
             // Guard against malformed payload — pages further down assume
             // `projectData.projects` is an array.
@@ -187,7 +187,7 @@ const Profile = () => {
                 </div>
                 <p className="mt-1 max-w-2xl text-sm text-kotoba-text/60">
                     {profile.role.charAt(0).toUpperCase() + profile.role.slice(1)}
-                    {profile.role === 'creator' && profile.average_rating != null && (
+                    {profile.role === 'tutor' && profile.average_rating != null && (
                         <span className="ml-3 inline-flex items-center">
                             <svg className="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>
                             <span className="ml-1 font-bold text-kotoba-text/80">{profile.average_rating}</span>
@@ -199,7 +199,7 @@ const Profile = () => {
           </div>
           {isOwner ? (
             <button onClick={() => setIsEditing(!isEditing)} className="text-kotoba-primary hover:text-kotoba-primary text-sm font-medium">{isEditing ? 'Cancel' : 'Edit profile'}</button>
-          ) : currentUser && profile.role === 'creator' && (
+          ) : currentUser && profile.role === 'tutor' && (
             profile.is_following ? (
               <button onClick={() => handleUnfollow(profile.id)} className="bg-kotoba-text/10 text-kotoba-text/80 px-3 py-1 rounded-md text-sm font-medium">Unfollow</button>
             ) : (
@@ -259,7 +259,7 @@ const Profile = () => {
               <dd className="mt-1 text-sm text-kotoba-text sm:mt-0 sm:col-span-2">{isEditing ? <textarea className="w-full border border-kotoba-text/20 rounded-md p-2" rows={3} value={editForm.bio} onChange={(e) => setEditForm({...editForm, bio: e.target.value})} /> : (profile.bio || "No bio provided.")}</dd>
             </div>
             
-            {profile.role === 'creator' && (
+            {profile.role === 'tutor' && (
               <div className="py-4 sm:py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
                 <dt className="text-sm font-medium text-kotoba-text/60">Languages</dt>
                 <dd className="mt-1 text-sm text-kotoba-text sm:mt-0 sm:col-span-2">
@@ -317,7 +317,7 @@ const Profile = () => {
         {isEditing && <div className="px-4 py-3 bg-kotoba-background/40 text-right sm:px-6"><button onClick={handleUpdate} className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-kotoba-primary hover:bg-kotoba-primary/90 focus:outline-none">Save</button></div>}
       </div>
 
-      {profile.role === 'creator' && (
+      {profile.role === 'tutor' && (
         <div className="mt-8">
           <h3 className="text-lg font-medium text-kotoba-text mb-4">Followers ({profile.follower_count})</h3>
           {followers.length > 0 ? (
@@ -395,7 +395,7 @@ const Profile = () => {
         </div>
       )}
 
-      {profile.role === 'creator' && (
+      {profile.role === 'tutor' && (
           <div className="mt-8">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-medium text-kotoba-text">Completed Projects</h3>

@@ -67,7 +67,9 @@ class VerificationRead(BaseModel):
 def get_stats(
     current_user: User = Depends(get_current_admin), session: Session = Depends(get_session)
 ):
-    user_count = session.exec(select(func.count(User.id))).one()
+    user_count = session.exec(
+        select(func.count(User.id)).where(User.deleted_at.is_(None))
+    ).one()
     project_count = session.exec(select(func.count(Project.id))).one()
     pledge_count = session.exec(select(func.count(Pledge.id))).one()
 
@@ -90,7 +92,9 @@ def get_stats(
 def list_users(
     current_user: User = Depends(get_current_admin), session: Session = Depends(get_session)
 ):
-    users = session.exec(select(User)).all()
+    users = session.exec(
+        select(User).where(User.deleted_at.is_(None))
+    ).all()
     return users
 
 
@@ -100,35 +104,53 @@ def delete_user(
     current_user: User = Depends(get_current_admin),
     session: Session = Depends(get_session),
 ):
+    """Soft-delete a user.
+
+    Hard-delete is impossible without rewriting every FK constraint:
+    `user.id` is referenced by ~40 tables (purchases, bookings,
+    pledges, audit log, payment records, etc.) and several of those
+    can't be reassigned to a sentinel without scrambling financial
+    history. We scramble PII, mark `deleted_at`, bump
+    `token_invalidation_at` (logs them out of every device), and leave
+    the row in place. The tenancy + auth layers treat
+    `deleted_at IS NOT NULL` as "doesn't exist".
+    """
     user_to_delete = session.get(User, user_id)
     if not user_to_delete:
         raise HTTPException(status_code=404, detail="User not found")
     if user_to_delete.id == current_user.id:
         raise HTTPException(status_code=400, detail="Cannot delete your own admin account")
 
-    from .users import _get_or_create_deleted_user
+    original_email = user_to_delete.email
+    original_role = user_to_delete.role.value
+    now = datetime.now(UTC)
 
-    deleted_user = _get_or_create_deleted_user(session)
+    # Anonymise PII. We keep the rest of the row so financial
+    # history (purchases, payouts, invoices) still references *something*.
+    user_to_delete.email = f"deleted-{user_id}@deleted.local"
+    user_to_delete.full_name = "(deleted user)"
+    user_to_delete.bio = None
+    user_to_delete.avatar_url = None
+    user_to_delete.languages = None
+    user_to_delete.intro_video_url = None
+    user_to_delete.sample_video_url = None
+    user_to_delete.hashed_password = "!"  # bcrypt never produces "!"
+    user_to_delete.is_active = False
+    user_to_delete.deleted_at = now
+    user_to_delete.token_invalidation_at = now
+    user_to_delete.newsletter_opt_in = False
+    user_to_delete.updated_at = now
 
-    deleted_email = user_to_delete.email
-    deleted_role = user_to_delete.role.value
-
-    for project in user_to_delete.taught_projects:
-        project.teacher_id = deleted_user.id
-    for pledge in user_to_delete.pledges:
-        pledge.user_id = deleted_user.id
-    for request in user_to_delete.requests:
-        request.user_id = deleted_user.id
-
-    session.delete(user_to_delete)
+    session.add(user_to_delete)
     session.commit()
+
     record_audit(
         session,
         actor=current_user,
         action="user.deleted",
         target_type="user",
         target_id=user_id,
-        summary=f"Admin deleted user {deleted_email} (role={deleted_role}).",
+        summary=f"Admin soft-deleted user {original_email} (role={original_role}).",
     )
     return
 
@@ -407,6 +429,7 @@ def list_staff(
     rows = session.exec(
         select(User)
         .where(
+            User.deleted_at.is_(None),
             User.role.in_(
                 [
                     UserRole.SUPPORT,
@@ -414,7 +437,7 @@ def list_staff(
                     UserRole.ADMIN,
                     UserRole.MODERATOR,
                 ]
-            )
+            ),
         )
         .order_by(User.role, User.email)
     ).all()

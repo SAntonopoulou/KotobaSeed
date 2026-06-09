@@ -131,7 +131,7 @@ def list_requests(
         Request.user_id == current_user.id,
         and_(Request.is_private == False, Request.status.in_(visible_statuses)),
     ]
-    if current_user.role == UserRole.CREATOR:
+    if current_user.role == UserRole.TUTOR:
         conditions.append(
             and_(Request.target_teacher_id == current_user.id, Request.status.in_(visible_statuses))
         )
@@ -139,7 +139,7 @@ def list_requests(
     query = query.where(or_(*conditions))
 
     # For teachers, exclude requests they have blacklisted (rejected)
-    if current_user.role == UserRole.CREATOR:
+    if current_user.role == UserRole.TUTOR:
         blacklist_sub = select(RequestBlacklist.request_id).where(
             RequestBlacklist.teacher_id == current_user.id
         )

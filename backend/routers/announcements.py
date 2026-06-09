@@ -77,7 +77,7 @@ def _audience_matches(audience: PlatformAnnouncementAudience, user) -> bool:
     if audience == PlatformAnnouncementAudience.ALL:
         return True
     if audience == PlatformAnnouncementAudience.TUTORS_ONLY:
-        return user.role in (UserRole.CREATOR, UserRole.ADMIN, UserRole.MANAGER)
+        return user.role in (UserRole.TUTOR, UserRole.ADMIN, UserRole.MANAGER)
     if audience == PlatformAnnouncementAudience.STUDENTS_ONLY:
         return user.role == UserRole.STUDENT
     return False

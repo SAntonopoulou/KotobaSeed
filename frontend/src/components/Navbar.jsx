@@ -86,7 +86,7 @@ const Navbar = () => {
     if (!user) return null;
     if (user.role === 'admin') return '/admin/dashboard';
     if (['support', 'manager', 'moderator'].includes(user.role)) return '/staff/support';
-    if (user.role === 'creator') return '/teacher/dashboard';
+    if (user.role === 'tutor') return '/teacher/dashboard';
     return '/student/dashboard';
   })();
 

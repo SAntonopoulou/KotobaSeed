@@ -2798,7 +2798,7 @@ def open_demo_classroom(
     """Spin up a short-lived Daily.co practice room for the tutor."""
     from ..models import UserRole
 
-    if current.role != UserRole.CREATOR:
+    if current.role != UserRole.TUTOR:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only tutors can open a practice classroom.",
@@ -2870,7 +2870,7 @@ def demo_classroom_heartbeat(
     """
     from ..models import TutorMinuteUsageLog, UserRole
 
-    if current.role != UserRole.CREATOR:
+    if current.role != UserRole.TUTOR:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only tutors can use the practice classroom.",
@@ -2925,3 +2925,64 @@ def demo_classroom_heartbeat(
         minutes_logged_today=minutes_today,
         over_quota=_demo_quota_blocked(tutor, current, session),
     )
+
+
+# --- Internal: Caddy on-demand TLS ask endpoint -----------------------
+#
+# Caddy queries this BEFORE attempting Let's Encrypt cert issuance for
+# any hostname it doesn't already have a cert for. We return 200 only
+# when the hostname maps to a verified `tutor.custom_domain`. Anything
+# else returns 4xx so Caddy refuses to issue.
+#
+# Without this gate, anyone could DOS our cert pipeline (LE rate
+# limits at 50 certs/registered-domain/week) by pointing arbitrary
+# subdomains at our IP.
+#
+# Tenancy: deliberately bypasses the tenant-host middleware (no
+# CurrentTutor dep) — Caddy queries from inside the Docker network
+# with no Host header it cares about.
+
+internal_router = APIRouter(prefix="/internal", tags=["internal"])
+
+
+@internal_router.get("/caddy/check-domain")
+def caddy_check_domain(
+    domain: str,
+    session: Annotated[Session, Depends(get_session)],
+):
+    """Return 200 iff `domain` is a verified custom domain for some
+    tutor. Caddy's on-demand TLS uses this as the issuance gate."""
+    from fastapi import Response
+
+    if not domain:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="missing domain")
+    normalized = domain.strip().lower().rstrip(".")
+    # Strip a leading 'www.' so a tutor only needs to register their
+    # apex domain; we still issue for the www host. Tutors who want
+    # www to live elsewhere can opt out later.
+    candidates = {normalized}
+    if normalized.startswith("www."):
+        candidates.add(normalized[4:])
+    else:
+        candidates.add("www." + normalized)
+    # Also accept the platform's own hosts — Caddy already handles those
+    # via specific server blocks but on_demand_tls.ask is consulted for
+    # any port-443 connection, so a 404 here would block legitimate
+    # certs from issuing for kotobaseed.net traffic.
+    apex = (settings.platform_apex or "kotobaseed.net").lower()
+    platform_hosts = {apex, "api." + apex, "www." + apex, "legal." + apex}
+    if normalized in platform_hosts or normalized.endswith("." + apex):
+        return Response(status_code=200)
+
+    matched = session.exec(
+        select(Tutor).where(
+            Tutor.custom_domain.in_(candidates),
+            Tutor.custom_domain_verified_at != None,  # noqa: E711
+        )
+    ).first()
+    if matched is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="domain not registered",
+        )
+    return Response(status_code=200)

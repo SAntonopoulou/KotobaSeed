@@ -21,7 +21,7 @@ const DemoClassroomCard = () => {
   const [showWarning, setShowWarning] = useState(false);
   const [opening, setOpening] = useState(false);
 
-  if (!currentUser || currentUser.role !== 'creator') {
+  if (!currentUser || currentUser.role !== 'tutor') {
     return null;
   }
 

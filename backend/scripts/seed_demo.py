@@ -191,7 +191,7 @@ def _create_users(session: Session) -> tuple[list[User], list[User]]:
             email=t["email"],
             hashed_password=pw,
             full_name=t["full_name"],
-            role=UserRole.CREATOR,
+            role=UserRole.TUTOR,
             languages=t["languages"],
             bio=t["bio"],
             subscription_tier=SubscriptionTier(t["tier"]),

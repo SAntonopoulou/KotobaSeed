@@ -103,7 +103,7 @@ def student_user(db_session: Session) -> User:
 
 @pytest.fixture
 def teacher_user(db_session: Session) -> User:
-    return _make_user(db_session, email="teacher@example.com", role=UserRole.CREATOR)
+    return _make_user(db_session, email="teacher@example.com", role=UserRole.TUTOR)
 
 
 @pytest.fixture

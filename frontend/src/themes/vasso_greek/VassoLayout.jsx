@@ -69,7 +69,7 @@ function dashboardHrefFor(currentUser) {
   if (['support', 'manager', 'moderator'].includes(currentUser.role)) {
     return apexUrl('/staff/support');
   }
-  if (currentUser.role === 'creator') return '/dashboard';
+  if (currentUser.role === 'tutor') return '/dashboard';
   return apexUrl('/student/dashboard');
 }
 

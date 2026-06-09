@@ -10,7 +10,7 @@ const TeacherRoute = () => {
   if (loading) {
     return <div className="p-10 text-center text-kotoba-text/60 text-sm">Loading…</div>;
   }
-  if (!currentUser || currentUser.role !== 'creator') {
+  if (!currentUser || currentUser.role !== 'tutor') {
     return <Navigate to="/" replace />;
   }
   return <Outlet />;

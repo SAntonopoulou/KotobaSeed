@@ -27,7 +27,7 @@ def _verified_user(
         email=email,
         hashed_password=get_password_hash("password123"),
         full_name=full_name,
-        role=UserRole.CREATOR,
+        role=UserRole.TUTOR,
         is_active=True,
         email_verified_at=datetime.now(UTC),
         languages=languages,

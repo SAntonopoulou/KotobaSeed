@@ -311,7 +311,7 @@ def create_conversation(
     current_user: User = Depends(_open_marketplace_limit),
     session: Session = Depends(get_session),
 ):
-    if current_user.role != UserRole.CREATOR:
+    if current_user.role != UserRole.TUTOR:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only teachers can initiate conversations.",
@@ -543,8 +543,8 @@ def find_or_create_direct_conversation(
     # side can be either. Assign by best guess: a CREATOR-role caller
     # becomes the teacher; otherwise the other party is the teacher if
     # they are CREATOR, falling back to the caller.
-    caller_is_creator = current_user.role == UserRole.CREATOR
-    other_is_creator = other.role == UserRole.CREATOR
+    caller_is_creator = current_user.role == UserRole.TUTOR
+    other_is_creator = other.role == UserRole.TUTOR
     if caller_is_creator and not other_is_creator:
         teacher_id, student_id = current_user.id, other.id
     elif other_is_creator and not caller_is_creator:

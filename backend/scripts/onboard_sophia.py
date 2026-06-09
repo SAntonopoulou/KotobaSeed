@@ -339,7 +339,7 @@ def _upsert_user_and_tutor(
         email=SOPHIA_EMAIL,
         hashed_password=get_password_hash(password),
         full_name=SOPHIA_DISPLAY_NAME,
-        role=UserRole.CREATOR,
+        role=UserRole.TUTOR,
         is_active=True,
         email_verified_at=now,
         gdpr_consent_at=now,

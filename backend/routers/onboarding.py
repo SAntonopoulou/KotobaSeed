@@ -238,7 +238,7 @@ def signup_tutor(
         user = existing_user
         # Promote a non-creator role to CREATOR — tutors are creators with a site.
         if user.role == UserRole.STUDENT:
-            user.role = UserRole.CREATOR
+            user.role = UserRole.TUTOR
         if payload.languages_taught:
             user.languages = payload.languages_taught
         user.updated_at = now
@@ -256,7 +256,7 @@ def signup_tutor(
             email=email,
             hashed_password=hash_password(payload.password),
             full_name=payload.full_name.strip(),
-            role=UserRole.CREATOR,
+            role=UserRole.TUTOR,
             is_active=True,
             timezone=payload.timezone or "UTC",
             languages=payload.languages_taught,

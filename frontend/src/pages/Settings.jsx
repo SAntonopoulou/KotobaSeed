@@ -66,7 +66,7 @@ const Settings = () => {
   const fetchPageData = useCallback(async () => {
     if (!currentUser) return;
     try {
-      if (currentUser.role === 'creator') {
+      if (currentUser.role === 'tutor') {
         const verificationsRes = await client.get('/verifications/');
         setVerifications(verificationsRes.data);
       }
@@ -176,7 +176,7 @@ const Settings = () => {
   if (!currentUser) return <div>Please log in to view your settings.</div>;
 
   const isProTeacher =
-    currentUser.role === 'creator' &&
+    currentUser.role === 'tutor' &&
     (currentUser.subscription_tier === 'pro' || currentUser.subscription_tier === 'business');
   const tier = currentUser.subscription_tier || 'free';
   const tierLabel = tier === 'free' || tier === 'none' ? 'Free' : tier.charAt(0).toUpperCase() + tier.slice(1);
@@ -234,7 +234,7 @@ const Settings = () => {
         <div className="px-4 py-5 sm:p-6">
           <h3 className="text-lg leading-6 font-medium text-kotoba-text">Timezone</h3>
           <p className="mt-2 max-w-xl text-sm text-kotoba-text/60">
-            {currentUser?.role === 'creator' ? (
+            {currentUser?.role === 'tutor' ? (
               <>Your availability windows are stored in this timezone. Students see lesson times converted to <em>their</em> browser-local zone — so you don't have to translate.</>
             ) : (
               <>Set this so we display lesson times in the zone you actually live in.</>
@@ -298,7 +298,7 @@ const Settings = () => {
         </div>
       </div>
 
-      {currentUser.role === 'creator' && (
+      {currentUser.role === 'tutor' && (
         <>
           <div className="bg-white shadow-soft rounded-3xl overflow-hidden mb-6">
             <div className="px-4 py-5 sm:p-6">
