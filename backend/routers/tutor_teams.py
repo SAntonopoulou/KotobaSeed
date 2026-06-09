@@ -36,8 +36,7 @@ from ..models import (
     TutorTeamInviteStatus,
     User,
 )
-from ..services import team_protection as _protection
-from ..services import teams as _teams
+from ..services import team_protection as _protection, teams as _teams
 from ..services.email import send_team_invite
 
 log = logging.getLogger(__name__)

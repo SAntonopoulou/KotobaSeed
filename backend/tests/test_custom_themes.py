@@ -30,11 +30,12 @@ from backend.models import (
     User,
 )
 from backend.routers import custom_themes as _ct_router
-from backend.services import custom_themes as _ct_svc
-from backend.services import team_protection as _protection
-from backend.services import teams as _teams
+from backend.services import (
+    custom_themes as _ct_svc,
+    team_protection as _protection,
+    teams as _teams,
+)
 from backend.tests.conftest import auth_headers_for
-
 
 HOST = {"Host": "kotobaseed.net"}
 

@@ -111,6 +111,7 @@ async def _create_checkout(*, plan: str, billing: str, current_user: User) -> di
     # Admin DISCOUNT comp — attach the user's unused discount coupon if any.
     try:
         from sqlmodel import Session as _Sess
+
         from .. import database as _db
         from ..services import admin_grants as _ag
         with _Sess(_db.engine) as _s:

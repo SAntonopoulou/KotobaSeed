@@ -14,21 +14,19 @@ touching code logic.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import UTC, datetime
-from typing import Iterable
 
 from sqlmodel import Session, func, select
 
 from ..models import (
     Article,
     GroupActivityPoint,
-    LanguageGroup,
     SkillBadge,
     Tutor,
     User,
     UserLanguageGroup,
 )
-
 
 # Points per event kind. Tune as we learn what drives quality engagement.
 POINTS_BY_KIND: dict[str, int] = {

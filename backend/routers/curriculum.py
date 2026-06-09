@@ -14,7 +14,7 @@ import json
 import logging
 import secrets
 from datetime import UTC, datetime
-from typing import Annotated, Optional
+from typing import Annotated
 
 from fastapi import (
     APIRouter,
@@ -33,7 +33,6 @@ from ..models import (
     Article,
     ArticleVisibility,
     Booking,
-    BookingStatus,
     CEFRLevel,
     Curriculum,
     CurriculumLesson,
@@ -48,7 +47,6 @@ from ..models import (
     User,
 )
 from ..tenancy import CurrentTutor
-
 
 router = APIRouter(prefix="/curriculum", tags=["curriculum"])
 plans_router = APIRouter(prefix="/lesson-plans", tags=["lesson-plans"])
@@ -68,20 +66,20 @@ class AttachmentItem(BaseModel):
 class EmbeddedVideoItem(BaseModel):
     provider: str = Field(default="other", max_length=20)
     url: str = Field(max_length=2048)
-    title: Optional[str] = Field(default=None, max_length=200)
+    title: str | None = Field(default=None, max_length=200)
 
 
 class CurriculumRead(BaseModel):
     id: int
     owner_user_id: int
-    tutor_team_id: Optional[int]
+    tutor_team_id: int | None
     title: str
-    description: Optional[str]
-    language: Optional[str]
-    level: Optional[CEFRLevel]
-    cover_image_url: Optional[str]
+    description: str | None
+    language: str | None
+    level: CEFRLevel | None
+    cover_image_url: str | None
     is_school_library: bool
-    archived_at: Optional[datetime]
+    archived_at: datetime | None
     created_at: datetime
     updated_at: datetime
     lesson_count: int
@@ -89,19 +87,19 @@ class CurriculumRead(BaseModel):
 
 class CurriculumCreate(BaseModel):
     title: str = Field(min_length=1, max_length=200)
-    description: Optional[str] = Field(default=None, max_length=4000)
-    language: Optional[str] = Field(default=None, max_length=60)
-    level: Optional[CEFRLevel] = None
-    cover_image_url: Optional[str] = Field(default=None, max_length=2048)
+    description: str | None = Field(default=None, max_length=4000)
+    language: str | None = Field(default=None, max_length=60)
+    level: CEFRLevel | None = None
+    cover_image_url: str | None = Field(default=None, max_length=2048)
 
 
 class CurriculumUpdate(BaseModel):
-    title: Optional[str] = Field(default=None, min_length=1, max_length=200)
-    description: Optional[str] = Field(default=None, max_length=4000)
-    language: Optional[str] = Field(default=None, max_length=60)
-    level: Optional[CEFRLevel] = None
-    cover_image_url: Optional[str] = Field(default=None, max_length=2048)
-    is_school_library: Optional[bool] = None
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=4000)
+    language: str | None = Field(default=None, max_length=60)
+    level: CEFRLevel | None = None
+    cover_image_url: str | None = Field(default=None, max_length=2048)
+    is_school_library: bool | None = None
 
 
 class LessonRead(BaseModel):
@@ -109,38 +107,38 @@ class LessonRead(BaseModel):
     curriculum_id: int
     position: int
     title: str
-    summary: Optional[str]
-    body_lexical_json: Optional[str]
-    body_markdown: Optional[str]
+    summary: str | None
+    body_lexical_json: str | None
+    body_markdown: str | None
     estimated_duration_minutes: int
     attachments: list[AttachmentItem]
     embedded_videos: list[EmbeddedVideoItem]
     is_published: bool
-    archived_at: Optional[datetime]
+    archived_at: datetime | None
     created_at: datetime
     updated_at: datetime
 
 
 class LessonCreate(BaseModel):
     title: str = Field(min_length=1, max_length=200)
-    summary: Optional[str] = Field(default=None, max_length=600)
-    body_lexical_json: Optional[str] = None
-    body_markdown: Optional[str] = None
+    summary: str | None = Field(default=None, max_length=600)
+    body_lexical_json: str | None = None
+    body_markdown: str | None = None
     estimated_duration_minutes: int = Field(default=60, ge=5, le=600)
     attachments: list[AttachmentItem] = Field(default_factory=list)
     embedded_videos: list[EmbeddedVideoItem] = Field(default_factory=list)
-    position: Optional[int] = None
+    position: int | None = None
 
 
 class LessonUpdate(BaseModel):
-    title: Optional[str] = Field(default=None, min_length=1, max_length=200)
-    summary: Optional[str] = Field(default=None, max_length=600)
-    body_lexical_json: Optional[str] = None
-    body_markdown: Optional[str] = None
-    estimated_duration_minutes: Optional[int] = Field(default=None, ge=5, le=600)
-    attachments: Optional[list[AttachmentItem]] = None
-    embedded_videos: Optional[list[EmbeddedVideoItem]] = None
-    is_published: Optional[bool] = None
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    summary: str | None = Field(default=None, max_length=600)
+    body_lexical_json: str | None = None
+    body_markdown: str | None = None
+    estimated_duration_minutes: int | None = Field(default=None, ge=5, le=600)
+    attachments: list[AttachmentItem] | None = None
+    embedded_videos: list[EmbeddedVideoItem] | None = None
+    is_published: bool | None = None
 
 
 class LessonReorderRequest(BaseModel):
@@ -477,8 +475,8 @@ def hard_delete_curriculum(
     _require_owner(c, current)
 
     lesson_ids = [
-        l.id
-        for l in session.exec(
+        lesson.id
+        for lesson in session.exec(
             select(CurriculumLesson).where(
                 CurriculumLesson.curriculum_id == curriculum_id
             )
@@ -723,8 +721,8 @@ def reorder_lessons(
         raise HTTPException(404, "Curriculum not found")
     _require_owner(c, current)
     lessons = {
-        l.id: l
-        for l in session.exec(
+        lesson.id: lesson
+        for lesson in session.exec(
             select(CurriculumLesson).where(
                 CurriculumLesson.curriculum_id == curriculum_id,
                 CurriculumLesson.archived_at.is_(None),
@@ -747,8 +745,8 @@ def reorder_lessons(
     session.add(c)
     session.commit()
     return [
-        _lesson_to_read(l)
-        for l in sorted(lessons.values(), key=lambda x: x.position)
+        _lesson_to_read(lesson)
+        for lesson in sorted(lessons.values(), key=lambda x: x.position)
     ]
 
 
@@ -842,29 +840,29 @@ class HomeworkTemplateRead(BaseModel):
     lesson_id: int
     position: int
     title: str
-    body_lexical_json: Optional[str]
-    body_markdown: Optional[str]
+    body_lexical_json: str | None
+    body_markdown: str | None
     due_days_after_lesson: int
     is_active: bool
-    archived_at: Optional[datetime]
+    archived_at: datetime | None
     created_at: datetime
     updated_at: datetime
 
 
 class HomeworkTemplateCreate(BaseModel):
     title: str = Field(min_length=1, max_length=200)
-    body_lexical_json: Optional[str] = None
-    body_markdown: Optional[str] = None
+    body_lexical_json: str | None = None
+    body_markdown: str | None = None
     due_days_after_lesson: int = Field(default=7, ge=0, le=365)
-    position: Optional[int] = None
+    position: int | None = None
 
 
 class HomeworkTemplateUpdate(BaseModel):
-    title: Optional[str] = Field(default=None, min_length=1, max_length=200)
-    body_lexical_json: Optional[str] = None
-    body_markdown: Optional[str] = None
-    due_days_after_lesson: Optional[int] = Field(default=None, ge=0, le=365)
-    is_active: Optional[bool] = None
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    body_lexical_json: str | None = None
+    body_markdown: str | None = None
+    due_days_after_lesson: int | None = Field(default=None, ge=0, le=365)
+    is_active: bool | None = None
 
 
 class HomeworkTemplateReorderRequest(BaseModel):
@@ -1111,39 +1109,39 @@ class StudentPlanRead(BaseModel):
     id: int
     tutor_id: int
     student_user_id: int
-    student_name: Optional[str]
-    student_email: Optional[str]
-    curriculum_id: Optional[int]
-    curriculum_title: Optional[str]
+    student_name: str | None
+    student_email: str | None
+    curriculum_id: int | None
+    curriculum_title: str | None
     is_custom: bool
     current_position: int
-    notes: Optional[str]
+    notes: str | None
     is_active: bool
     lessons: list[PlanLessonRef]
     # The lesson the tutor would teach next, or None if the plan is done.
-    next_lesson: Optional[PlanLessonRef]
+    next_lesson: PlanLessonRef | None
     created_at: datetime
     updated_at: datetime
 
 
 class StudentPlanUpsert(BaseModel):
     # When curriculum_id is None we treat the plan as fully custom.
-    curriculum_id: Optional[int] = None
-    notes: Optional[str] = Field(default=None, max_length=4000)
+    curriculum_id: int | None = None
+    notes: str | None = Field(default=None, max_length=4000)
     reset_position: bool = True
 
 
 class CustomPlanItemCreate(BaseModel):
     lesson_id: int
-    position: Optional[int] = None
-    notes: Optional[str] = Field(default=None, max_length=1000)
+    position: int | None = None
+    notes: str | None = Field(default=None, max_length=1000)
 
 
 class LessonDeliveryCreate(BaseModel):
     student_user_id: int
     lesson_id: int
-    booking_id: Optional[int] = None
-    teacher_notes: Optional[str] = Field(default=None, max_length=4000)
+    booking_id: int | None = None
+    teacher_notes: str | None = Field(default=None, max_length=4000)
     # When True, advance plan.current_position by 1 after recording delivery.
     advance_plan: bool = True
 
@@ -1153,9 +1151,9 @@ class LessonDeliveryRead(BaseModel):
     plan_id: int
     lesson_id: int
     lesson_title: str
-    booking_id: Optional[int]
+    booking_id: int | None
     delivered_at: datetime
-    teacher_notes: Optional[str]
+    teacher_notes: str | None
     homework_assignment_ids: list[int]
     plan_current_position_after: int
 
@@ -1185,8 +1183,8 @@ def _lessons_for_plan(plan: StudentLessonPlan, session: Session) -> list[Curricu
         return []
     lesson_ids = [i.lesson_id for i in items]
     lessons_by_id = {
-        l.id: l
-        for l in session.exec(
+        lesson.id: lesson
+        for lesson in session.exec(
             select(CurriculumLesson).where(CurriculumLesson.id.in_(lesson_ids))
         ).all()
     }
@@ -1199,12 +1197,12 @@ def _plan_to_read(
     lessons = _lessons_for_plan(plan, session)
     refs = [
         PlanLessonRef(
-            lesson_id=l.id,
-            lesson_title=l.title,
+            lesson_id=lesson.id,
+            lesson_title=lesson.title,
             position=idx,
-            estimated_duration_minutes=l.estimated_duration_minutes,
+            estimated_duration_minutes=lesson.estimated_duration_minutes,
         )
-        for idx, l in enumerate(lessons)
+        for idx, lesson in enumerate(lessons)
     ]
     next_ref = (
         refs[plan.current_position]
@@ -1500,11 +1498,11 @@ class ClassroomLessonContext(BaseModel):
 
     plan_id: int
     student_user_id: int
-    student_name: Optional[str]
+    student_name: str | None
     booking_id: int
     plan_position: int
     plan_total_lessons: int
-    next_lesson: Optional[LessonRead]
+    next_lesson: LessonRead | None
     homework_templates: list[HomeworkTemplateRead]
 
 
@@ -1660,9 +1658,9 @@ def record_lesson_delivery(
 
 
 class PublishAsModulePayload(BaseModel):
-    title: Optional[str] = Field(default=None, max_length=200)
-    summary: Optional[str] = Field(default=None, max_length=500)
-    description: Optional[str] = Field(default=None, max_length=4000)
+    title: str | None = Field(default=None, max_length=200)
+    summary: str | None = Field(default=None, max_length=500)
+    description: str | None = Field(default=None, max_length=4000)
     price_cents: int = Field(default=0, ge=0, le=1_000_000)
     currency: str = Field(default="eur", max_length=3)
     is_published: bool = False
@@ -1770,14 +1768,14 @@ def publish_curriculum_as_module(
 
     now = datetime.now(UTC)
     article_ids: list[int] = []
-    for l in lessons:
-        slug = _unique_article_slug(_slugify(l.title), tutor.id, session)
+    for lesson in lessons:
+        slug = _unique_article_slug(_slugify(lesson.title), tutor.id, session)
         article = Article(
             tutor_id=tutor.id,
             slug=slug,
-            title=l.title,
-            summary=l.summary,
-            body_markdown=l.body_markdown or "",
+            title=lesson.title,
+            summary=lesson.summary,
+            body_markdown=lesson.body_markdown or "",
             visibility=ArticleVisibility.PUBLIC,
             price_cents=0,
             currency="eur",

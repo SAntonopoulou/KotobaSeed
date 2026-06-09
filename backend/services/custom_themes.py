@@ -20,15 +20,12 @@ from sqlmodel import Session, select
 
 from ..models import (
     CustomTheme,
-    CustomThemeOrder,
     CustomThemePackage,
     CustomThemeStatus,
     SubscriptionTier,
     Tutor,
     TutorPageSection,
     TutorPageSectionType,
-    TutorTeam,
-    User,
 )
 
 log = logging.getLogger(__name__)

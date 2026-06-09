@@ -18,8 +18,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlmodel import Session, func, select
 
 from ..database import get_session
@@ -196,14 +196,11 @@ def read_group(
 
     # Tutors who teach this language. We pull tutor profile data via the
     # User → Tutor relationship.
-    tutor_user_ids = [
-        row
-        for row in session.exec(
+    tutor_user_ids = list(session.exec(
             select(UserLanguageGroup.user_id).where(
                 UserLanguageGroup.group_id == g.id
             )
-        ).all()
-    ]
+        ).all())
     tutors_out: list[GroupTutorRead] = []
     if tutor_user_ids:
         tutor_rows = session.exec(
@@ -243,7 +240,7 @@ def read_group(
     articles_out: list[GroupArticleRead] = []
     if tutor_user_ids:
         # Tutor.id → tutor_user_id reverse lookup
-        tutor_id_by_user = {t.user_id: t for t in tutor_rows}
+        {t.user_id: t for t in tutor_rows}
         tutor_table_ids = [t.id for t in tutor_rows]
         if tutor_table_ids:
             article_rows = session.exec(
@@ -275,8 +272,8 @@ def read_group(
 
     # Cohorts open in this group. Imported lazily so a cohorts-module
     # refactor doesn't break this read endpoint.
-    from .cohorts import list_open_cohorts_for_group
     from ..services.engagement import leaderboard_for_group
+    from .cohorts import list_open_cohorts_for_group
 
     cohorts = [
         c.model_dump(mode="json") for c in list_open_cohorts_for_group(session, g.id)

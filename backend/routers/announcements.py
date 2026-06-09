@@ -17,7 +17,7 @@ Two concerns sit in one router:
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Annotated, Optional
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
@@ -34,7 +34,6 @@ from ..models import (
 )
 from ..services.audit import record_audit
 
-
 router = APIRouter(tags=["announcements"])
 
 
@@ -48,9 +47,9 @@ class AnnouncementRead(BaseModel):
     audience: PlatformAnnouncementAudience
     severity: PlatformAnnouncementSeverity
     publish_at: datetime
-    effective_at: Optional[datetime]
-    cta_label: Optional[str]
-    cta_url: Optional[str]
+    effective_at: datetime | None
+    cta_label: str | None
+    cta_url: str | None
     dismissible: bool
     is_retracted: bool
     created_at: datetime
@@ -63,10 +62,10 @@ class AnnouncementCreate(BaseModel):
     body_md: str = Field(..., min_length=10, max_length=10_000)
     audience: PlatformAnnouncementAudience = PlatformAnnouncementAudience.ALL
     severity: PlatformAnnouncementSeverity = PlatformAnnouncementSeverity.INFO
-    publish_at: Optional[datetime] = None
-    effective_at: Optional[datetime] = None
-    cta_label: Optional[str] = Field(default=None, max_length=80)
-    cta_url: Optional[str] = Field(default=None, max_length=512)
+    publish_at: datetime | None = None
+    effective_at: datetime | None = None
+    cta_label: str | None = Field(default=None, max_length=80)
+    cta_url: str | None = Field(default=None, max_length=512)
     dismissible: bool = True
 
 

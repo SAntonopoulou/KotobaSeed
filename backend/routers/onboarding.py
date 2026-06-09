@@ -247,10 +247,7 @@ def signup_tutor(
         # The exception is a legacy user who registered but never verified —
         # without issuing a fresh code here, the dashboard banner would
         # surface but /auth/verify-email would 400 with "no code on file".
-        if user.email_verified_at is None:
-            code = _issue_email_code(user)
-        else:
-            code = None
+        code = _issue_email_code(user) if user.email_verified_at is None else None
     else:
         user = User(
             email=email,

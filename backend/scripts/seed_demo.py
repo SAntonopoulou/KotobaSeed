@@ -68,7 +68,6 @@ from backend.models import (
 )
 from backend.security import hash_password
 
-
 # Deterministic RNG so re-runs produce the same demo data (if we ever
 # allow re-running).
 RNG = random.Random(20260607)
@@ -202,7 +201,7 @@ def _create_users(session: Session) -> tuple[list[User], list[User]]:
         )
         session.add(u)
         tutors.append(u)
-    for slug, name, email in STUDENTS:
+    for _slug, name, email in STUDENTS:
         u = User(
             email=email,
             hashed_password=pw,
@@ -223,8 +222,8 @@ def _create_users(session: Session) -> tuple[list[User], list[User]]:
 
 def _create_tutors(session: Session, tutor_users: list[User]) -> list[Tutor]:
     out: list[Tutor] = []
-    now = datetime.now(UTC)
-    for user, defn in zip(tutor_users, TUTORS):
+    datetime.now(UTC)
+    for user, defn in zip(tutor_users, TUTORS, strict=False):
         # TutorPlan is just STARTER/PRO — the granular FREE/PLUS/PRO/
         # BUSINESS live on User.subscription_tier (already set above).
         # Tutors on the paid tutoring tiers (Plus/Pro/Business) all get
@@ -272,7 +271,7 @@ def _create_tutors(session: Session, tutor_users: list[User]) -> list[Tutor]:
 
 def _create_lesson_packs(session: Session, tutors: list[Tutor]) -> list[LessonPack]:
     packs: list[LessonPack] = []
-    for tutor, defn in zip(tutors, TUTORS):
+    for tutor, defn in zip(tutors, TUTORS, strict=False):
         # Trial pack (hidden from price list, used by trial book endpoint)
         if defn["trial_minutes"] > 0:
             session.add(LessonPack(
@@ -315,7 +314,7 @@ def _create_bookings(
 ) -> None:
     """30-ish bookings across the lifecycle for a realistic dashboard."""
     now = datetime.now(UTC)
-    for i in range(35):
+    for _i in range(35):
         tutor = RNG.choice(tutors)
         student = RNG.choice(students)
         if tutor.user_id == student.id:
@@ -437,7 +436,7 @@ def _create_articles(session: Session, tutors: list[Tutor], tutor_users: list[Us
         ArticleVisibility.PUBLIC,
         ArticleVisibility.SUBSCRIBERS_ONLY,
     ]
-    for tutor, user in zip(tutors, tutor_users):
+    for tutor, user in zip(tutors, tutor_users, strict=False):
         for idx, (title, summary) in enumerate(base_titles.get(tutor.tutor_slug, [])):
             visibility = visibilities[idx] if idx < len(visibilities) else ArticleVisibility.PUBLIC
             preview_markdown: str | None = None
@@ -506,7 +505,7 @@ def _create_marketplace_projects(
     ]
     out: list[Project] = []
     for (user, (title, descr, lang, level, goal, st)) in zip(
-        list(tutor_users) * 2, blueprint
+        list(tutor_users) * 2, blueprint, strict=False
     ):
         p = Project(
             title=title,
@@ -561,7 +560,7 @@ def _create_marketplace_requests(
         ("French pronunciation only", "I read fine but my accent is killing me.", "French", "B1", 2500, RequestStatus.OPEN),
     ]
     for student, (title, descr, lang, level, budget, st) in zip(
-        students[:5], blueprint
+        students[:5], blueprint, strict=False
     ):
         target = RNG.choice(tutor_users) if st != RequestStatus.OPEN else None
         session.add(Request(
@@ -938,7 +937,7 @@ def main() -> int:
             print(f"  {t['email']}  →  https://{t['slug']}.demo.kotobaseed.net")
         print()
         print("Login as a student:")
-        for slug, name, email in STUDENTS[:3]:
+        for _slug, name, email in STUDENTS[:3]:
             print(f"  {email}  ({name})")
     return 0
 

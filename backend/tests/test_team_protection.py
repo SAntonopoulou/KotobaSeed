@@ -30,10 +30,8 @@ from backend.models import (
     User,
     UserRole,
 )
-from backend.services import team_protection as _protection
-from backend.services import teams as _teams
+from backend.services import team_protection as _protection, teams as _teams
 from backend.tests.conftest import auth_headers_for
-
 
 HOST = {"Host": "kotobaseed.net"}
 SUB_HOST = {"Host": "vasso.kotobaseed.net"}

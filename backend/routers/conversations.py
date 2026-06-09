@@ -4,7 +4,18 @@ import logging
 import secrets
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+    status,
+)
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import selectinload
@@ -13,7 +24,6 @@ from sqlmodel import Session, func, select
 from ..database import get_session
 from ..deps import get_current_user
 from ..services.rate_limit import rate_limit
-
 
 # Bound separately at module load so each endpoint stamps its own
 # bucket. send_message is the hot one; the rest of the limits are
@@ -26,7 +36,7 @@ _report_limit = rate_limit("report", limit=10, window_seconds=3600)
 # as the direct-DM limit so a single account can't spam every tutor on
 # the board.
 _open_marketplace_limit = rate_limit("open_marketplace", limit=10, window_seconds=3600)
-from ..models import (
+from ..models import (  # noqa: E402 — rate_limit set up above this block
     Conversation,
     ConversationReport,
     ConversationReportReason,
@@ -49,7 +59,7 @@ from ..models import (
     UserBlock,
     UserRole,
 )
-from ..schemas import (
+from ..schemas import (  # noqa: E402 — rate_limit set up above
     ConversationCreate,
     ConversationRead,
     ConversationSummaryRead,
@@ -61,8 +71,8 @@ from ..schemas import (
     RequestRead as FullRequestRead,
     UserPublicRead,
 )
-from ..security import decode_access_token
-from ..services.gamification import award_achievement
+from ..security import decode_access_token  # noqa: E402 — rate_limit set up above
+from ..services.gamification import award_achievement  # noqa: E402
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 

@@ -243,7 +243,7 @@ def cancel_group_session(
     # Refund every paid seat. We reuse the standard Booking refund path
     # rather than dispatching Stripe inline so chargeback handling stays
     # consistent.
-    from ..services import group_lessons
+    from ..services import group_lessons, minute_quota
 
     group_lessons.refund_session_bookings(session, gs, reason="tutor_cancelled")
     # Release the reserved-minute row so the quota meter actually drops

@@ -200,7 +200,7 @@ def send_reminder_emails(session: Session, booking: Booking) -> None:
                         f"Your lesson with {tutor.display_name} is in about a day "
                         f"({when_short})."
                     ),
-                    link=f"/student/dashboard",
+                    link="/student/dashboard",
                 )
             )
         if tutor_user is not None:

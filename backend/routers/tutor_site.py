@@ -292,8 +292,8 @@ def update_current_tutor(
         tutor.min_booking_lead_minutes = int(changes["min_booking_lead_minutes"])
         tutor_dirty = True
     if "theme" in changes and changes["theme"] is not None:
-        from ..services.themes import THEME_KEYS
         from ..models import CustomTheme
+        from ..services.themes import THEME_KEYS
 
         next_theme = changes["theme"]
 

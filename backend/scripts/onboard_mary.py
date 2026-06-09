@@ -163,7 +163,7 @@ def main() -> int:
         print("=" * 60)
         print(f"  Tenant URL : https://{result['tutor_slug']}.kotobaseed.net/")
         print(f"  Login email: {MARY_EMAIL}")
-        print(f"  Password   : (as supplied at signup)")
+        print("  Password   : (as supplied at signup)")
         print(f"  Pro until  : {result['expires_at']}")
         print(f"  Tier       : {result['subscription_tier']}")
         print(f"  Grant id   : {result['grant_id']}")

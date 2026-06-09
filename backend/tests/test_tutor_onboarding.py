@@ -21,7 +21,6 @@ from sqlmodel import Session, select
 from backend.models import Tutor, TutorOnboardingProgress, User
 from backend.tests.conftest import auth_headers_for
 
-
 HOST = {"Host": "vasso.kotobaseed.net"}
 
 

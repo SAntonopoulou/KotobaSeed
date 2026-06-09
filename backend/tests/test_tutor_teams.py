@@ -13,8 +13,6 @@ Covers:
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
-
 from sqlmodel import Session, select
 
 from backend.models import (
@@ -28,7 +26,6 @@ from backend.models import (
 )
 from backend.services import teams as _teams
 from backend.tests.conftest import auth_headers_for
-
 
 HOST = {"Host": "kotobaseed.net"}
 

@@ -41,7 +41,6 @@ from ..models import (
     Tutor,
     TutorAccountStatus,
     User,
-    UserRole,
 )
 
 log = logging.getLogger(__name__)

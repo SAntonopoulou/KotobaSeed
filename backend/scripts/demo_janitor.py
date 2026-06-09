@@ -90,10 +90,7 @@ def _has_user_edits(session: Session, user: User) -> bool:
             ~Project.id.in_(seeded_projects or [-1]),
         )
     ).first()
-    if unseeded_projects is not None:
-        return True
-
-    return False
+    return unseeded_projects is not None
 
 
 def prune_demo_accounts(session: Session, now: datetime | None = None) -> dict:

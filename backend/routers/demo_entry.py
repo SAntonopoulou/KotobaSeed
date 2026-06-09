@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import logging
 import re
-import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Literal
 
@@ -29,10 +28,10 @@ from ..database import get_session
 from ..deps import get_current_user
 from ..models import Tutor, User, UserRole
 from ..security import (
+    clear_auth_cookie,
     create_access_token,
     get_password_hash,
     set_auth_cookie,
-    clear_auth_cookie,
 )
 from ..services.demo_lifecycle import seed_workspace, wipe_workspace
 

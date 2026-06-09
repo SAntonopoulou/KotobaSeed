@@ -19,16 +19,15 @@ boundary-second is acceptable for chat-write rate-limiting.
 from __future__ import annotations
 
 import time
-from collections import defaultdict
+from collections.abc import Callable
 from threading import Lock
-from typing import Annotated, Callable
+from typing import Annotated
 
 from fastapi import Depends, HTTPException, status
 
 from ..config import settings
 from ..deps import get_current_user
 from ..models import User
-
 
 _inprocess_counters: dict[str, tuple[int, float]] = {}
 _inprocess_lock = Lock()

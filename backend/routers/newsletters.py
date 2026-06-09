@@ -5,12 +5,10 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
 from pydantic import BaseModel, EmailStr, Field
 from sqlmodel import Session, select
 
-from fastapi import Request
-from ..config import settings
 from ..database import get_session
 from ..deps import CurrentUser
 from ..models import (
@@ -20,8 +18,7 @@ from ..models import (
     TutorNewsletterSubscriber,
     User,
 )
-from ..services import email as email_service, email_templates
-from ..services import newsletters as newsletters_service
+from ..services import email as email_service, email_templates, newsletters as newsletters_service
 from ..tenancy import CurrentTutor
 
 router = APIRouter(tags=["newsletters"])
@@ -535,11 +532,11 @@ def confirm_subscription(
             raise ValueError("bad token shape")
         tutor_id = int(parts[1])
         subscriber_id = int(parts[2])
-    except (ValueError, AttributeError):
+    except (ValueError, AttributeError) as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="That confirmation link is invalid.",
-        )
+        ) from e
     expected = newsletters_service.make_confirmation_token(tutor_id, subscriber_id)
     import hmac as _hmac
     if not _hmac.compare_digest(token, expected):

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
-from typing import Annotated, Optional
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
@@ -33,12 +33,12 @@ log = logging.getLogger(__name__)
 class IllegalContentReport(BaseModel):
     """DSA Article 16 notice."""
 
-    reporter_email: Optional[str] = Field(default=None, max_length=320)
+    reporter_email: str | None = Field(default=None, max_length=320)
     content_url: str = Field(..., max_length=2048)
-    legal_basis: Optional[str] = Field(default=None, max_length=512)
+    legal_basis: str | None = Field(default=None, max_length=512)
     description: str = Field(..., min_length=10, max_length=8000)
     is_trusted_flagger: bool = False
-    acting_on_behalf_of: Optional[str] = Field(default=None, max_length=300)
+    acting_on_behalf_of: str | None = Field(default=None, max_length=300)
 
 
 class IllegalContentReportAck(BaseModel):
@@ -105,26 +105,26 @@ admin_router = APIRouter(prefix="/admin/reports", tags=["admin-reports"])
 class AdminReportRead(BaseModel):
     id: int
     reference: str
-    reporter_email: Optional[str]
+    reporter_email: str | None
     content_url: str
-    legal_basis: Optional[str]
+    legal_basis: str | None
     description: str
     is_trusted_flagger: bool
-    acting_on_behalf_of: Optional[str]
-    ip: Optional[str]
-    user_agent: Optional[str]
+    acting_on_behalf_of: str | None
+    ip: str | None
+    user_agent: str | None
     status: ReportStatus
     created_at: datetime
-    decided_at: Optional[datetime]
-    decided_by_user_id: Optional[int]
-    decision_reason: Optional[str]
+    decided_at: datetime | None
+    decided_by_user_id: int | None
+    decision_reason: str | None
 
 
 @admin_router.get("", response_model=list[AdminReportRead])
 def list_reports(
     current: CurrentAdmin,
     session: Annotated[Session, Depends(get_session)],
-    status_filter: Optional[ReportStatus] = None,
+    status_filter: ReportStatus | None = None,
     limit: int = 100,
 ) -> list[AdminReportRead]:
     """Admin: list reports, newest first. Optionally filter by status."""

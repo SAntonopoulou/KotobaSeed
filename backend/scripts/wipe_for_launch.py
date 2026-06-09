@@ -26,7 +26,6 @@ import sys
 from sqlalchemy import text
 from sqlmodel import Session, SQLModel, select
 
-from ..config import settings
 from ..database import engine
 from ..models import Tutor, User  # noqa: F401 — populate metadata
 

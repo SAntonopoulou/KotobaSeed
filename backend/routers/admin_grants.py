@@ -18,8 +18,7 @@ from sqlmodel import Session, select
 from ..database import get_session
 from ..deps import CurrentAdmin
 from ..models import AdminGrant, AdminGrantKind, AdminGrantStatus, User
-from ..services import admin_grants as _grants_svc
-from ..services import audit
+from ..services import admin_grants as _grants_svc, audit
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin/grants", tags=["admin", "grants"])

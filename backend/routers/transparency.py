@@ -8,9 +8,9 @@ first official report has a full historical baseline.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from statistics import median
-from typing import Annotated, Optional
+from typing import Annotated
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
@@ -19,7 +19,6 @@ from sqlmodel import Session, func, select
 from ..database import get_session
 from ..deps import CurrentAdmin
 from ..models import AuditLog, Report, ReportStatus
-
 
 router = APIRouter(prefix="/admin/transparency", tags=["admin-transparency"])
 
@@ -43,9 +42,9 @@ class TransparencySnapshot(BaseModel):
     appeals_upheld: int
     # Hours from notice receipt to first decision. Computed only over
     # reports that have a decision in the period.
-    median_response_hours: Optional[float]
-    p50_response_hours: Optional[float]
-    p90_response_hours: Optional[float]
+    median_response_hours: float | None
+    p50_response_hours: float | None
+    p90_response_hours: float | None
 
 
 def _hours_between(a: datetime, b: datetime) -> float:
@@ -90,7 +89,7 @@ def transparency_year(
         if r.decided_at is not None
     ]
 
-    def _pct(p: float) -> Optional[float]:
+    def _pct(p: float) -> float | None:
         if not response_hours:
             return None
         srt = sorted(response_hours)

@@ -25,7 +25,6 @@ from sqlmodel import Session, select
 from ..models import (
     Booking,
     Tutor,
-    TutorPageSection,
     TutorProtectedStudent,
     TutorTeam,
 )

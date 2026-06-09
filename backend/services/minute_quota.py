@@ -20,6 +20,7 @@ re-deriving the math.
 
 from __future__ import annotations
 
+import contextlib
 from calendar import monthrange
 from datetime import UTC, datetime, timedelta
 from typing import NamedTuple
@@ -328,15 +329,11 @@ def _split_month_minutes_by_status(
         m = int(r.minutes_used or 0)
         by_source[r.source] = by_source.get(r.source, 0) + m
         if (r.source or "").startswith("booking:"):
-            try:
+            with contextlib.suppress(ValueError):
                 booking_ids.append(int(r.source.split(":", 1)[1]))
-            except ValueError:
-                pass
         elif (r.source or "").startswith("group_session:"):
-            try:
+            with contextlib.suppress(ValueError):
                 group_session_ids.append(int(r.source.split(":", 1)[1]))
-            except ValueError:
-                pass
 
     booking_status_by_id: dict[int, BookingStatus] = {}
     if booking_ids:
