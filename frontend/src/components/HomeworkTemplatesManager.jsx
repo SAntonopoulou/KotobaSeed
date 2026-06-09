@@ -16,6 +16,52 @@ const HomeworkTemplatesManager = () => {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
+  // One-off "assign this template to a student" dialog state. Replaces
+  // the legacy blanket auto-assign flow Sophia retired 2026-06-09.
+  const [assigningTemplate, setAssigningTemplate] = useState(null);
+  const [students, setStudents] = useState([]);
+  const [studentsLoading, setStudentsLoading] = useState(false);
+  const [assignForm, setAssignForm] = useState({ student_user_id: '', due_days: 7 });
+  const [assignBusy, setAssignBusy] = useState(false);
+
+  useEffect(() => {
+    if (!assigningTemplate) return;
+    setStudentsLoading(true);
+    setAssignForm({ student_user_id: '', due_days: 7 });
+    (async () => {
+      try {
+        const res = await client.get('/tutor/students');
+        setStudents(res.data || []);
+      } catch (err) {
+        setError(getErrorMessage(err, 'Could not load your students.'));
+      } finally {
+        setStudentsLoading(false);
+      }
+    })();
+  }, [assigningTemplate]);
+
+  const submitAssign = async (e) => {
+    e.preventDefault();
+    if (!assignForm.student_user_id) return;
+    setAssignBusy(true);
+    try {
+      const dueDays = parseInt(assignForm.due_days, 10) || 0;
+      const due_at = dueDays > 0
+        ? new Date(Date.now() + dueDays * 24 * 60 * 60 * 1000).toISOString()
+        : null;
+      await client.post('/tutor/homework/assignments', {
+        template_id: assigningTemplate.id,
+        student_user_id: parseInt(assignForm.student_user_id, 10),
+        due_at,
+      });
+      setInfo(`Assigned "${assigningTemplate.title}" to the student.`);
+      setAssigningTemplate(null);
+    } catch (err) {
+      setError(getErrorMessage(err, 'Could not assign.'));
+    } finally {
+      setAssignBusy(false);
+    }
+  };
 
   const load = async () => {
     setLoading(true);
@@ -39,7 +85,6 @@ const HomeworkTemplatesManager = () => {
       title: '',
       description: '',
       questions: [makeQuestion('mc_single')],
-      auto_assign_on_lesson_complete: false,
       is_premium: false,
       price_cents: 0,
       currency: 'eur',
@@ -91,7 +136,11 @@ const HomeworkTemplatesManager = () => {
         title: editing.title.trim(),
         description: editing.description?.trim() || null,
         questions: editing.questions,
-        auto_assign_on_lesson_complete: editing.auto_assign_on_lesson_complete,
+        // Force the legacy auto-assign-after-every-lesson flag off on
+        // every save. The toggle was removed from the UI 2026-06-09;
+        // any templates still carrying it from before now get cleared
+        // on next edit. Curriculum lessons are the new auto-assign path.
+        auto_assign_on_lesson_complete: false,
         is_premium: editing.is_premium,
         price_cents: editing.is_premium ? editing.price_cents : 0,
         currency: editing.currency || 'eur',
@@ -115,9 +164,9 @@ const HomeworkTemplatesManager = () => {
   const remove = async (t) => {
     if (!(await confirm({
       title: 'Archive template',
-      message: `Archive the template "${t.title}"? Existing assignments keep their snapshots.`,
+      message: `Archive the template "${t.title}"? Existing assignments keep their snapshots; you can still see them in the assignments list.`,
       confirmText: 'Archive',
-      destructive: true,
+      destructive: false,
     }))) return;
     setBusy(true);
     try {
@@ -130,13 +179,32 @@ const HomeworkTemplatesManager = () => {
     }
   };
 
+  const hardDelete = async (t) => {
+    if (!(await confirm({
+      title: 'Delete template permanently',
+      message: `Delete "${t.title}" permanently? Already-issued assignments keep their content but lose the link to this template. This can't be undone.`,
+      confirmText: 'Delete forever',
+      destructive: true,
+    }))) return;
+    setBusy(true);
+    try {
+      await client.delete(`/tutor/homework/templates/${t.id}/permanent`);
+      await load();
+      setInfo('Template deleted.');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Could not delete.'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <section className="bg-white rounded-2xl shadow-sm p-6">
       <div className="flex items-start justify-between gap-3 flex-wrap mb-3">
         <div>
           <h2 className="text-lg font-bold text-kotoba-primary">Homework templates</h2>
           <p className="text-sm text-kotoba-text/70 mt-1">
-            Build reusable assignments — multiple choice, fill-blank with accent normalization, and short-answer questions you grade yourself. Flag one as "auto-assign" and it goes out automatically after every completed lesson.
+            Build reusable assignments — multiple choice, fill-blank with accent normalization, and short-answer questions you grade yourself. Assign a template to a specific student one-off here, or attach it to a curriculum lesson so it auto-spawns when you teach that lesson to that student.
           </p>
         </div>
         {!editing && (
@@ -189,21 +257,11 @@ const HomeworkTemplatesManager = () => {
             onChange={(questions) => setEditing({ ...editing, questions })}
           />
 
-          <label className="inline-flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={editing.auto_assign_on_lesson_complete}
-              onChange={(e) =>
-                setEditing({
-                  ...editing,
-                  auto_assign_on_lesson_complete: e.target.checked,
-                })
-              }
-              disabled={busy}
-              className="h-4 w-4 text-kotoba-primary border-kotoba-text/30 rounded"
-            />
-            Auto-assign this after every completed lesson
-          </label>
+          {/* The legacy "auto-assign after every completed lesson"
+              checkbox was removed 2026-06-09. Auto-assignment now lives
+              on curriculum lessons: attach this template's content to a
+              lesson via Dashboard → Content → Curriculums and it
+              auto-spawns only for the student you teach the lesson to. */}
 
           <div className="border-t border-kotoba-text/10 pt-3">
             <label className="inline-flex items-center gap-2 text-sm">
@@ -310,11 +368,8 @@ const HomeworkTemplatesManager = () => {
                   <span className="text-xs px-2 py-0.5 rounded bg-kotoba-background text-kotoba-text/70">
                     {t.questions.length} {t.questions.length === 1 ? 'question' : 'questions'} · {t.max_score} pts
                   </span>
-                  {t.auto_assign_on_lesson_complete && (
-                    <span className="text-xs px-2 py-0.5 rounded bg-kotoba-secondary/30 text-kotoba-text">
-                      Auto-assign
-                    </span>
-                  )}
+                  {/* Legacy "Auto-assign" badge removed 2026-06-09 with
+                      the auto_assign_on_lesson_complete option. */}
                   {!t.is_active && (
                     <span className="text-xs px-2 py-0.5 rounded bg-kotoba-text/10 text-kotoba-text/60">
                       Archived
@@ -323,6 +378,15 @@ const HomeworkTemplatesManager = () => {
                 </div>
               </div>
               <div className="flex items-center gap-2">
+                {t.is_active && (
+                  <button
+                    type="button"
+                    onClick={() => setAssigningTemplate(t)}
+                    className="text-sm font-semibold text-kotoba-primary hover:bg-kotoba-primary hover:text-white border border-kotoba-primary rounded-md px-3 py-1"
+                  >
+                    Assign to student
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => startEdit(t)}
@@ -334,15 +398,77 @@ const HomeworkTemplatesManager = () => {
                   <button
                     type="button"
                     onClick={() => remove(t)}
-                    className="text-sm text-red-600 hover:underline"
+                    className="text-sm text-kotoba-text/60 hover:text-kotoba-text"
                   >
                     Archive
                   </button>
                 )}
+                <button
+                  type="button"
+                  onClick={() => hardDelete(t)}
+                  className="text-sm text-red-600 hover:underline"
+                >
+                  Delete
+                </button>
               </div>
             </li>
           ))}
         </ul>
+      )}
+
+      {assigningTemplate && (
+        <div className="fixed inset-0 z-50 bg-kotoba-text/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <form onSubmit={submitAssign} className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md space-y-4">
+            <div>
+              <h3 className="font-display text-xl font-bold text-kotoba-primary">Assign homework</h3>
+              <p className="text-xs text-kotoba-text/60 mt-1">
+                Sends "<strong>{assigningTemplate.title}</strong>" to one student. They'll see it in their assignments queue immediately.
+              </p>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-kotoba-text/70 mb-1">Student</label>
+              {studentsLoading ? (
+                <p className="text-sm text-kotoba-text/60">Loading your students…</p>
+              ) : students.length === 0 ? (
+                <p className="text-sm text-kotoba-text/70 bg-kotoba-background/40 rounded-md p-3">
+                  You have no enrolled students yet. Students are added automatically when they book a lesson with you. Once you have a student, come back here to assign homework one-off.
+                </p>
+              ) : (
+                <select
+                  value={assignForm.student_user_id}
+                  onChange={(e) => setAssignForm((f) => ({ ...f, student_user_id: e.target.value }))}
+                  required
+                  className="w-full px-3 py-2 border border-kotoba-text/20 rounded text-sm"
+                >
+                  <option value="">— Pick a student —</option>
+                  {students.map((s) => (
+                    <option key={s.enrollment_id} value={s.student_user_id}>{s.student_name}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-kotoba-text/70 mb-1">Due in (days)</label>
+              <input
+                type="number"
+                min="0"
+                max="365"
+                value={assignForm.due_days}
+                onChange={(e) => setAssignForm((f) => ({ ...f, due_days: e.target.value }))}
+                className="w-32 px-3 py-2 border border-kotoba-text/20 rounded text-sm"
+              />
+              <p className="text-[10px] text-kotoba-text/55 mt-1">Set 0 for no fixed due date.</p>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button type="button" onClick={() => setAssigningTemplate(null)} disabled={assignBusy} className="px-4 py-2 text-sm text-kotoba-text/70 hover:text-kotoba-text">
+                Cancel
+              </button>
+              <button type="submit" disabled={assignBusy || students.length === 0 || !assignForm.student_user_id} className="px-5 py-2 rounded-md bg-kotoba-primary text-white font-semibold hover:bg-kotoba-primary/90 disabled:opacity-50">
+                {assignBusy ? 'Sending…' : 'Assign now'}
+              </button>
+            </div>
+          </form>
+        </div>
       )}
     </section>
   );

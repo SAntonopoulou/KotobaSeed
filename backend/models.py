@@ -21,7 +21,7 @@ class UserRole(str, Enum):
     """
 
     STUDENT = "student"
-    CREATOR = "creator"
+    TUTOR = "tutor"
     MODERATOR = "moderator"
     SUPPORT = "support"  # staff tier 1 — handles support tickets
     MANAGER = "manager"  # staff tier 2 — handles escalations, content review
@@ -398,7 +398,7 @@ class User(SQLModel, table=True):
             and self.subscription_expires_at < datetime.now(UTC)
         ):
             return False
-        return self.role == UserRole.CREATOR and self.subscription_tier in (
+        return self.role == UserRole.TUTOR and self.subscription_tier in (
             SubscriptionTier.PRO,
             SubscriptionTier.BUSINESS,
         )
@@ -1579,6 +1579,216 @@ class ModulePurchase(SQLModel, table=True):
     # created before the waiver checkbox shipped.
     withdrawal_waiver_at: datetime | None = Field(default=None)
     withdrawal_waiver_ip: str | None = Field(default=None, max_length=64)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class CEFRLevel(str, Enum):
+    """CEFR level reference. None = unspecified; otherwise A1..C2."""
+
+    A1 = "A1"
+    A2 = "A2"
+    B1 = "B1"
+    B2 = "B2"
+    C1 = "C1"
+    C2 = "C2"
+
+
+class Curriculum(SQLModel, table=True):
+    """A teacher-authored curriculum — an ordered sequence of lessons.
+
+    Internal use first: tutors keep curriculums in their library and
+    walk students through them lesson by lesson. Teachers in a school
+    team can flip `is_school_library=True` to expose the curriculum to
+    other team teachers (read + clone, never edit-in-place).
+
+    Curriculums are NOT sellable directly. To monetise a curriculum a
+    tutor uses the "publish as module" action that copies the lessons
+    into the existing LessonModule + items_json structure; the two then
+    evolve independently.
+    """
+
+    __tablename__ = "curriculum"
+
+    id: int | None = Field(default=None, primary_key=True)
+    # Owner is the User row (creator/tutor). We allow non-tutor authors
+    # (e.g. a Business team owner) so the column points at user, not tutor.
+    owner_user_id: int = Field(foreign_key="user.id", index=True)
+    # When set, the curriculum belongs to a school team and can be
+    # surfaced to teammates via the school library flag below.
+    tutor_team_id: int | None = Field(
+        default=None, foreign_key="tutor_team.id", index=True
+    )
+
+    title: str = Field(max_length=200)
+    description: str | None = Field(default=None, max_length=4000)
+    language: str | None = Field(default=None, max_length=60, index=True)
+    level: CEFRLevel | None = Field(default=None)
+    cover_image_url: str | None = Field(default=None, max_length=2048)
+
+    # Visibility within the owner's school team. False = private to the
+    # owner. True = read + clone available to any teacher in the team.
+    is_school_library: bool = Field(default=False, index=True)
+
+    archived_at: datetime | None = Field(default=None, index=True)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC), index=True
+    )
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class CurriculumLesson(SQLModel, table=True):
+    """One lesson inside a curriculum.
+
+    Rich text + media: the body is a Lexical editor state JSON. Optional
+    PDFs + images live on R2 with their URLs in `attachments_json`.
+    Embedded videos (YouTube/Vimeo) are URL references in
+    `embedded_videos_json` — we don't proxy video bytes.
+
+    Position determines display order; we re-pack positions on
+    insert/move to keep them dense (cheap because lesson counts are
+    small, typically < 50 per curriculum).
+    """
+
+    __tablename__ = "curriculum_lesson"
+
+    id: int | None = Field(default=None, primary_key=True)
+    curriculum_id: int = Field(foreign_key="curriculum.id", index=True)
+    position: int = Field(default=0, index=True)
+
+    title: str = Field(max_length=200)
+    summary: str | None = Field(default=None, max_length=600)
+    # Lexical editor state, JSON-stringified. None = blank lesson.
+    body_lexical_json: str | None = Field(default=None)
+    # Plain-text body used as the source-of-truth for full-text search
+    # + as the email/preview fallback when Lexical isn't rendered.
+    body_markdown: str | None = Field(default=None)
+    estimated_duration_minutes: int = Field(default=60, ge=5, le=600)
+
+    # JSON list of {kind: 'pdf'|'image', name, url, size_bytes}.
+    attachments_json: str = Field(default="[]")
+    # JSON list of {provider: 'youtube'|'vimeo'|'other', url, title?}.
+    embedded_videos_json: str = Field(default="[]")
+
+    is_published: bool = Field(default=True)
+    archived_at: datetime | None = Field(default=None)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class LessonHomeworkTemplate(SQLModel, table=True):
+    """A homework template attached to a CurriculumLesson.
+
+    When the lesson is actually taught to a student (LessonDelivery row
+    created), every active LessonHomeworkTemplate on the lesson
+    auto-spawns a HomeworkAssignment for that student. This is the
+    "homework auto-assigns only when the lesson is taught" model.
+
+    Body is Lexical-style rich text — same authoring tool as
+    CurriculumLesson.body_lexical_json.
+    """
+
+    __tablename__ = "lesson_homework_template"
+
+    id: int | None = Field(default=None, primary_key=True)
+    lesson_id: int = Field(foreign_key="curriculum_lesson.id", index=True)
+    position: int = Field(default=0)
+
+    title: str = Field(max_length=200)
+    body_lexical_json: str | None = Field(default=None)
+    body_markdown: str | None = Field(default=None)
+    # Days after the lesson delivery that the assignment is due.
+    due_days_after_lesson: int = Field(default=7, ge=0, le=365)
+
+    is_active: bool = Field(default=True)
+    archived_at: datetime | None = Field(default=None)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class StudentLessonPlan(SQLModel, table=True):
+    """The lesson sequence a teacher is using for one student.
+
+    Two shapes:
+      - Curriculum-driven (is_custom=False, curriculum_id set): the
+        sequence IS the curriculum's lessons in order. `current_position`
+        tracks where the student is up to.
+      - Custom (is_custom=True, curriculum_id null): the sequence is
+        spelled out in StudentLessonPlanItem rows. Teachers can clone
+        an existing custom plan to seed a new student's plan.
+
+    One plan per (tutor, student) is the v1 default. We allow multiple
+    historical plans per pair (e.g. teacher started Beginner Greek with
+    Maria last year, switched her to a custom plan this year — old plan
+    stays for the LessonDelivery history).
+    """
+
+    __tablename__ = "student_lesson_plan"
+
+    id: int | None = Field(default=None, primary_key=True)
+    tutor_id: int = Field(foreign_key="tutor.id", index=True)
+    student_user_id: int = Field(foreign_key="user.id", index=True)
+    curriculum_id: int | None = Field(
+        default=None, foreign_key="curriculum.id", index=True
+    )
+    is_custom: bool = Field(default=False)
+    # Where the student is up to. For curriculum-driven plans this is
+    # the CurriculumLesson.position to teach next. For custom plans it's
+    # the StudentLessonPlanItem.position.
+    current_position: int = Field(default=0)
+
+    notes: str | None = Field(default=None, max_length=4000)
+    is_active: bool = Field(default=True, index=True)
+    archived_at: datetime | None = Field(default=None)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class StudentLessonPlanItem(SQLModel, table=True):
+    """One step in a custom student lesson plan.
+
+    Only used when `StudentLessonPlan.is_custom=True`. Each item points
+    at a CurriculumLesson the teacher already owns (or has cloned from
+    the school library). Teachers can mix lessons from multiple
+    curriculums into a single custom plan.
+    """
+
+    __tablename__ = "student_lesson_plan_item"
+
+    id: int | None = Field(default=None, primary_key=True)
+    plan_id: int = Field(foreign_key="student_lesson_plan.id", index=True)
+    lesson_id: int = Field(foreign_key="curriculum_lesson.id", index=True)
+    position: int = Field(default=0)
+    notes: str | None = Field(default=None, max_length=1000)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class LessonDelivery(SQLModel, table=True):
+    """A record that the teacher actually taught a specific lesson to a
+    specific student during a specific booking.
+
+    Created when the teacher marks "Lesson taught" in the classroom or
+    via the dashboard after a booking. Triggers the homework auto-
+    assignment for every active LessonHomeworkTemplate attached to the
+    lesson. `homework_assignment_ids_json` records which homeworks were
+    actually created so we can audit/undo if needed.
+    """
+
+    __tablename__ = "lesson_delivery"
+
+    id: int | None = Field(default=None, primary_key=True)
+    plan_id: int = Field(foreign_key="student_lesson_plan.id", index=True)
+    lesson_id: int = Field(foreign_key="curriculum_lesson.id", index=True)
+    booking_id: int | None = Field(
+        default=None, foreign_key="booking.id", index=True
+    )
+    delivered_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC), index=True
+    )
+    teacher_notes: str | None = Field(default=None, max_length=4000)
+    # JSON list of HomeworkAssignment.id values that were auto-spawned
+    # at delivery time. Lets us undo cleanly if the teacher reverses a
+    # delivery record.
+    homework_assignment_ids_json: str = Field(default="[]")
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 

@@ -259,6 +259,37 @@ def delete_template(
     session.commit()
 
 
+@tutor_router.delete(
+    "/templates/{template_id}/permanent",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def hard_delete_template(
+    template_id: int,
+    current: CurrentUser,
+    tutor: CurrentTutor,
+    session: Annotated[Session, Depends(get_session)],
+) -> None:
+    """Hard delete a homework template. Assignments already issued from
+    this template are KEPT but their `template_id` is nulled (students
+    still see their work; the snapshot lives on the assignment row)."""
+    _require_owner(tutor, current)
+    row = session.get(HomeworkTemplate, template_id)
+    if row is None or row.tutor_id != tutor.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Template not found."
+        )
+    # Detach any existing assignments first to avoid FK violation.
+    for a in session.exec(
+        select(HomeworkAssignment).where(
+            HomeworkAssignment.template_id == template_id
+        )
+    ).all():
+        a.template_id = None
+        session.add(a)
+    session.delete(row)
+    session.commit()
+
+
 # --- Tutor: assignments --------------------------------------------
 
 
@@ -494,6 +525,34 @@ class HomeworkSubmissionDetail(BaseModel):
     feedback: str | None
     submitted_at: datetime
     graded_at: datetime | None
+
+
+@tutor_router.delete(
+    "/assignments/{assignment_id}", status_code=status.HTTP_204_NO_CONTENT
+)
+def delete_assignment(
+    assignment_id: int,
+    current: CurrentUser,
+    tutor: CurrentTutor,
+    session: Annotated[Session, Depends(get_session)],
+) -> None:
+    """Hard-delete an assignment. Also deletes the student's submission
+    if one exists (the assignment is the parent FK)."""
+    _require_owner(tutor, current)
+    a = session.get(HomeworkAssignment, assignment_id)
+    if a is None or a.tutor_id != tutor.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Assignment not found."
+        )
+    sub = session.exec(
+        select(HomeworkSubmission).where(
+            HomeworkSubmission.assignment_id == assignment_id
+        )
+    ).first()
+    if sub is not None:
+        session.delete(sub)
+    session.delete(a)
+    session.commit()
 
 
 @tutor_router.get(

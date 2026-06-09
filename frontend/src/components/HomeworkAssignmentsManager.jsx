@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import client from '../api/client';
+import { useConfirm } from '../context/ModalContext';
 import { getErrorMessage } from '../utils/errors';
 
 // Lists the tutor's assignments with quick visibility into submissions.
@@ -97,10 +98,26 @@ const SubmissionGrader = ({ assignment, onSaved, onClose }) => {
 };
 
 const HomeworkAssignmentsManager = () => {
+  const confirm = useConfirm();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [grading, setGrading] = useState(null);
+
+  const deleteAssignment = async (a) => {
+    if (!(await confirm({
+      title: 'Delete assignment',
+      message: `Delete "${a.title}" for ${a.student_name || 'this student'}? Any submission they made will be deleted too. This can't be undone.`,
+      confirmText: 'Delete forever',
+      destructive: true,
+    }))) return;
+    try {
+      await client.delete(`/tutor/homework/assignments/${a.id}`);
+      load();
+    } catch (err) {
+      setError(getErrorMessage(err, 'Could not delete.'));
+    }
+  };
 
   const load = async () => {
     setLoading(true);
@@ -164,15 +181,24 @@ const HomeworkAssignmentsManager = () => {
                     {a.submission_submitted_at && ` · submitted ${formatDate(a.submission_submitted_at)}`}
                   </p>
                 </div>
-                {a.submission_id && (
+                <div className="flex items-center gap-2">
+                  {a.submission_id && (
+                    <button
+                      type="button"
+                      onClick={() => setGrading(grading?.id === a.id ? null : a)}
+                      className="text-sm text-kotoba-primary hover:underline"
+                    >
+                      {grading?.id === a.id ? 'Close' : a.submission_needs_review ? 'Grade' : 'Adjust grade'}
+                    </button>
+                  )}
                   <button
                     type="button"
-                    onClick={() => setGrading(grading?.id === a.id ? null : a)}
-                    className="text-sm text-kotoba-primary hover:underline"
+                    onClick={() => deleteAssignment(a)}
+                    className="text-sm text-red-600 hover:underline"
                   >
-                    {grading?.id === a.id ? 'Close' : a.submission_needs_review ? 'Grade' : 'Adjust grade'}
+                    Delete
                   </button>
-                )}
+                </div>
               </div>
               {grading?.id === a.id && (
                 <SubmissionGrader
@@ -205,7 +231,7 @@ const HomeworkAssignmentsManager = () => {
 
       {items.length === 0 ? (
         <p className="text-sm text-kotoba-text/70 bg-kotoba-background/40 rounded-md p-4">
-          No assignments yet. They appear here as soon as you assign one from a template — or as soon as you complete a lesson where you have an auto-assign template enabled.
+          No assignments yet. They appear here as soon as you assign one from a template, or when you mark a curriculum lesson taught and that lesson has homework templates attached.
         </p>
       ) : (
         <>

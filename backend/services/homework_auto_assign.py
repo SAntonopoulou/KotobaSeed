@@ -1,29 +1,30 @@
-"""Auto-assign homework templates after a lesson is completed.
+"""Deprecated: legacy "auto-assign homework after every completed lesson".
 
-Fires from the tutor's POST /tutor/bookings/{id}/complete endpoint. For
-every active template the tutor has flagged with
-`auto_assign_on_lesson_complete=True`, clone it into a fresh
-HomeworkAssignment for the booking's student. Failures are swallowed so
-a misconfigured template doesn't fail the booking completion itself.
+Sophia retired this on 2026-06-09. The legacy model spammed homework on
+every completed booking regardless of which lesson was taught — students
+ended up doing the same homework after every class.
+
+The replacement lives in the curriculum system: a tutor attaches
+LessonHomeworkTemplate rows to a specific CurriculumLesson, and when the
+tutor records a LessonDelivery for a student (from the dashboard or the
+in-classroom presenter), every active template on that lesson auto-spawns
+a HomeworkAssignment for that student only. See
+backend/routers/curriculum.py::record_lesson_delivery.
+
+This file stays so the import path from routers/recurring.py and friends
+doesn't break, but the function is now a no-op. The DB column
+`HomeworkTemplate.auto_assign_on_lesson_complete` is kept for back-compat
+of historical rows but is ignored everywhere — the templates page also
+hides the toggle and force-clears the flag on save.
 """
 
 from __future__ import annotations
 
-import contextlib
-import json
 import logging
-from datetime import UTC, datetime
 
-from sqlmodel import Session, select
+from sqlmodel import Session
 
-from ..models import (
-    Booking,
-    HomeworkAssignment,
-    HomeworkAssignmentStatus,
-    HomeworkTemplate,
-    Tutor,
-)
-from . import homework_grading
+from ..models import Booking, Tutor
 
 log = logging.getLogger(__name__)
 
@@ -31,39 +32,6 @@ log = logging.getLogger(__name__)
 def assign_for_completed_booking(
     *, session: Session, tutor: Tutor, booking: Booking
 ) -> int:
-    """Clone every active auto-assign template for this tutor into a new
-    HomeworkAssignment for booking.student_user_id. Returns count assigned."""
-    templates = list(
-        session.exec(
-            select(HomeworkTemplate).where(
-                HomeworkTemplate.tutor_id == tutor.id,
-                HomeworkTemplate.is_active == True,  # noqa: E712
-                HomeworkTemplate.auto_assign_on_lesson_complete == True,  # noqa: E712
-            )
-        ).all()
-    )
-    if not templates:
-        return 0
-    now = datetime.now(UTC)
-    created = 0
-    for template in templates:
-        with contextlib.suppress(Exception):
-            questions = homework_grading.parse_questions(template.questions_json)
-            row = HomeworkAssignment(
-                tutor_id=tutor.id,
-                student_user_id=booking.student_user_id,
-                template_id=template.id,
-                title=template.title,
-                description=template.description,
-                questions_snapshot_json=json.dumps(questions),
-                max_score=homework_grading.compute_max_score(questions),
-                grading_price_cents=template.grading_price_cents,
-                grading_currency=template.currency,
-                status=HomeworkAssignmentStatus.OPEN,
-                assigned_at=now,
-            )
-            session.add(row)
-            created += 1
-    if created:
-        session.commit()
-    return created
+    """No-op. Returns 0 so callers see "nothing auto-assigned" and
+    don't surface a misleading toast or count."""
+    return 0
