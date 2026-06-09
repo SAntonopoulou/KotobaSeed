@@ -26,6 +26,11 @@ ENV VITE_PLATFORM_APEX=${VITE_PLATFORM_APEX}
 # Toggle staging-only affordances — most visibly the demo login hints.
 ARG VITE_DEMO_MODE=
 ENV VITE_DEMO_MODE=${VITE_DEMO_MODE}
+# Stripe publishable key. Currently unused (every payment flow goes through
+# server-side Stripe Checkout), but baked in now so that future Stripe
+# Elements / Payment Element use just works without a rebuild.
+ARG VITE_STRIPE_PUBLIC_KEY=
+ENV VITE_STRIPE_PUBLIC_KEY=${VITE_STRIPE_PUBLIC_KEY}
 # Sentry: DSN + environment + release identifier are baked at build
 # time so the SDK config is locked to this exact bundle. The release
 # string must match the one passed to `sentry-cli sourcemaps upload`

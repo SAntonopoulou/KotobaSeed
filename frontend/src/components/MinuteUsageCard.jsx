@@ -217,8 +217,10 @@ const MinuteUsageCard = () => {
               </button>
             ))}
           </div>
-          <p className="text-xs text-kotoba-text/50">
-            One-time purchase. Minutes carry over month to month until used.
+          <p className="text-xs text-kotoba-text/60 leading-relaxed">
+            One-time purchase. Minutes <strong>never expire</strong> and carry over month to month
+            until used. <strong>Minute packs are non-refundable</strong> once purchased — please pick
+            the size you actually need.
           </p>
         </div>
       )}

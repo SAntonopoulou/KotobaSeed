@@ -5,8 +5,11 @@ scheduled minutes to keep their calendar open. Packs never expire and are
 consumed FIFO across multiple booked lessons.
 
 Two SKUs (matching the Stripe products created in setup):
-- 1,000 minutes for €15
-- 5,000 minutes for €60
+- 1,000 minutes for €19
+- 5,000 minutes for €79
+
+Minutes are non-refundable but never expire — disclosed at point of purchase
+on both the in-app pack list and the Stripe Checkout custom_text.
 
 Flow:
 - Tutor POSTs to /tutor/minute-packs/checkout with the SKU they want
@@ -60,7 +63,7 @@ def _catalog() -> list[PackSku]:
                 sku="pack_1k",
                 label="1,000 classroom minutes",
                 minutes=1000,
-                price_cents=1500,
+                price_cents=1900,
                 currency="eur",
                 price_id=settings.stripe_minute_pack_1k_price_id,
             )
@@ -71,7 +74,7 @@ def _catalog() -> list[PackSku]:
                 sku="pack_5k",
                 label="5,000 classroom minutes",
                 minutes=5000,
-                price_cents=6000,
+                price_cents=7900,
                 currency="eur",
                 price_id=settings.stripe_minute_pack_5k_price_id,
             )
@@ -189,6 +192,15 @@ def start_checkout(
             line_items=[{"price": sku.price_id, "quantity": 1}],
             success_url=f"{apex}{payload.success_path}",
             cancel_url=f"{apex}{payload.cancel_path}",
+            custom_text={
+                "submit": {
+                    "message": (
+                        "Classroom minutes are non-refundable and never expire. "
+                        "They top up your monthly tier quota and are consumed "
+                        "from oldest pack first."
+                    ),
+                },
+            },
             metadata={
                 "type": "minute_pack",
                 "tutor_id": str(tutor.id),
