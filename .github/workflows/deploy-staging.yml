@@ -60,6 +60,10 @@ jobs:
 
       - name: Rsync workspace
         run: |
+          # CRITICAL: --exclude the server-side-only configuration files
+          # so --delete doesn't wipe them. .env carries POSTGRES_PASSWORD,
+          # Stripe keys, R2 creds, etc. — none of which are in the repo
+          # and all of which kill the stack if missing.
           rsync -az --delete \
             --exclude '.git' \
             --exclude 'node_modules' \
@@ -70,6 +74,10 @@ jobs:
             --exclude '*.db-wal' \
             --exclude 'frontend/dist' \
             --exclude 'frontend/test-results' \
+            --exclude '.env' \
+            --exclude '.env.*' \
+            --exclude 'backend/uploads/' \
+            --exclude 'docker-compose.override.yml' \
             -e "ssh -i ~/.ssh/id_deploy" \
             ./ "$STAGING_USER@$STAGING_HOST:$STAGING_PATH/"
 
