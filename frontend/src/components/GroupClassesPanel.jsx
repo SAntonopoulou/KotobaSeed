@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import client from '../api/client';
 import { useConfirm } from '../context/ModalContext';
+import { getErrorMessage } from '../utils/errors';
+import { formatDateTime } from '../utils/dates';
 
 // Group lesson management — list group-flagged packs, create new group
 // packs (a different shape from 1:1 packs), schedule sessions, view
@@ -17,13 +19,9 @@ const formatPrice = (cents, currency = 'eur') => {
   }
 };
 
-const formatDateTime = (iso) => {
-  try {
-    return new Date(iso).toLocaleString();
-  } catch {
-    return iso;
-  }
-};
+// `formatDateTime` is imported from `../utils/dates`. An earlier sweep
+// accidentally re-declared this as a self-recursive alias; importing
+// the shared helper directly avoids the stack overflow.
 
 const NewGroupPackForm = ({ onCreated }) => {
   const [form, setForm] = useState({
@@ -69,7 +67,7 @@ const NewGroupPackForm = ({ onCreated }) => {
         group_min_threshold_hours: 24,
       });
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not create the group lesson.');
+      setError(getErrorMessage(err, 'Could not create the group lesson.'));
     } finally {
       setSubmitting(false);
     }
@@ -206,7 +204,7 @@ const ScheduleSessionForm = ({ packs, onCreated }) => {
       setScheduledAt('');
       setNotes('');
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not schedule the session.');
+      setError(getErrorMessage(err, 'Could not schedule the session.'));
     } finally {
       setSubmitting(false);
     }
@@ -275,7 +273,7 @@ const GroupClassesPanel = () => {
       setPacks((packsRes.data || []).filter((p) => p.is_group));
       setSessions(sessionsRes.data || []);
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not load group classes.');
+      setError(getErrorMessage(err, 'Could not load group classes.'));
     } finally {
       setLoading(false);
     }
@@ -296,7 +294,7 @@ const GroupClassesPanel = () => {
       await client.delete(`/tutor/group-sessions/${s.id}`);
       await load();
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not cancel.');
+      setError(getErrorMessage(err, 'Could not cancel.'));
     }
   };
 

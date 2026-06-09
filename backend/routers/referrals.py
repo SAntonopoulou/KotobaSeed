@@ -6,7 +6,7 @@ import logging
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, HttpUrl
 from sqlmodel import Session, select
 
@@ -15,7 +15,6 @@ from ..deps import CurrentUser, get_current_admin
 from ..models import (
     AffiliateApplication,
     AffiliateApplicationStatus,
-    LessonCredit,
     ReferralAttribution,
     ReferralCode,
     ReferralCodeKind,

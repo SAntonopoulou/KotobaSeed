@@ -51,9 +51,9 @@ const InitialContentPlugin = ({ initialLexicalJson, initialMarkdown }) => {
   return null;
 };
 
-const Placeholder = () => (
+const Placeholder = ({ text }) => (
   <div className="absolute top-0 left-0 px-4 py-3 text-kotoba-text/40 pointer-events-none select-none">
-    Write something…
+    {text}
   </div>
 );
 
@@ -63,6 +63,9 @@ const MarkdownEditor = ({
   initialMarkdown = '',
   initialLexicalJson = null,
   onChange,
+  enableVocab = true,
+  minHeight = 400,
+  placeholder = 'Write something…',
 }) => {
   const handleChange = (editorState, editor) => {
     if (!onChange) return;
@@ -93,13 +96,16 @@ const MarkdownEditor = ({
   return (
     <div className="border border-kotoba-text/15 rounded-lg overflow-hidden bg-white">
       <LexicalComposer initialConfig={initialConfig}>
-        <EditorToolbar />
+        <EditorToolbar enableVocab={enableVocab} />
         <div className="relative">
           <RichTextPlugin
             contentEditable={
-              <ContentEditable className="min-h-[400px] px-4 py-3 outline-none prose prose-sm max-w-none focus:outline-none" />
+              <ContentEditable
+                className="px-4 py-3 outline-none prose prose-sm max-w-none focus:outline-none"
+                style={{ minHeight }}
+              />
             }
-            placeholder={<Placeholder />}
+            placeholder={<Placeholder text={placeholder} />}
             ErrorBoundary={LexicalErrorBoundary}
           />
         </div>

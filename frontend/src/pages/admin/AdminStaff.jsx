@@ -2,6 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import client from '../../api/client';
 import { useToast } from '../../context/ToastContext';
+import { useAuth } from '../../context/AuthContext';
+import { getErrorMessage } from '../../utils/errors';
+import ConfirmationModal from '../../components/ConfirmationModal';
 
 // Admin-only staff management — list current staff, search any user by
 // email/name and promote them. Demoting to student is just selecting
@@ -36,12 +39,18 @@ const RoleBadge = ({ role }) => {
 
 const AdminStaff = () => {
   const { addToast } = useToast();
+  const { currentUser } = useAuth();
   const [staff, setStaff] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
+  // Role-change confirmation — guards against accidental admin
+  // promotion/demotion via dropdown misclick. The select's onChange
+  // stashes the intended change here; doConfirmedRoleChange runs only
+  // after the admin explicitly clicks through.
+  const [pending, setPending] = useState(null);
 
   const loadStaff = async () => {
     setLoading(true);
@@ -59,10 +68,23 @@ const AdminStaff = () => {
     loadStaff();
   }, []);
 
-  const changeRole = async (userId, role) => {
+  const requestRoleChange = (user, newRole) => {
+    if (user.role === newRole) return;
+    setPending({
+      userId: user.id,
+      userLabel: user.full_name || user.email,
+      currentRole: user.role,
+      newRole,
+    });
+  };
+
+  const doConfirmedRoleChange = async () => {
+    if (!pending) return;
+    const { userId, newRole } = pending;
+    setPending(null);
     setBusyId(userId);
     try {
-      await client.put(`/admin/users/${userId}/role`, { role });
+      await client.put(`/admin/users/${userId}/role`, { role: newRole });
       addToast('Role updated.', 'success');
       await loadStaff();
       // Re-run the search so the moved row's badge updates inline.
@@ -71,7 +93,7 @@ const AdminStaff = () => {
         setSearchResults(sres.data || []);
       }
     } catch (err) {
-      addToast(err?.response?.data?.detail || 'Could not change role.', 'error');
+      addToast(getErrorMessage(err, 'Could not change role.'), 'error');
     } finally {
       setBusyId(null);
     }
@@ -89,7 +111,7 @@ const AdminStaff = () => {
       const res = await client.get(`/admin/users/search?q=${encodeURIComponent(q)}`);
       setSearchResults(res.data || []);
     } catch (err) {
-      addToast(err?.response?.data?.detail || 'Search failed.', 'error');
+      addToast(getErrorMessage(err, 'Search failed.'), 'error');
     } finally {
       setSearching(false);
     }
@@ -107,7 +129,7 @@ const AdminStaff = () => {
       <td className="px-4 py-3 text-right">
         <select
           value={user.role}
-          onChange={(e) => changeRole(user.id, e.target.value)}
+          onChange={(e) => requestRoleChange(user, e.target.value)}
           disabled={busyId === user.id}
           className="px-2 py-1 border border-kotoba-text/20 rounded text-sm focus:outline-none focus:ring-2 focus:ring-kotoba-primary"
         >
@@ -203,6 +225,35 @@ const AdminStaff = () => {
           </table>
         )}
       </section>
+      <ConfirmationModal
+        isOpen={Boolean(pending)}
+        onClose={() => setPending(null)}
+        onConfirm={doConfirmedRoleChange}
+        title={
+          pending?.newRole === 'admin'
+            ? 'Promote to admin'
+            : pending?.currentRole === 'admin'
+              ? 'Demote from admin'
+              : 'Change user role'
+        }
+        message={
+          pending
+            ? pending.newRole === 'admin'
+              ? `Make ${pending.userLabel} an admin? They'll have full access including the ability to demote you. Only do this for people you trust.`
+              : pending.currentRole === 'admin' && currentUser && pending.userId === currentUser.id
+                ? `You're about to demote yourself out of the admin role. You won't be able to undo this without another admin. Continue?`
+                : pending.currentRole === 'admin'
+                  ? `Remove admin access from ${pending.userLabel}? They'll lose access to the admin panel immediately.`
+                  : `Change ${pending.userLabel}'s role to "${pending.newRole}"?`
+            : ''
+        }
+        confirmText={
+          pending?.newRole === 'admin' ? 'Promote to admin' : 'Change role'
+        }
+        isDanger={
+          pending?.newRole === 'admin' || pending?.currentRole === 'admin'
+        }
+      />
     </div>
   );
 };

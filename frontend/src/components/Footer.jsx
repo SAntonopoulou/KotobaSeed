@@ -69,9 +69,12 @@ const Footer = () => {
           </div>
         )}
 
-        <nav className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm text-kotoba-text/70 mb-4">
+        <nav className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm text-kotoba-text/70 mb-3">
           <Link to="/privacy" className="hover:text-kotoba-primary">Privacy</Link>
           <Link to="/terms" className="hover:text-kotoba-primary">Terms</Link>
+          <Link to="/legal/tutor-agreement" className="hover:text-kotoba-primary">Tutor agreement</Link>
+          <Link to="/legal/acceptable-use" className="hover:text-kotoba-primary">Acceptable use</Link>
+          <Link to="/legal/cookies" className="hover:text-kotoba-primary">Cookies</Link>
           <Link to="/refunds" className="hover:text-kotoba-primary">Refunds</Link>
           <Link to="/pricing" className="hover:text-kotoba-primary">Pricing</Link>
           <Link to="/help" className="hover:text-kotoba-primary">Help</Link>
@@ -84,6 +87,15 @@ const Footer = () => {
               Support
             </a>
           )}
+        </nav>
+
+        <nav className="flex flex-wrap justify-center gap-x-6 gap-y-1 text-xs text-kotoba-text/55 mb-4">
+          <a href="mailto:dpo@kotobaseed.net" className="hover:text-kotoba-primary">
+            Data protection (DPO): dpo@kotobaseed.net
+          </a>
+          <Link to="/legal/report-content" className="hover:text-kotoba-primary">
+            Report illegal content
+          </Link>
         </nav>
 
         {config.tagline && (

@@ -179,14 +179,29 @@ def test_patch_other_tutor_404(client, vasso_tutor, teacher_user, db_session: Se
     assert r.status_code == 404
 
 
-def test_delete_removes_row(client, vasso_tutor, teacher_user, db_session: Session):
+def test_delete_soft_deletes_and_hides_row(client, vasso_tutor, teacher_user, db_session: Session):
+    """DELETE soft-deletes (sets deleted_at) so the tutor can restore via
+    POST /:id/restore — the row stays in the database but disappears from
+    list endpoints."""
     a = _create(client, auth_headers_for(teacher_user), title="Doomed")
+    article_id = a.json()["id"]
     r = client.delete(
-        f"/articles/{a.json()['id']}",
+        f"/articles/{article_id}",
         headers={"Host": HOST, **auth_headers_for(teacher_user)},
     )
     assert r.status_code == 204
-    assert db_session.get(Article, a.json()["id"]) is None
+    row = db_session.get(Article, article_id)
+    assert row is not None
+    assert row.deleted_at is not None
+    listing = client.get("/articles/all", headers={"Host": HOST, **auth_headers_for(teacher_user)})
+    assert all(item["id"] != article_id for item in listing.json())
+    restored = client.post(
+        f"/articles/{article_id}/restore",
+        headers={"Host": HOST, **auth_headers_for(teacher_user)},
+    )
+    assert restored.status_code == 200
+    db_session.expire_all()
+    assert db_session.get(Article, article_id).deleted_at is None
 
 
 def test_patch_can_rename_slug(client, vasso_tutor, teacher_user):
@@ -218,14 +233,65 @@ def test_create_with_subscribers_only_visibility(client, vasso_tutor, teacher_us
     assert all(a["slug"] != r.json()["slug"] for a in listing.json())
 
 
-def test_public_reader_404s_subscribers_only_for_anon(
+def test_public_reader_returns_preview_for_subscribers_only(
     client, vasso_tutor, teacher_user
 ):
+    """Anonymous visitor on a SUBSCRIBERS_ONLY article gets a preview
+    shape (first 200 words of body OR the tutor's preview_markdown if
+    set), with is_preview=True so the frontend can paywall it."""
+    body = " ".join([f"word{i}" for i in range(500)])
     _create(
         client,
         auth_headers_for(teacher_user),
         title="Locked",
         visibility="subscribers_only",
+        is_published=True,
+        body_markdown=body,
+    )
+    r = client.get("/articles/locked", headers={"Host": HOST})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["is_preview"] is True
+    assert data["lexical_json"] is None  # body tree must not leak
+    # ~200 words returned, not 500. The trailing "…" is appended by the helper.
+    word_count = len(data["body_markdown"].rstrip("…").split())
+    assert 150 <= word_count <= 210
+    assert data["body_markdown"].endswith("…")
+
+
+def test_public_reader_uses_preview_markdown_when_set(
+    client, vasso_tutor, teacher_user
+):
+    """If the tutor wrote a preview_markdown, that's returned verbatim
+    instead of the auto-fallback."""
+    _create(
+        client,
+        auth_headers_for(teacher_user),
+        title="Locked",
+        visibility="subscribers_only",
+        is_published=True,
+        body_markdown="The full secret answer is 42.",
+        preview_markdown="Here's a hand-crafted hook the tutor wrote.",
+    )
+    r = client.get("/articles/locked", headers={"Host": HOST})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["is_preview"] is True
+    assert data["body_markdown"] == "Here's a hand-crafted hook the tutor wrote."
+    # Full body must NOT leak even though preview_markdown is shorter.
+    assert "42" not in data["body_markdown"]
+
+
+def test_public_reader_404s_module_only_for_anon(
+    client, vasso_tutor, teacher_user
+):
+    """MODULE_ONLY articles still 404 anonymously — their preview lives
+    inside the parent module's storefront, not on the article surface."""
+    _create(
+        client,
+        auth_headers_for(teacher_user),
+        title="Locked",
+        visibility="module_only",
         is_published=True,
     )
     r = client.get("/articles/locked", headers={"Host": HOST})

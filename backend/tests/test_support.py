@@ -6,18 +6,13 @@ notes, and read-permission rules.
 from __future__ import annotations
 
 import pytest
-from sqlmodel import Session, select
+from sqlmodel import Session
 
 from backend.models import (
-    SupportTicket,
-    SupportTicketMessage,
-    SupportTicketStatus,
-    SubscriptionTier,
     UserRole,
 )
 
-from .conftest import auth_headers_for, _make_user
-
+from .conftest import _make_user, auth_headers_for
 
 HOST = {"Host": "vasso.kotobaseed.net"}
 

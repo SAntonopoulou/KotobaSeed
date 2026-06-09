@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import client from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import { getErrorMessage } from '../utils/errors';
 
 const ResetPassword = () => {
   const [params] = useSearchParams();
@@ -48,7 +49,7 @@ const ResetPassword = () => {
       login(res.data.access_token);
       navigate('/', { replace: true });
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not reset password. The link may have expired — request a new one.');
+      setError(getErrorMessage(err, 'Could not reset password. The link may have expired — request a new one.'));
     } finally {
       setSubmitting(false);
     }

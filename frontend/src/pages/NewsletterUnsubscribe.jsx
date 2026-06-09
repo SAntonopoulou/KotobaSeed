@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import client from '../api/client';
+import { getErrorMessage } from '../utils/errors';
 
 // Public landing page for the unsubscribe link in newsletter emails.
 // Hits the backend with the token from the URL; the backend verifies
@@ -29,8 +30,7 @@ const NewsletterUnsubscribe = () => {
       } catch (err) {
         setState('error');
         setMessage(
-          err?.response?.data?.detail
-          || 'That unsubscribe link is invalid or has expired.'
+          getErrorMessage(err, 'That unsubscribe link is invalid or has expired.')
         );
       }
     })();

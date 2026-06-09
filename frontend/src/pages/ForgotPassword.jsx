@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import client from '../api/client';
+import { getErrorMessage } from '../utils/errors';
 
 const ForgotPassword = () => {
   const [email, setEmail] = useState('');
@@ -24,7 +25,7 @@ const ForgotPassword = () => {
     } catch (err) {
       // Endpoint always returns ok=true — anything reaching here is a
       // network/server problem.
-      setError(err?.response?.data?.detail || 'Could not request a reset right now. Try again in a moment.');
+      setError(getErrorMessage(err, 'Could not request a reset right now. Try again in a moment.'));
     } finally {
       setSubmitting(false);
     }

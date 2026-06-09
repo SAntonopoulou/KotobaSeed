@@ -218,7 +218,11 @@ def test_patch_draft_updates_fields(client, active_tutor, teacher_user):
     assert r.json()["subject"] == "Updated"
 
 
-def test_delete_draft(client, active_tutor, teacher_user, db_session):
+def test_delete_draft_soft_deletes_and_can_be_restored(
+    client, active_tutor, teacher_user, db_session
+):
+    """Drafts soft-delete via DELETE — restorable via POST /:id/restore so
+    the tutor can undo from the toast."""
     created = client.post(
         "/tutor/newsletters",
         json={"subject": "Goodbye", "body_markdown": ""},
@@ -227,7 +231,18 @@ def test_delete_draft(client, active_tutor, teacher_user, db_session):
     nid = created.json()["id"]
     r = client.delete(f"/tutor/newsletters/{nid}", headers=_headers(teacher_user))
     assert r.status_code == 204
-    assert db_session.get(Newsletter, nid) is None
+    row = db_session.get(Newsletter, nid)
+    assert row is not None
+    assert row.deleted_at is not None
+    listing = client.get("/tutor/newsletters", headers=_headers(teacher_user))
+    assert all(item["id"] != nid for item in listing.json())
+    restored = client.post(
+        f"/tutor/newsletters/{nid}/restore",
+        headers=_headers(teacher_user),
+    )
+    assert restored.status_code == 200
+    db_session.expire_all()
+    assert db_session.get(Newsletter, nid).deleted_at is None
 
 
 # --- HTTP: send + immutability of sent rows -------------------------

@@ -11,6 +11,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlmodel import Session, select
 
 from . import database as _database  # late-bound engine so tests can swap it
@@ -18,33 +19,52 @@ from .config import settings
 from .database import create_db_and_tables
 from .models import LanguageGroup, Project, User, UserRole
 from .routers import (
+    admin_db,
+    admin_grants,
     admin,
+    announcements,
+    article_engagement,
     articles,
+    cohorts,
+    demo_entry,
+    custom_themes,
+    demo_trials,
+    discover,
     auth,
     conversations,
     email_templates,
+    group_sessions,
     groups,
+    group_threads,
     homework,
+    language_groups,
+    maintenance,
     marketplace,
     modules,
     newsletters,
     notifications,
-    group_sessions,
     onboarding,
     placement,
     platform,
-    recurring,
-    referrals,
     pledges,
     projects,
-    support,
     ratings,
+    recurring,
+    referrals,
+    reports,
     requests,
+    transparency,
     subscriptions,
+    support,
     testimonials,
+    minute_packs,
+    tutor_onboarding,
     tutor_pages,
     tutor_site,
+    tutor_students,
     tutor_subscriptions,
+    tutor_teams,
+    tutor_verifications,
     users,
     verifications,
     videos,
@@ -134,6 +154,30 @@ def _run_referrals_sweep() -> None:
             log.exception("Referral sweep failed")
 
 
+def _run_demo_janitor() -> None:
+    """Daily wrapper around the demo account janitor. Opens its own
+    session; logs errors so a single bad sweep doesn't kill the loop."""
+    try:
+        from .scripts.demo_janitor import run as _janitor_run
+        result = _janitor_run()
+        log.info("demo_janitor result: %s", result)
+    except Exception:
+        log.exception("demo_janitor failed")
+
+
+def _run_admin_grants_sweep() -> None:
+    """Daily — auto-expire time-gated admin comps + reverse side effects."""
+    from .services import admin_grants as _ag
+
+    with Session(_database.engine) as session:
+        try:
+            n = _ag.sweep_expired_grants(session)
+            if n:
+                log.info("Admin-grants sweep expired %d grant(s).", n)
+        except Exception:
+            log.exception("Admin grants sweep failed")
+
+
 def _run_recurring_sweep() -> None:
     """Daily job — top up child Bookings for every active recurring plan,
     then cancel any PENDING_PAYMENT recurring bookings inside the 48h
@@ -164,10 +208,23 @@ def _build_scheduler():
     if not settings.scheduler_enabled:
         log.info("scheduler_enabled=false; skipping APScheduler setup")
         return None
+    from apscheduler.jobstores.memory import MemoryJobStore
+    from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
     from apscheduler.schedulers.asyncio import AsyncIOScheduler
     from apscheduler.triggers.cron import CronTrigger
 
-    scheduler = AsyncIOScheduler()
+    # Production runs against Postgres → use a SQLAlchemy jobstore so
+    # next-run timestamps and misfire bookkeeping survive a restart and
+    # are visible to any operations tooling that can read the DB.
+    # Dev (sqlite) sticks with the in-memory store so test runs stay
+    # hermetic — they replace_existing on every start anyway.
+    is_postgres = settings.database_url.startswith("postgres")
+    jobstores = {
+        "default": SQLAlchemyJobStore(url=settings.database_url)
+        if is_postgres
+        else MemoryJobStore()
+    }
+    scheduler = AsyncIOScheduler(jobstores=jobstores)
     scheduler.add_job(
         pause_dormant_tutors,
         trigger=CronTrigger(hour=settings.dormant_check_hour_utc, minute=0, timezone="UTC"),
@@ -204,6 +261,20 @@ def _build_scheduler():
         misfire_grace_time=3600,
     )
     scheduler.add_job(
+        _run_admin_grants_sweep,
+        trigger=CronTrigger(hour=5, minute=0, timezone="UTC"),
+        id="admin_grants_sweep",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
+    scheduler.add_job(
+        _run_demo_janitor,
+        trigger=CronTrigger(hour=4, minute=45, timezone="UTC"),
+        id="demo_janitor",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
+    scheduler.add_job(
         _run_db_backup,
         trigger=CronTrigger(hour=2, minute=0, timezone="UTC"),
         id="db_backup",
@@ -220,6 +291,11 @@ def _build_scheduler():
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    # Auto-create-then-stamp pattern (documented in baseline migration):
+    # SQLModel.metadata.create_all() is idempotent and bootstraps every
+    # base table; alembic then owns incremental changes from baseline on.
+    # Skipping this in prod breaks fresh Postgres deploys because the
+    # baseline migration is a no-op stamp marker.
     create_db_and_tables()
     with Session(_database.engine) as session:
         _seed_admin_user(session)
@@ -240,14 +316,47 @@ async def lifespan(_app: FastAPI):
 # absent = no-op import; SDK only sends if the DSN resolves.
 if settings.sentry_dsn:
     import sentry_sdk
+    from sentry_sdk.integrations.fastapi import FastApiIntegration
+    from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
 
     sentry_sdk.init(
         dsn=settings.sentry_dsn,
         traces_sample_rate=settings.sentry_traces_sample_rate,
+        # Profile a portion of traces so we see slow endpoints in detail.
+        profiles_sample_rate=settings.sentry_traces_sample_rate,
         environment=settings.environment,
+        # Tag every event with the release the SHA we're running so
+        # post-deploy regressions are obvious in the Sentry release
+        # tracker. The CI workflow writes this file at build time.
+        release=settings.sentry_release or None,
+        integrations=[
+            FastApiIntegration(transaction_style="endpoint"),
+            SqlalchemyIntegration(),
+        ],
         send_default_pii=False,
+        # PII scrubbing — strip auth headers + Stripe tokens before
+        # events leave the box. Sentry has built-in scrubbing too but
+        # this is the belt-and-suspenders pass.
+        before_send=lambda event, _hint: _scrub_sentry_event(event),
     )
-    log.info("Sentry initialised (env=%s)", settings.environment)
+    log.info("Sentry initialised (env=%s, release=%s)", settings.environment, settings.sentry_release)
+
+
+def _scrub_sentry_event(event: dict) -> dict:
+    """Redact secrets before they leave the box."""
+    # Drop the Authorization header outright.
+    req = event.get("request", {}) or {}
+    headers = req.get("headers", {}) or {}
+    for k in list(headers.keys()):
+        if k.lower() in {"authorization", "cookie", "x-api-key"}:
+            headers[k] = "[scrubbed]"
+    # Trim out Stripe webhook signatures + similar.
+    body = req.get("data", {})
+    if isinstance(body, dict):
+        for k in list(body.keys()):
+            if "secret" in k.lower() or "password" in k.lower() or "token" in k.lower():
+                body[k] = "[scrubbed]"
+    return event
 
 
 app = FastAPI(title="Kotobaseed", lifespan=lifespan)
@@ -255,10 +364,11 @@ app = FastAPI(title="Kotobaseed", lifespan=lifespan)
 # Rate limiter — applied to auth endpoints via a decorator. Storage is
 # in-memory by default; for multi-worker deployments use Redis (see
 # slowapi docs). Per-IP keys are enough for the auth-attack vector.
-from slowapi.errors import RateLimitExceeded
-from slowapi.middleware import SlowAPIMiddleware
+# E402: middleware must be wired after `app` is defined above.
+from slowapi.errors import RateLimitExceeded  # noqa: E402
+from slowapi.middleware import SlowAPIMiddleware  # noqa: E402
 
-from .limiter import limiter
+from .limiter import limiter  # noqa: E402
 
 app.state.limiter = limiter
 app.add_middleware(SlowAPIMiddleware)
@@ -287,6 +397,33 @@ app.add_middleware(
 )
 
 
+# --- Local-volume uploads --------------------------------------------------
+# When the storage facade is running in local mode (no R2 creds), files
+# get written to ``settings.local_uploads_dir`` and served back out here.
+# Caddy proxies /uploads/* to the backend the same way it does /api/*.
+# Mount unconditionally so that switching backends later (R2 → local or
+# vice-versa) keeps any legacy local URLs serveable until the next
+# user re-upload.
+import mimetypes as _mimetypes  # noqa: E402
+import os as _os  # noqa: E402
+
+# Python's stdlib mimetypes table doesn't include webp on some distros;
+# without this StaticFiles serves uploaded avatars as
+# `application/octet-stream` which kills both browser caching and
+# rendering on some embeds.
+_mimetypes.add_type("image/webp", ".webp")
+_mimetypes.add_type("image/heic", ".heic")
+_mimetypes.add_type("image/heif", ".heif")
+
+_uploads_dir = settings.local_uploads_dir
+try:
+    _os.makedirs(_uploads_dir, exist_ok=True)
+    app.mount("/uploads", StaticFiles(directory=_uploads_dir), name="uploads")
+    log.info("Local uploads mounted at /uploads → %s", _uploads_dir)
+except OSError:
+    log.exception("Could not create uploads dir %s — /uploads disabled", _uploads_dir)
+
+
 @app.get("/healthz", include_in_schema=False)
 def healthz() -> dict:
     """Liveness probe — used by docker healthcheck + uptime monitors."""
@@ -312,9 +449,23 @@ for router in (
     notifications.router,
     ratings.router,
     admin.router,
+    admin_db.router,
+    admin_grants.router,
+    custom_themes.router,
+    discover.router,
     verifications.router,
+    tutor_verifications.router,
+    tutor_students.router,
+    tutor_onboarding.router,
+    tutor_teams.router,
+    minute_packs.router,
     conversations.router,
     groups.router,
+    language_groups.router,
+    group_threads.router,
+    article_engagement.router,
+    cohorts.router,
+    demo_entry.router,
     subscriptions.router,
     tutor_site.router,
     tutor_pages.router,
@@ -334,6 +485,13 @@ for router in (
     group_sessions.router,
     recurring.router,
     referrals.router,
+    reports.router,
+    reports.admin_router,
+    announcements.router,
+    announcements.admin_router,
+    transparency.router,
+    maintenance.router,
+    demo_trials.router,
 ):
     app.include_router(router)
 

@@ -51,7 +51,14 @@ THEMES: list[ThemeDef] = [
         "label": "Slate",
         "description": "Modern grey with electric blue. Clean and technical.",
     },
+    # vasso-greek used to appear here as a showcase. It's now superseded by
+    # the per-tutor `custom-vasso` v2 theme (owner-locked via owner_user_id
+    # so only Vasso sees it in the picker). Bespoke palettes for paying
+    # customers should NEVER appear in the universal catalogue.
 ]
 
-THEME_KEYS: set[str] = {theme["key"] for theme in THEMES}
+# `vasso-greek` is still accepted as a valid theme key for back-compat —
+# any existing tutor row on it keeps rendering correctly via the themed
+# routes. New tutors can't pick it because it's not in THEMES.
+THEME_KEYS: set[str] = {theme["key"] for theme in THEMES} | {"vasso-greek"}
 DEFAULT_THEME: str = "sage"

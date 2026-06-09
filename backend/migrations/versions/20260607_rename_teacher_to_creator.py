@@ -22,10 +22,11 @@ def upgrade() -> None:
     # SQLAlchemy's Enum column stores enum NAMES by default (uppercase),
     # not values. Catch both cases so we work on production data (where
     # values were stored lowercased somewhere) AND dev data (uppercase).
-    op.execute("UPDATE user SET role = 'CREATOR' WHERE role = 'TEACHER'")
-    op.execute("UPDATE user SET role = 'CREATOR' WHERE role = 'teacher'")
+    # "user" is a reserved keyword in Postgres so the table must be quoted.
+    op.execute('UPDATE "user" SET role = \'CREATOR\' WHERE role = \'TEACHER\'')
+    op.execute('UPDATE "user" SET role = \'CREATOR\' WHERE role = \'teacher\'')
 
 
 def downgrade() -> None:
-    op.execute("UPDATE user SET role = 'TEACHER' WHERE role = 'CREATOR'")
-    op.execute("UPDATE user SET role = 'TEACHER' WHERE role = 'creator'")
+    op.execute('UPDATE "user" SET role = \'TEACHER\' WHERE role = \'CREATOR\'')
+    op.execute('UPDATE "user" SET role = \'TEACHER\' WHERE role = \'creator\'')

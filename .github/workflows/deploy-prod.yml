@@ -1,0 +1,117 @@
+name: Deploy production
+
+# Production deploys are tag-gated: push a `v*` tag (e.g. v1.4.2) to
+# trigger. The `environment: production` block gates the deploy job
+# behind a manual approval step that you configure in the repo's
+# Environments settings — this gives Sophia a "yes really, ship it"
+# button instead of a silent auto-deploy.
+#
+# Tag conventions:
+#   v1.0.0  — semver release
+#   v1.0.0-hotfix.1 — emergency patch
+#
+# Rollback:
+#   git tag v1.0.0-rollback <previous-good-sha> && git push origin --tags
+#   triggers a redeploy of the older sha under a new tag.
+
+on:
+  # Pre-launch: manual trigger only. Restore the `push: tags: ['v*']`
+  # block when you want tags like v1.0.0 to auto-trigger prod deploy.
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Ref to deploy (tag or sha)'
+        required: true
+  # push:
+  #   tags: ['v*']
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Rsync + docker compose up
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: production
+      url: https://kotobaseed.net
+    env:
+      PROD_HOST: ${{ secrets.PROD_HOST }}
+      PROD_USER: ${{ secrets.PROD_USER }}
+      PROD_PATH: ${{ vars.PROD_PATH || '/opt/kotobaseed' }}
+      FRONTEND_URL: https://kotobaseed.net
+      API_URL: https://api.kotobaseed.net
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.PROD_SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "$PROD_HOST" >> ~/.ssh/known_hosts
+
+      - name: Snapshot DB before deploy
+        run: |
+          ssh -i ~/.ssh/id_deploy "$PROD_USER@$PROD_HOST" \
+            "cd $PROD_PATH && docker compose exec -T backend cp /data/database.db /data/database.db.deploy-$(date +%Y%m%d-%H%M%S).bak || true"
+
+      - name: Rsync workspace
+        run: |
+          rsync -az --delete \
+            --exclude '.git' \
+            --exclude 'node_modules' \
+            --exclude '__pycache__' \
+            --exclude '.venv' \
+            --exclude '*.db' \
+            --exclude '*.db-shm' \
+            --exclude '*.db-wal' \
+            --exclude 'frontend/dist' \
+            --exclude 'frontend/test-results' \
+            -e "ssh -i ~/.ssh/id_deploy" \
+            ./ "$PROD_USER@$PROD_HOST:$PROD_PATH/"
+
+      - name: Build and restart stack
+        run: |
+          ssh -i ~/.ssh/id_deploy "$PROD_USER@$PROD_HOST" \
+            "cd $PROD_PATH && docker compose up -d --build backend frontend"
+
+      - name: Wait for backend to come up
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS --max-time 5 "$API_URL/healthz" >/dev/null; then
+              echo "Backend up after ${i} probe(s)."
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Backend did not become healthy within 150s" >&2
+          exit 1
+
+      - name: Smoke test
+        run: ./scripts/smoke_test.sh "$FRONTEND_URL" "$API_URL"
+
+      - name: Notify Sentry of release
+        if: env.SENTRY_AUTH_TOKEN != ''
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
+        run: |
+          VERSION="${{ inputs.ref || github.ref_name }}"
+          curl -sS -X POST "https://sentry.io/api/0/organizations/$SENTRY_ORG/releases/" \
+            -H "Authorization: Bearer $SENTRY_AUTH_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"version\":\"$VERSION\",\"projects\":[\"$SENTRY_PROJECT\"]}" \
+            > /dev/null
+          curl -sS -X POST "https://sentry.io/api/0/organizations/$SENTRY_ORG/releases/$VERSION/deploys/" \
+            -H "Authorization: Bearer $SENTRY_AUTH_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{"environment":"production"}' \
+            > /dev/null
+          echo "Sentry release $VERSION marked deployed."

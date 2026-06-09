@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import client from '../api/client';
 import { tutorSiteUrl } from '../hooks/useTenant';
 import { useConfirm } from '../context/ModalContext';
+import { getErrorMessage } from '../utils/errors';
 
 const CLASSROOM_LEAD_MIN = 15;
 const CLASSROOM_GRACE_MIN = 30;
@@ -18,7 +19,7 @@ const canJoinClassroom = (booking) => {
 
 const formatDate = (iso) => {
   try {
-    return new Date(iso).toLocaleString();
+    return formatDateTime(iso);
   } catch {
     return iso;
   }
@@ -35,13 +36,7 @@ const formatPrice = (cents, currency = 'eur') => {
   }
 };
 
-const STATUS_LABELS = {
-  pending_payment: { label: 'Awaiting payment', tone: 'bg-yellow-100 text-yellow-800' },
-  confirmed: { label: 'Confirmed', tone: 'bg-emerald-100 text-emerald-800' },
-  completed: { label: 'Completed', tone: 'bg-gray-100 text-gray-700' },
-  cancelled: { label: 'Cancelled', tone: 'bg-gray-100 text-gray-500' },
-  refunded: { label: 'Refunded', tone: 'bg-orange-100 text-orange-800' },
-};
+import { BOOKING_STATUS_LABELS as STATUS_LABELS } from './BookingCard';
 
 const withinCancellationCutoff = (booking) => {
   const cutoff = booking.cancellation_cutoff_hours ?? 48;
@@ -97,7 +92,7 @@ const MyBookings = () => {
       setSelected(new Set());
       await load();
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Bulk cancel failed.');
+      setError(getErrorMessage(err, 'Bulk cancel failed.'));
     } finally {
       setBulkBusy(false);
     }
@@ -110,7 +105,7 @@ const MyBookings = () => {
       const res = await client.get('/users/me/bookings');
       setBookings(res.data || []);
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not load your bookings.');
+      setError(getErrorMessage(err, 'Could not load your bookings.'));
     } finally {
       setLoading(false);
     }
@@ -136,7 +131,7 @@ const MyBookings = () => {
       await client.post(`/users/me/bookings/${booking.id}/cancel`);
       await load();
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not cancel.');
+      setError(getErrorMessage(err, 'Could not cancel.'));
     } finally {
       setCancelling(null);
     }
@@ -171,7 +166,7 @@ const MyBookings = () => {
       cancelReschedule();
       await load();
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not reschedule.');
+      setError(getErrorMessage(err, 'Could not reschedule.'));
     } finally {
       setSubmittingReschedule(false);
     }
@@ -186,7 +181,7 @@ const MyBookings = () => {
   const canReschedule = (b) =>
     b.status === 'confirmed' && !withinCancellationCutoff(b);
 
-  if (loading) return <p className="text-sm text-gray-500">Loading…</p>;
+  if (loading) return <p className="text-sm text-kotoba-text/60">Loading…</p>;
 
   return (
     <div>
@@ -222,13 +217,13 @@ const MyBookings = () => {
       )}
 
       {bookings.length === 0 ? (
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-kotoba-text/60">
           No bookings yet. Visit a tutor's site to book your first lesson.
         </p>
       ) : (
-        <ul className="border border-gray-200 rounded-lg divide-y divide-gray-200">
+        <ul className="border border-kotoba-text/10 rounded-lg divide-y divide-kotoba-text/10">
           {bookings.map((b) => {
-            const meta = STATUS_LABELS[b.status] || { label: b.status, tone: 'bg-gray-100 text-gray-700' };
+            const meta = STATUS_LABELS[b.status] || { label: b.status, tone: 'bg-kotoba-background/60 text-kotoba-text/80' };
             const cutoff = b.cancellation_cutoff_hours ?? 48;
             const tooLate = b.status === 'confirmed' && withinCancellationCutoff(b);
             const isCancellable = b.status === 'confirmed' && !tooLate;
@@ -245,10 +240,10 @@ const MyBookings = () => {
                     />
                   )}
                   <div>
-                    <div className="font-medium text-gray-900">
+                    <div className="font-medium text-kotoba-text">
                       {b.tutor_display_name || 'Tutor'} · {b.pack_name || 'Lesson pack'}
                     </div>
-                    <div className="text-xs text-gray-500">
+                    <div className="text-xs text-kotoba-text/60">
                       {formatDate(b.scheduled_at)} · {b.duration_minutes} min · {formatPrice(b.price_cents, b.currency)}
                     </div>
                     {b.tutor_slug && (
@@ -290,7 +285,7 @@ const MyBookings = () => {
                       </button>
                     )}
                     {tooLate && (
-                      <span className="text-xs text-gray-500" title={`Within the ${cutoff}h cancellation window`}>
+                      <span className="text-xs text-kotoba-text/60" title={`Within the ${cutoff}h cancellation window`}>
                         Locked in (within {cutoff}h)
                       </span>
                     )}
@@ -330,8 +325,8 @@ const MyBookings = () => {
                 </div>
 
                 {reschedulingFor === b.id && (
-                  <div className="bg-gray-50 border border-gray-200 rounded-md p-3 text-sm">
-                    <p className="text-gray-700 mb-2">
+                  <div className="bg-kotoba-background/40 border border-kotoba-text/10 rounded-md p-3 text-sm">
+                    <p className="text-kotoba-text/80 mb-2">
                       Pick a new time at least {cutoff} hours from now. The tutor must be available at the new slot.
                     </p>
                     <div className="flex items-center gap-2 flex-wrap">
@@ -340,7 +335,7 @@ const MyBookings = () => {
                         value={rescheduleAt}
                         onChange={(e) => setRescheduleAt(e.target.value)}
                         disabled={submittingReschedule}
-                        className="px-3 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-kotoba-primary"
+                        className="px-3 py-1.5 border border-kotoba-text/20 rounded-md focus:outline-none focus:ring-2 focus:ring-kotoba-primary"
                       />
                       <button
                         type="button"
@@ -354,7 +349,7 @@ const MyBookings = () => {
                         type="button"
                         onClick={cancelReschedule}
                         disabled={submittingReschedule}
-                        className="text-sm text-gray-600 hover:underline"
+                        className="text-sm text-kotoba-text/70 hover:underline"
                       >
                         Never mind
                       </button>

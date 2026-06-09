@@ -89,13 +89,24 @@ def test_dev_override_header_resolves_tenant(client, vasso_tutor):
     assert r.json()["tutor_slug"] == "vasso"
 
 
-def test_dev_override_ignored_in_production(client, vasso_tutor, monkeypatch):
+def test_tenant_header_honored_in_production(client, vasso_tutor, monkeypatch):
+    """X-Tenant-Slug is honored in every environment, including production.
+
+    The header is *informational* — it tells the backend which tutor's
+    data to scope to. It is NOT an authorization signal: every owner-only
+    endpoint enforces ``tutor.user_id == current.id`` independently, so
+    forging this header cannot escalate access. Honoring it in prod is
+    what lets the SPA on a tutor subdomain talk to api.kotobaseed.net
+    (which the Host header alone can't disambiguate — ``api`` is a
+    reserved subdomain).
+    """
     monkeypatch.setattr(settings, "environment", "production")
     r = client.get(
         "/tutor/me",
-        headers={"Host": "testserver", "X-Tenant-Slug": "vasso"},
+        headers={"Host": "api.kotobaseed.net", "X-Tenant-Slug": "vasso"},
     )
-    assert r.status_code == 404
+    assert r.status_code == 200
+    assert r.json()["tutor_slug"] == "vasso"
 
 
 def test_nested_subdomain_is_no_tenant(client, db_session: Session, teacher_user):

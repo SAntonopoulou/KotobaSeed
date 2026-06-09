@@ -46,4 +46,10 @@ backend/uploads/
 # IDEs
 .vscode/
 .idea/
+.obsidian/
 .DS_Store
+
+# Test output + local artefacts
+frontend/test-results/
+frontend/playwright-report/
+*.db.backup-*

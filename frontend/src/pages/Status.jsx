@@ -7,15 +7,33 @@ import client from '../api/client';
 // external service like Statuspage or Better Stack — this is the launch-
 // day MVP.
 
-const Badge = ({ ok }) => (
-  <span className={`px-3 py-1 rounded-md text-sm font-semibold ${
-    ok ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-  }`}>
-    {ok ? 'Operational' : 'Issue detected'}
-  </span>
-);
+// Three-state badge — "checking" sits as a neutral pill so we never
+// flash red while the user's first request is in flight. Once the
+// healthcheck resolves we flip to green (operational) or red
+// (issue). Without this the page literally renders red for the first
+// frame, which looks broken on every load.
+const Badge = ({ state }) => {
+  if (state === null || state === undefined) {
+    return (
+      <span className="px-3 py-1 rounded-md text-sm font-semibold bg-kotoba-background/60 text-kotoba-text/60 inline-flex items-center gap-2">
+        <span className="inline-block w-2 h-2 rounded-full bg-kotoba-text/40 animate-pulse" aria-hidden="true" />
+        Checking…
+      </span>
+    );
+  }
+  const ok = state === true;
+  return (
+    <span className={`px-3 py-1 rounded-md text-sm font-semibold ${
+      ok ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+    }`}>
+      {ok ? 'Operational' : 'Issue detected'}
+    </span>
+  );
+};
 
 const Status = () => {
+  // null = not yet checked (renders the neutral "Checking…" pill).
+  // true / false = result. Same shape for both signals.
   const [api, setApi] = useState(null);
   const [db, setDb] = useState(null);
   const [checkedAt, setCheckedAt] = useState(null);
@@ -60,14 +78,14 @@ const Status = () => {
             <p className="font-medium text-kotoba-primary">API</p>
             <p className="text-xs text-kotoba-text/60 mt-0.5">The backend that handles bookings, payments, content.</p>
           </div>
-          <Badge ok={api === true} />
+          <Badge state={api} />
         </div>
         <div className="px-6 py-4 flex items-center justify-between">
           <div>
             <p className="font-medium text-kotoba-primary">Database</p>
             <p className="text-xs text-kotoba-text/60 mt-0.5">Read + write availability of user data, bookings, content.</p>
           </div>
-          <Badge ok={db === true} />
+          <Badge state={db} />
         </div>
       </section>
 

@@ -106,6 +106,79 @@ def send_verification_code(
     return send_email(to=to_email, subject=subject, html=_wrap(subject, body))
 
 
+def send_custom_theme_status_change(
+    *,
+    to_email: str,
+    full_name: str,
+    order_id: int,
+    new_status: str,
+    cta_url: str | None = None,
+) -> bool:
+    """Generic transactional email for custom-theme order transitions."""
+    first_name = full_name.split()[0] if full_name else "there"
+    HEADLINES = {
+        "deposit_paid": "Your custom theme is in production",
+        "concepts_ready": "Your 3 concepts are ready to review",
+        "reviewing": "Your custom theme is being reviewed",
+        "revising": "Revision requested — designer is working on it",
+        "approved": "Concept approved — pay the final 50% to deliver",
+        "final_paid": "Final payment received — delivering theme",
+        "delivered": "Your custom theme is live on your site",
+        "cancelled": "Custom theme order cancelled",
+    }
+    headline = HEADLINES.get(new_status, f"Custom theme order #{order_id} update")
+    subject = f"{headline} — order #{order_id}"
+    cta_html = ""
+    if cta_url:
+        cta_html = (
+            f'<p style="margin:28px 0;">'
+            f'<a href="{cta_url}" '
+            'style="background:#5b8c66;color:#fff;text-decoration:none;'
+            'padding:14px 28px;border-radius:6px;font-weight:600;display:inline-block;">'
+            "Open in Kotobaseed</a></p>"
+        )
+    body = (
+        f"<p>Hi {first_name},</p>"
+        f"<p>{headline}.</p>"
+        f"{cta_html}"
+        f"<p style='font-size:12px;color:#666;'>Order #{order_id}</p>"
+    )
+    return send_email(to=to_email, subject=subject, html=_wrap(subject, body))
+
+
+def send_team_invite(
+    *,
+    to_email: str,
+    team_name: str,
+    inviter_name: str,
+    token: str,
+    expires_days: int = 14,
+) -> bool:
+    """Email a "you've been invited to join a Kotobaseed team" link."""
+    from ..config import settings
+
+    accept_url = (
+        f"{settings.frontend_url.rstrip('/')}"
+        f"/onboarding/team-accept?token={token}"
+    )
+    subject = f"You're invited to join {team_name} on Kotobaseed"
+    body = (
+        f"<p>Hi,</p>"
+        f"<p>{inviter_name} has invited you to join <strong>{team_name}</strong> on "
+        "Kotobaseed. Accepting unlocks all Business-plan tutor features for your "
+        "account — 0% lesson fee, custom domain, verified badges, and the team's "
+        "shared site design.</p>"
+        f'<p style="margin:28px 0;">'
+        f'<a href="{accept_url}" '
+        'style="background:#5b8c66;color:#fff;text-decoration:none;'
+        'padding:14px 28px;border-radius:6px;font-weight:600;display:inline-block;">'
+        "Accept invite</a></p>"
+        f"<p>This invite expires in {expires_days} days. If you weren't expecting "
+        "it, you can safely ignore this email.</p>"
+    )
+    return send_email(to=to_email, subject=subject, html=_wrap(subject, body))
+
+
 def send_password_reset(
     *,
     to_email: str,

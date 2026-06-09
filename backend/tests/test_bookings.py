@@ -43,9 +43,24 @@ def stub_stripe_checkout(monkeypatch):
 def active_tutor(db_session: Session, vasso_tutor, teacher_user):
     """Move vasso_tutor to ACTIVE with a Stripe Connect account on file so it
     can accept bookings."""
+    from backend.models import TutorAvailability
+
     vasso_tutor.account_status = TutorAccountStatus.ACTIVE
     vasso_tutor.stripe_connect_account_id = "acct_test_vasso"
     db_session.add(vasso_tutor)
+    # Open availability all week so the paid-booking slot validator
+    # (which now mirrors trial validation — book_trial pattern) can
+    # find a matching window for the default `now + 2 days` slot.
+    for weekday in range(7):
+        db_session.add(
+            TutorAvailability(
+                tutor_id=vasso_tutor.id,
+                weekday=weekday,
+                start_minute=0,
+                end_minute=1440,
+                allow_trial=True,
+            )
+        )
     db_session.commit()
     db_session.refresh(vasso_tutor)
     return vasso_tutor

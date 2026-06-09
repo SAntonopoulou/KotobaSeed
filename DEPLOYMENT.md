@@ -90,31 +90,50 @@ SECRET_KEY=<the JWT signing key you generated in step 0>
 DATABASE_URL=sqlite:////data/database.db
 FRONTEND_URL=https://kotobaseed.net
 
-# --- Admin user (auto-seeded on first boot) ---
+# --- Admin user (auto-seeded on first boot if no users exist) ---
 ADMIN_EMAIL=sophia@kotobaseed.net
 ADMIN_PASSWORD=<the admin password from step 0>
 
 # --- Stripe (LIVE keys — make sure the dashboard shows "live") ---
 STRIPE_SECRET_KEY=sk_live_...
-STRIPE_PUBLISHABLE_KEY=pk_live_...
-STRIPE_WEBHOOK_SECRET=whsec_...   # filled in during step 6
+STRIPE_WEBHOOK_SECRET=whsec_...    # filled in during step 6
+# Optional — Pro/Plus/Business/Premium plan Price IDs from Stripe.
+# Run `python -m scripts.setup_stripe_products` to create them and
+# print the IDs to paste back here.
+STRIPE_PLUS_PRICE_ID=
+STRIPE_PRO_PRICE_ID=
+STRIPE_BUSINESS_PRICE_ID=
+STRIPE_PREMIUM_PRICE_ID=
 
 # --- Resend ---
 RESEND_API_KEY=re_...
-EMAIL_FROM_ADDRESS=hello@kotobaseed.net
-EMAIL_FROM_NAME=Kotobaseed
+RESEND_FROM_EMAIL=hello@kotobaseed.net
+RESEND_FROM_NAME=Kotobaseed
 
 # --- Daily.co ---
 DAILY_API_KEY=...
 DAILY_DOMAIN=kotobaseed.daily.co
+CLASSROOM_ENABLE_RECORDING=true    # opt-in: only Pro/Business plans get cloud recording
 
 # --- Custom domains ---
 KOTOBASEED_SERVER_IP=<SERVER_IP>
-CUSTOM_DOMAIN_AUTO_VERIFY=false   # MUST be false in prod
+CUSTOM_DOMAIN_AUTO_VERIFY=false    # MUST be false in prod
 
 # --- CORS ---
 CORS_ORIGINS=https://kotobaseed.net
 CORS_ORIGIN_REGEX=^https://([a-z0-9-]+\.)?kotobaseed\.net$
+
+# --- Connect onboarding URLs (point back at YOUR apex) ---
+CONNECT_ONBOARDING_RETURN_URL=https://kotobaseed.net/onboarding/return
+CONNECT_ONBOARDING_REFRESH_URL=https://kotobaseed.net/onboarding/refresh
+
+# --- Optional: Sentry error tracking ---
+SENTRY_DSN=
+SENTRY_TRACES_SAMPLE_RATE=0.1
+
+# --- Backups ---
+BACKUP_DIR=/data/backups
+BACKUP_RETENTION_DAYS=14
 ```
 
 Lock down the file:
@@ -228,6 +247,7 @@ Visit `https://kotobaseed.net/login`, log in with the admin email + password fro
 Before announcing the launch, click through:
 
 - [ ] Apex `kotobaseed.net` loads, shows the marketing site
+- [ ] `python -m scripts.smoke_test https://api.kotobaseed.net` returns ALL GREEN
 - [ ] Sign up flow creates a tutor + Stripe Connect onboarding link works
 - [ ] Tutor subdomain renders with default Sage theme
 - [ ] Pro tutor can switch themes from the dashboard Site section
@@ -238,6 +258,12 @@ Before announcing the launch, click through:
 - [ ] Cancellation refunds via Stripe and sends the cancel email
 - [ ] Custom domain (if testing) verifies and serves with TLS
 - [ ] `/marketplace` lists the test tutor once they enable marketplace listing
+- [ ] Group lesson seat checkout works, and a group session with min not met auto-refunds at the deadline
+- [ ] Recurring booking plan generates the next 4 weeks of pending bookings
+- [ ] Referral link tracking attributes a signup and awards the first-lesson milestone
+- [ ] Deleting an article/testimonial/draft shows an Undo toast that restores the row
+- [ ] 2FA enroll + login on a fresh device works (TOTP + recovery codes)
+- [ ] `/data/backups/` has a snapshot from the last 24h after `db_backup` runs
 
 ## Re-deploying after changes
 
@@ -247,6 +273,14 @@ cd /opt/kotobaseed
 git pull
 docker compose up -d --build backend frontend
 ```
+
+> **Always pass `--build`.** Without it, `docker compose up` only restarts the
+> entrypoint — your new Python sources stay inside the old image and the deploy
+> looks successful but ships nothing. The flag forces an image rebuild from the
+> current Dockerfile + source tree. If you forget, the symptom is that *nothing
+> changes* after deploy. We've been bitten by this on timezone fixes that
+> looked deployed but weren't, so default to `--build` even for "trivial"
+> backend changes.
 
 Migrations apply automatically on container start via `entrypoint.sh`.
 
@@ -263,7 +297,11 @@ The backend runs scheduled tasks via APScheduler **inside the FastAPI process**.
 | Job | Schedule | What it does |
 |---|---|---|
 | `dormant_pause` | Daily at `DORMANT_CHECK_HOUR_UTC` (default 04:00 UTC) | Flips Starter tutors with no completed lesson in `dormant_pause_days` (default 30) to `PAUSED_DORMANT`. Idempotent. |
-| `booking_reminder_sweep` | Hourly | Finds confirmed bookings ~24h out and sends reminder emails. Dedupes via `Booking.reminder_sent_at`. |
+| `booking_reminders` | Hourly at `:05` | Finds confirmed bookings ~24h out and sends reminder emails. Dedupes via `Booking.reminder_sent_at`. |
+| `group_evaluations` | Hourly at `:10` | For group sessions past their booking-window deadline, confirms if minimum attendance was met or refunds all seats. Idempotent via `min_evaluated_at` stamp. |
+| `recurring_sweep` | Daily at `03:15 UTC` | Generates the rolling 4-week window of pending bookings for active recurring plans and auto-cancels unpaid bookings inside 48h of their lesson. |
+| `referrals_sweep` | Daily at `04:30 UTC` | Walks recent attributions to award referral milestones (tutor + affiliate). Inline path covers the happy case; this is the safety net. |
+| `db_backup` | Daily at `02:00 UTC` | SQLite online-backup snapshot to `/data/backups/`, prunes anything older than 14 days. |
 
 ### Multi-worker safety
 
@@ -294,6 +332,76 @@ docker compose exec backend python -c "from backend.services.dormant_pause impor
 - **`CUSTOM_DOMAIN_AUTO_VERIFY=true` in prod**: would let anyone claim any domain. Always `false` in prod.
 - **Don't commit `.env`**: `.env.example` is the prod template; the real one stays only on the server.
 - **Cloudflare proxy (orange cloud) breaks Caddy's TLS issuance**: keep DNS-only at launch. Move to proxied later as a deliberate step if you want CDN.
+
+## CI/CD via GitHub Actions
+
+Three workflows:
+
+| Workflow | Trigger | What it does |
+|---|---|---|
+| `ci.yml` | PR + push to main | Ruff + pytest + frontend build + Playwright e2e (chromium). Required check before deploys can run. |
+| `deploy-staging.yml` | push to main | Waits for CI green on the SHA, then rsyncs the workspace to `demo.kotobaseed.net`, `docker compose up -d --build`, smoke-tests `https://demo.kotobaseed.net`. |
+| `deploy-prod.yml` | push tag `v*` (e.g. `v1.4.2`) | Snapshots the DB, rsyncs to prod, rebuilds, smoke-tests, notifies Sentry of the release. Gated behind the GitHub Environment "production" — you have to click "Approve and deploy" in the Actions UI. |
+
+### One-time setup
+
+In **Settings → Environments**, create:
+
+- `staging` (no approval required — auto-deploys on merge)
+- `production` (required reviewer: you — gives you the approval button)
+
+In **Settings → Secrets and variables → Actions**, add the following.
+
+**Secrets** (encrypted, never echoed):
+
+| Name | Where |
+|---|---|
+| `STAGING_HOST` | Staging IP or hostname (e.g. `138.199.167.136`) |
+| `STAGING_USER` | SSH user on staging (e.g. `kotobaseed`) |
+| `STAGING_SSH_KEY` | Private key for the deploy user. Generate a fresh one and `ssh-copy-id` its pub half to the server — don't reuse your laptop key. |
+| `PROD_HOST` | Prod IP or hostname |
+| `PROD_USER` | SSH user on prod |
+| `PROD_SSH_KEY` | Same shape as staging, separate key |
+| `SENTRY_AUTH_TOKEN` | Optional. Internal-integration token with `project:releases` scope. Skip if you don't want Sentry release tracking — the step is gated on the secret existing. |
+
+**Variables** (visible in logs — non-sensitive):
+
+| Name | Default | Purpose |
+|---|---|---|
+| `STAGING_PATH` | `/opt/kotobaseed` | Path to the compose project on staging |
+| `PROD_PATH` | `/opt/kotobaseed` | Path to the compose project on prod |
+| `SENTRY_ORG` | — | Sentry org slug, e.g. `kotobaseed` |
+| `SENTRY_PROJECT` | — | Sentry project slug, e.g. `backend` |
+
+### Cutting a prod release
+
+```bash
+git checkout main && git pull
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+Then go to **Actions → Deploy production** and click **Review deployments → Approve and deploy**. The workflow runs the smoke test before reporting success.
+
+### Rollback
+
+Two options:
+
+1. **Tag the last good SHA**:
+   ```bash
+   git tag v1.0.0-rollback <previous-good-sha>
+   git push origin v1.0.0-rollback
+   ```
+   Triggers a fresh prod deploy of the older code through the same approval gate.
+
+2. **Manual on-server fallback** (faster, if Actions is down):
+   ```bash
+   ssh kotobaseed@<PROD_HOST>
+   cd /opt/kotobaseed
+   git fetch && git checkout <previous-good-sha>
+   docker compose up -d --build backend frontend
+   ```
+   The DB snapshot taken at the start of the failing deploy is in `/data/database.db.deploy-*.bak` — restore it only if a migration corrupted state.
 
 ## Handover note for future-Sophia
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import client from '../api/client';
 import { useConfirm } from '../context/ModalContext';
 import {
@@ -8,6 +8,8 @@ import {
 } from './tutor_sections';
 import PageSectionEditor from './page_builder/PageSectionEditor';
 import { SkeletonCard } from './Skeleton';
+import { getErrorMessage } from '../utils/errors';
+import { getVariant } from '../themes/variants';
 
 // Pro+ feature. The dashboard renders this regardless of tier and the
 // component itself shows the gate prompt for non-Pro tutors — keeps the
@@ -18,6 +20,12 @@ const PageBuilder = () => {
   const confirm = useConfirm();
   const [sections, setSections] = useState([]);
   const [tier, setTier] = useState(null);
+  // When the tutor has chosen a v2 custom theme, we resolve the
+  // theme's design_payload into a `section_type → variant_key` map so
+  // the per-section editor can render the variant's contentSchema
+  // (the same schema the designer used). Tutors on stock themes fall
+  // back to the hard-coded EDITORS in PageSectionEditor.
+  const [variantBySection, setVariantBySection] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -32,19 +40,60 @@ const PageBuilder = () => {
     setLoading(true);
     setError('');
     try {
-      const [sectionsRes, meRes] = await Promise.all([
+      // Source the subscription tier from the *tutor* that owns the
+      // site, not from the currently-logged-in viewer. A Business-tier
+      // tutor with a co-managed team member on the free plan should
+      // still be able to use the page builder. Tenant-scoped endpoint.
+      const [sectionsRes, tutorRes] = await Promise.all([
         client.get('/tutor/page-sections'),
-        client.get('/users/me').catch(() => ({ data: null })),
+        client.get('/tutor/me').catch(() => ({ data: null })),
       ]);
       setSections(sectionsRes.data || []);
-      setTier(meRes.data?.subscription_tier || 'free');
+      setTier(tutorRes.data?.plan || tutorRes.data?.subscription_tier || 'free');
       setDirty(false);
+
+      // If the tutor is on a v2 custom theme, fetch it to know which
+      // variant treats each section type — then the per-section editor
+      // can render the variant's contentSchema as form fields. Same
+      // editing mechanism the designer used to author it.
+      const themeKey = tutorRes.data?.theme;
+      if (themeKey && typeof themeKey === 'string' && themeKey.startsWith('custom-')) {
+        try {
+          const themeRes = await client.get(`/custom-themes/v2/by-key/${themeKey}`);
+          const layout = JSON.parse(themeRes.data?.design_payload_json || '[]');
+          const map = {};
+          for (const item of Array.isArray(layout) ? layout : []) {
+            if (item?.section_type && item?.variant_key) {
+              map[item.section_type] = item.variant_key;
+            }
+          }
+          setVariantBySection(map);
+        } catch {
+          // Theme fetch failed — fall through; the editor renders the
+          // default EDITORS, no harm done.
+          setVariantBySection({});
+        }
+      } else {
+        setVariantBySection({});
+      }
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not load your page layout.');
+      setError(getErrorMessage(err, 'Could not load your page layout.'));
     } finally {
       setLoading(false);
     }
   };
+
+  // Resolve the editing schema for a given section. Returns either a
+  // variant `contentSchema` (for tutors on custom themes) or null
+  // (PageSectionEditor falls back to the default EDITORS).
+  const resolveVariantSchema = useMemo(() => {
+    return (sectionType) => {
+      const variantKey = variantBySection[sectionType];
+      if (!variantKey) return null;
+      const entry = getVariant(sectionType, variantKey);
+      return entry?.contentSchema || null;
+    };
+  }, [variantBySection]);
 
   useEffect(() => {
     load();
@@ -71,7 +120,7 @@ const PageBuilder = () => {
       if (status === 402) {
         setError('The page builder is a Pro feature. Upgrade to save changes.');
       } else {
-        setError(err?.response?.data?.detail || 'Could not save your layout.');
+        setError(getErrorMessage(err, 'Could not save your layout.'));
       }
     } finally {
       setSaving(false);
@@ -93,7 +142,7 @@ const PageBuilder = () => {
       await load();
       setInfo('Reset to default.');
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not reset.');
+      setError(getErrorMessage(err, 'Could not reset.'));
     } finally {
       setSaving(false);
     }
@@ -250,6 +299,7 @@ const PageBuilder = () => {
                     sectionType={section.section_type}
                     content={section.content || {}}
                     onChange={(content) => updateContent(idx, content)}
+                    variantSchema={resolveVariantSchema(section.section_type)}
                   />
                 </div>
               )}

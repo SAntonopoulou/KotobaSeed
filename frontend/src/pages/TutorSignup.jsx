@@ -2,6 +2,12 @@ import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import client from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import { getErrorMessage } from '../utils/errors';
+import {
+  STRIPE_CONNECT_COUNTRIES,
+  guessCountryFromBrowser,
+  guessTimezone,
+} from '../utils/countries';
 
 const initialForm = {
   email: '',
@@ -10,7 +16,8 @@ const initialForm = {
   display_name: '',
   tutor_slug: '',
   languages_taught: '',
-  timezone: 'Europe/Athens',
+  timezone: guessTimezone(),
+  country: guessCountryFromBrowser() || '',
   gdpr_consent: false,
 };
 
@@ -51,6 +58,11 @@ const TutorSignup = () => {
       return;
     }
 
+    if (!form.country) {
+      setError('Pick the country where your bank account is.');
+      return;
+    }
+
     setSubmitting(true);
     try {
       // For a logged-in user we only send tutor-specific fields. The backend
@@ -61,6 +73,7 @@ const TutorSignup = () => {
             display_name: form.display_name,
             languages_taught: form.languages_taught,
             timezone: form.timezone,
+            country: form.country,
           }
         : { ...form, tutor_slug: slug };
 
@@ -70,12 +83,20 @@ const TutorSignup = () => {
         login(access_token);
       }
       if (onboarding_url) {
-        window.location.href = onboarding_url;
+        // Already-verified callers (logged-in creator upgrading) go
+        // straight to Stripe. New signups go through email verify
+        // first; the KYC URL waits in sessionStorage.
+        if (isLoggedIn) {
+          window.location.href = onboarding_url;
+          return;
+        }
+        try { sessionStorage.setItem('koto_pending_kyc_url', onboarding_url); } catch {}
+        navigate('/verify-email');
       } else {
         navigate('/onboarding/return');
       }
     } catch (err) {
-      const detail = err?.response?.data?.detail || 'Could not create your account.';
+      const detail = getErrorMessage(err, 'Could not create your account.');
       setError(typeof detail === 'string' ? detail : 'Could not create your account.');
       setSubmitting(false);
     }
@@ -216,6 +237,28 @@ const TutorSignup = () => {
           )}
 
           <div>
+            <label className="block text-sm font-medium text-kotoba-text mb-1" htmlFor="country">
+              Country (where your bank account is)
+            </label>
+            <select
+              id="country"
+              name="country"
+              required
+              value={form.country}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border border-kotoba-text/20 rounded-md focus:outline-none focus:ring-2 focus:ring-kotoba-primary focus:border-transparent"
+            >
+              <option value="">Select your country…</option>
+              {STRIPE_CONNECT_COUNTRIES.map(([code, label]) => (
+                <option key={code} value={code}>{label}</option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-kotoba-text/60">
+              Stripe opens a Connect account in this country. You can't change it later, so pick where you legally operate and where your bank account is.
+            </p>
+          </div>
+
+          <div>
             <label className="block text-sm font-medium text-kotoba-text mb-1" htmlFor="timezone">
               Timezone
             </label>
@@ -229,6 +272,21 @@ const TutorSignup = () => {
               placeholder="Europe/Athens"
             />
             <p className="mt-1 text-xs text-kotoba-text/60">Used so emails arrive at sensible times.</p>
+          </div>
+
+          {/* Prominent KYC heads-up so the partner isn't blindsided by
+              Stripe's hosted ID-check page after the form submits. */}
+          <div className="bg-amber-50 border-l-4 border-amber-400 text-amber-900 px-4 py-3 rounded-r-md text-sm space-y-2">
+            <p className="font-semibold">Next step: Stripe identity check (KYC)</p>
+            <p>After you submit, Stripe asks for:</p>
+            <ul className="list-disc list-inside ml-2 space-y-1">
+              <li>A government-issued photo ID</li>
+              <li>Your business / personal details (registered name, address)</li>
+              <li>A bank account in the country you picked above</li>
+            </ul>
+            <p className="text-xs">
+              Nothing publishes on your site and you can't take payouts until Stripe verifies you. You can come back and finish later from your dashboard.
+            </p>
           </div>
 
           {!isLoggedIn && (
@@ -249,14 +307,13 @@ const TutorSignup = () => {
           <button
             type="submit"
             disabled={submitting}
-            className="w-full py-3 px-4 rounded-lg bg-kotoba-secondary text-kotoba-text font-semibold hover:bg-kotoba-secondary-dark disabled:opacity-60 disabled:cursor-not-allowed"
+            className="w-full py-3 px-4 rounded-lg bg-kotoba-secondary text-kotoba-text font-semibold hover:bg-kotoba-secondary-dark disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
           >
-            {submitting ? 'Setting things up…' : 'Continue to Stripe Connect'}
+            {submitting && (
+              <span className="w-4 h-4 border-2 border-kotoba-text border-t-transparent rounded-full animate-spin" aria-hidden="true" />
+            )}
+            {submitting ? 'Setting things up…' : (isLoggedIn ? 'Continue to Stripe Connect' : 'Continue to email verification')}
           </button>
-
-          <p className="text-xs text-kotoba-text/60 text-center">
-            After this form you'll go through a quick Stripe identity check. Nothing is published until you finish it.
-          </p>
         </form>
       </div>
     </div>

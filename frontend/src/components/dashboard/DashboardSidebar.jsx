@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { FaBars, FaTimes } from 'react-icons/fa';
 import { apexUrl } from '../../hooks/useTenant';
 import { useInbox } from '../../context/InboxContext';
 
@@ -18,6 +19,7 @@ const NavButton = ({ section, active, onClick }) => (
   <button
     type="button"
     onClick={onClick}
+    data-tour={`dashboard-section-${section.key}`}
     className={`w-full text-left px-4 py-2 rounded-md text-sm font-medium transition-colors ${
       active
         ? 'bg-kotoba-primary text-white'
@@ -52,7 +54,7 @@ const DashboardSidebar = ({ tutor, currentSection, onSelect, onLogout }) => {
           className="p-2 text-kotoba-text/70 hover:text-kotoba-primary"
           aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
         >
-          {mobileOpen ? '✕' : '☰'}
+          {mobileOpen ? <FaTimes size={18} /> : <FaBars size={18} />}
         </button>
       </div>
 
@@ -77,7 +79,7 @@ const DashboardSidebar = ({ tutor, currentSection, onSelect, onLogout }) => {
               className="lg:hidden text-kotoba-text/60 hover:text-kotoba-primary"
               aria-label="Close menu"
             >
-              ✕
+              <FaTimes size={16} />
             </button>
           )}
         </div>
@@ -93,7 +95,7 @@ const DashboardSidebar = ({ tutor, currentSection, onSelect, onLogout }) => {
           </div>
         )}
 
-        <nav className="flex-grow overflow-y-auto px-3 py-4 space-y-0.5">
+        <nav className="flex-grow overflow-y-auto px-3 py-4 space-y-0.5" data-tour="dashboard-sidebar">
           {SECTIONS.map((section) => (
             <NavButton
               key={section.key}

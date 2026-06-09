@@ -539,8 +539,18 @@ def create_tip_checkout_session(
             },
         )
         return {"checkout_url": checkout_session.url}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) from None
+    except stripe.error.StripeError:
+        logger.exception("Stripe error starting tip checkout for project %s", project.id)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Could not start checkout. Try again in a moment.",
+        ) from None
+    except Exception:
+        logger.exception("Unexpected error starting tip checkout for project %s", project.id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Something went wrong starting checkout. Please try again.",
+        ) from None
 
 
 @router.get("/{project_id}/backers", response_model=list[BackerRead])
@@ -723,8 +733,12 @@ def confirm_completion(
                 metadata={"project_id": str(project.id)},
             )
             project.stripe_transfer_id = transfer.id
-        except stripe.error.StripeError as e:
-            raise HTTPException(status_code=400, detail=f"Payout failed: {str(e)}") from None
+        except stripe.error.StripeError:
+            logger.exception("Stripe payout failed for project %s", project.id)
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Couldn't release the payout. Try again or contact support.",
+            ) from None
 
     project.status = ProjectStatus.COMPLETED
     session.add(project)

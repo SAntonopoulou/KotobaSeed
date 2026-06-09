@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import client from '../api/client';
 import { useToast } from '../context/ToastContext';
 import { SkeletonCard } from './Skeleton';
+import { getErrorMessage } from '../utils/errors';
 
 // Dashboard module: tutor's articles with text search + status filter +
 // visibility filter so a tutor with a long backlog can find what they're
@@ -47,7 +48,7 @@ const ArticlesManager = () => {
       const res = await client.get('/articles/all');
       setArticles(res.data || []);
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not load your articles.');
+      setError(getErrorMessage(err, 'Could not load your articles.'));
     } finally {
       setLoading(false);
     }
@@ -77,13 +78,13 @@ const ArticlesManager = () => {
               });
               await load();
             } catch (err) {
-              setError(err?.response?.data?.detail || 'Undo failed.');
+              setError(getErrorMessage(err, 'Undo failed.'));
             }
           },
         },
       });
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not change publish state.');
+      setError(getErrorMessage(err, 'Could not change publish state.'));
     } finally {
       setBusy(null);
     }

@@ -2,6 +2,35 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import client from '../../api/client';
 import { useToast } from '../../context/ToastContext';
+import { getErrorMessage } from '../../utils/errors';
+
+// Hoisted out of the parent so each render isn't a fresh component
+// type. When this lived inside AdminSettings's body React remounted
+// the <input> on every keystroke, stealing focus mid-typing.
+const Field = ({ field, value, onChange, onSave, saving, dirty }) => (
+  <div className="grid sm:grid-cols-[1fr_auto] gap-3 items-end mb-3">
+    <div>
+      <label className="block text-xs font-medium text-kotoba-text/70 mb-1">
+        {field.label}
+      </label>
+      <input
+        type="text"
+        value={value ?? ''}
+        onChange={(e) => onChange(field.key, e.target.value)}
+        placeholder={field.placeholder}
+        className="w-full px-3 py-2 border border-kotoba-text/20 rounded text-sm focus:outline-none focus:ring-2 focus:ring-kotoba-primary"
+      />
+    </div>
+    <button
+      type="button"
+      onClick={() => onSave(field.key)}
+      disabled={saving || !dirty}
+      className="px-4 py-2 rounded-md bg-kotoba-primary text-white text-sm font-medium hover:bg-kotoba-primary/90 disabled:opacity-40"
+    >
+      {saving ? 'Saving…' : 'Save'}
+    </button>
+  </div>
+);
 
 // Admin-only platform settings — social media URLs, support email, footer
 // tagline. Keys here must match the curated set in backend
@@ -78,7 +107,7 @@ const AdminSettings = () => {
       });
       addToast('Saved.', 'success');
     } catch (err) {
-      addToast(err?.response?.data?.detail || 'Could not save.', 'error');
+      addToast(getErrorMessage(err, 'Could not save.'), 'error');
     } finally {
       setSavingKey(null);
     }
@@ -87,31 +116,6 @@ const AdminSettings = () => {
   if (loading) {
     return <div className="p-10 text-center">Loading settings…</div>;
   }
-
-  const Field = ({ field }) => (
-    <div className="grid sm:grid-cols-[1fr_auto] gap-3 items-end mb-3">
-      <div>
-        <label className="block text-xs font-medium text-kotoba-text/70 mb-1">
-          {field.label}
-        </label>
-        <input
-          type="text"
-          value={values[field.key] ?? ''}
-          onChange={(e) => setValue(field.key, e.target.value)}
-          placeholder={field.placeholder}
-          className="w-full px-3 py-2 border border-kotoba-text/20 rounded text-sm focus:outline-none focus:ring-2 focus:ring-kotoba-primary"
-        />
-      </div>
-      <button
-        type="button"
-        onClick={() => saveOne(field.key)}
-        disabled={savingKey === field.key || !dirtyKeys.has(field.key)}
-        className="px-4 py-2 rounded-md bg-kotoba-primary text-white text-sm font-medium hover:bg-kotoba-primary/90 disabled:opacity-40"
-      >
-        {savingKey === field.key ? 'Saving…' : 'Save'}
-      </button>
-    </div>
-  );
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
@@ -136,7 +140,15 @@ const AdminSettings = () => {
           Leave blank to hide an icon from the footer. Full URLs only.
         </p>
         {SOCIAL_FIELDS.map((f) => (
-          <Field key={f.key} field={f} />
+          <Field
+            key={f.key}
+            field={f}
+            value={values[f.key]}
+            onChange={setValue}
+            onSave={saveOne}
+            saving={savingKey === f.key}
+            dirty={dirtyKeys.has(f.key)}
+          />
         ))}
       </section>
 
@@ -146,7 +158,15 @@ const AdminSettings = () => {
           Support email is the address users see in the footer. The tagline appears just above the copyright line.
         </p>
         {BRAND_FIELDS.map((f) => (
-          <Field key={f.key} field={f} />
+          <Field
+            key={f.key}
+            field={f}
+            value={values[f.key]}
+            onChange={setValue}
+            onSave={saveOne}
+            saving={savingKey === f.key}
+            dirty={dirtyKeys.has(f.key)}
+          />
         ))}
       </section>
     </div>

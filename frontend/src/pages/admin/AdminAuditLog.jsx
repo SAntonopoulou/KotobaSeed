@@ -1,13 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import client from '../../api/client';
+import { getErrorMessage } from '../../utils/errors';
+import { formatDateTime } from '../../utils/dates';
 
 const PAGE_SIZE = 50;
 
 const formatTimestamp = (iso) => {
   if (!iso) return '';
   try {
-    return new Date(iso).toLocaleString();
+    return formatDateTime(iso);
   } catch {
     return iso;
   }
@@ -51,7 +53,7 @@ const actionTone = (action) => {
     return 'bg-kotoba-secondary/30 text-kotoba-text';
   }
   if (action.startsWith('settings.')) {
-    return 'bg-blue-100 text-blue-800';
+    return 'bg-kotoba-primary/15 text-kotoba-primary';
   }
   return 'bg-kotoba-primary/15 text-kotoba-primary';
 };
@@ -88,7 +90,7 @@ const AdminAuditLog = () => {
       })
       .catch((err) => {
         if (cancelled) return;
-        setError(err?.response?.data?.detail || 'Could not load the audit log.');
+        setError(getErrorMessage(err, 'Could not load the audit log.'));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -224,7 +226,7 @@ const AdminAuditLog = () => {
         </div>
       )}
 
-      <div className="bg-white shadow overflow-hidden sm:rounded-lg">
+      <div className="bg-white shadow sm:rounded-lg overflow-x-auto">
         <table className="min-w-full divide-y divide-kotoba-text/10">
           <thead className="bg-kotoba-background/40">
             <tr>

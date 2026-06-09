@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import client from '../api/client';
+import { formatDateShort } from '../utils/dates';
 
 const StarIcon = ({ color = 'currentColor', size = 20 }) => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill={color} height={size} width={size}>
@@ -36,59 +37,90 @@ const TeacherReviews = () => {
 
     const formatCurrency = (amountInCents) => new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(amountInCents / 100);
 
-    if (loading) return <div className="text-center py-10">Loading reviews...</div>;
-    if (error) return <div className="text-center py-10 text-red-600">{error}</div>;
+    if (loading) return <div className="font-sans text-center py-12 text-kotoba-text/60">Loading reviews…</div>;
+    if (error) return (
+        <div className="font-sans max-w-3xl mx-auto px-4 py-16 text-center">
+            <div className="bg-white rounded-3xl shadow-soft p-8 text-red-600 text-sm">{error}</div>
+        </div>
+    );
     if (!teacher) return null;
 
     return (
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-            <div className="mb-8">
-                <h1 className="text-3xl font-bold text-gray-900">Reviews for {teacher.full_name}</h1>
-                {teacher.average_rating && (
-                    <div className="mt-2 flex items-center">
-                        <StarIcon color="#ffc107" size={24} />
-                        <span className="ml-2 text-2xl font-bold text-gray-800">{teacher.average_rating}</span>
-                        <span className="ml-2 text-gray-500">({reviews.length} reviews)</span>
-                    </div>
-                )}
-            </div>
-
-            <div className="space-y-6">
-                {reviews.length === 0 ? (
-                    <p className="text-gray-500">This teacher has no reviews yet.</p>
-                ) : (
-                    reviews.map((review, index) => (
-                        <div key={index} className="bg-white shadow-md rounded-lg p-6 border border-gray-200">
-                            <div className="flex items-start justify-between">
-                                <div className="flex items-center">
-                                    {[...Array(5)].map((_, i) => (
-                                        <StarIcon key={i} color={i < review.rating ? '#ffc107' : '#e4e5e9'} />
-                                    ))}
-                                </div>
-                                <span className="text-sm text-gray-500">{new Date(review.created_at).toLocaleDateString()}</span>
-                            </div>
-                            {review.comment && <p className="mt-4 text-gray-700 italic">"{review.comment}"</p>}
-                            
-                            {review.teacher_response && (
-                                <div className="mt-4 pt-4 border-t border-gray-200 bg-gray-50 p-3 rounded-md">
-                                    <p className="text-sm font-semibold text-gray-800">Response from {teacher.full_name}:</p>
-                                    <p className="text-sm text-gray-600 italic">"{review.teacher_response}"</p>
-                                    <p className="text-xs text-gray-400 text-right">{new Date(review.response_created_at).toLocaleDateString()}</p>
-                                </div>
-                            )}
-
-                            <div className="mt-4 pt-4 border-t border-gray-100">
-                                <p className="text-sm text-gray-600">For project: <Link to={`/projects/${review.project.id}`} className="font-semibold text-kotoba-primary hover:underline">{review.project.title}</Link></p>
-                                <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500">
-                                    <span>Goal: {formatCurrency(review.project.funding_goal)}</span>
-                                    <span className="capitalize">Language: {review.project.language}</span>
-                                    <span>Level: {review.project.level}</span>
-                                </div>
-                            </div>
+        <div className="font-sans bg-kotoba-background min-h-screen text-kotoba-text">
+            <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
+                <header className="mb-10">
+                    <p className="text-[10px] uppercase tracking-[0.18em] font-bold text-kotoba-secondary-dark">
+                        Reviews
+                    </p>
+                    <h1 className="mt-2 font-display text-4xl sm:text-5xl font-bold text-kotoba-primary leading-tight tracking-[-0.02em]">
+                        Reviews for {teacher.full_name}
+                    </h1>
+                    {teacher.average_rating && (
+                        <div className="mt-4 inline-flex items-center gap-2 bg-white rounded-full pl-3 pr-4 py-2 shadow-soft">
+                            <StarIcon color="#d6a42f" size={20} />
+                            <span className="font-display text-xl font-bold text-kotoba-primary tabular-nums">{teacher.average_rating}</span>
+                            <span className="text-sm text-kotoba-text/65">({reviews.length} {reviews.length === 1 ? 'review' : 'reviews'})</span>
                         </div>
-                    ))
-                )}
-            </div>
+                    )}
+                </header>
+
+                <div className="space-y-4">
+                    {reviews.length === 0 ? (
+                        <div className="bg-white rounded-3xl shadow-soft p-10 text-center">
+                            <p className="text-kotoba-text/70">This teacher has no reviews yet.</p>
+                        </div>
+                    ) : (
+                        reviews.map((review, index) => (
+                            <div key={index} className="bg-white rounded-3xl shadow-soft p-6 sm:p-7 hover:shadow-soft-lg transition-shadow duration-300">
+                                <div className="flex items-start justify-between gap-3 flex-wrap">
+                                    <div className="flex items-center gap-0.5">
+                                        {[...Array(5)].map((_, i) => (
+                                            <StarIcon key={i} color={i < review.rating ? '#d6a42f' : 'rgba(43,70,60,0.15)'} />
+                                        ))}
+                                    </div>
+                                    <span className="text-[10px] uppercase tracking-[0.18em] font-bold text-kotoba-text/50">
+                                        {formatDateShort(review.created_at)}
+                                    </span>
+                                </div>
+                                {review.comment && (
+                                    <blockquote className="mt-4 font-display text-lg text-kotoba-text/85 italic leading-relaxed">
+                                        <span aria-hidden="true" className="text-kotoba-secondary-dark mr-0.5">“</span>
+                                        {review.comment}
+                                        <span aria-hidden="true" className="text-kotoba-secondary-dark ml-0.5">”</span>
+                                    </blockquote>
+                                )}
+
+                                {review.teacher_response && (
+                                    <div className="mt-5 pt-5 border-t border-kotoba-text/[0.06] bg-kotoba-background/40 -mx-6 sm:-mx-7 px-6 sm:px-7 py-4 rounded-b-3xl">
+                                        <p className="text-[10px] uppercase tracking-[0.18em] font-bold text-kotoba-secondary-dark">
+                                            Response from {teacher.full_name}
+                                        </p>
+                                        <p className="mt-2 text-sm text-kotoba-text/80 italic leading-relaxed">"{review.teacher_response}"</p>
+                                        <p className="text-xs text-kotoba-text/40 text-right mt-1">{formatDateShort(review.response_created_at)}</p>
+                                    </div>
+                                )}
+
+                                <div className="mt-5 pt-4 border-t border-kotoba-text/[0.06]">
+                                    <p className="text-sm text-kotoba-text/75">
+                                        For project:{' '}
+                                        <Link
+                                            to={`/projects/${review.project.id}`}
+                                            className="font-display font-bold text-kotoba-primary hover:underline"
+                                        >
+                                            {review.project.title}
+                                        </Link>
+                                    </p>
+                                    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-kotoba-text/55">
+                                        <span>Goal: {formatCurrency(review.project.funding_goal)}</span>
+                                        <span className="capitalize">Language: {review.project.language}</span>
+                                        <span>Level: {review.project.level}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        ))
+                    )}
+                </div>
+            </main>
         </div>
     );
 };

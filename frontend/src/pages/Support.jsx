@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import client from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import { getErrorMessage } from '../utils/errors';
+import { formatDateTime } from '../utils/dates';
 
 const STATUS_LABEL = {
   open: 'Open',
@@ -30,7 +32,7 @@ const CATEGORY_OPTIONS = [
 
 const formatWhen = (iso) => {
   try {
-    return new Date(iso).toLocaleString();
+    return formatDateTime(iso);
   } catch {
     return iso;
   }
@@ -75,7 +77,7 @@ const NewTicketForm = ({ onCreated, prefill }) => {
       });
       onCreated(res.data);
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not submit your ticket.');
+      setError(getErrorMessage(err, 'Could not submit your ticket.'));
     } finally {
       setSubmitting(false);
     }
@@ -177,7 +179,7 @@ const TicketDetail = ({ ticket: initial, onBack }) => {
       setTicket(res.data);
       setReply('');
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not send your reply.');
+      setError(getErrorMessage(err, 'Could not send your reply.'));
     } finally {
       setSubmitting(false);
     }
@@ -263,7 +265,11 @@ const TicketDetail = ({ ticket: initial, onBack }) => {
 };
 
 const Support = () => {
-  const { token } = useAuth();
+  // Auth state from AuthContext.currentUser, NOT localStorage `token` —
+  // the cookie carries SSO across subdomains and localStorage is per-
+  // origin so checking `token` here would bounce a logged-in user back
+  // to /login the moment they cross from the apex to a tutor subdomain.
+  const { currentUser, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const { ticketId } = useParams();
   const [searchParams] = useSearchParams();
@@ -299,12 +305,13 @@ const Support = () => {
   };
 
   useEffect(() => {
-    if (!token) {
+    if (authLoading) return;
+    if (!currentUser) {
       navigate('/login');
       return;
     }
     loadList();
-  }, [token, navigate]);
+  }, [authLoading, currentUser, navigate]);
 
   useEffect(() => {
     if (!ticketId) {

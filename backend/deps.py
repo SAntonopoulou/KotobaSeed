@@ -1,7 +1,7 @@
 from collections.abc import Callable
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from pydantic import BaseModel
@@ -9,11 +9,12 @@ from sqlmodel import Session
 
 from .database import get_session
 from .models import User, UserRole
-from .security import ALGORITHM, SECRET_KEY
+from .security import ALGORITHM, SECRET_KEY, token_from_request
 
-reusable_oauth2 = OAuth2PasswordBearer(tokenUrl="/auth/token")
-
-reusable_oauth2_optional = OAuth2PasswordBearer(tokenUrl="/auth/token", auto_error=False)
+# Kept for Swagger/OAuth2-form compatibility on /auth/token; not used to
+# extract the bearer for protected endpoints — see `token_from_request`,
+# which also reads the shared auth cookie.
+reusable_oauth2 = OAuth2PasswordBearer(tokenUrl="/auth/token", auto_error=False)
 
 
 class TokenPayload(BaseModel):
@@ -21,8 +22,15 @@ class TokenPayload(BaseModel):
 
 
 def get_current_user(
-    token: str = Depends(reusable_oauth2), session: Session = Depends(get_session)
+    request: Request, session: Session = Depends(get_session)
 ) -> User:
+    token = token_from_request(request)
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         token_data = TokenPayload(**payload)
@@ -83,8 +91,9 @@ CurrentVerifiedUser = Annotated[User, Depends(require_email_verified)]
 
 
 def get_current_user_optional(
-    token: str | None = Depends(reusable_oauth2_optional), session: Session = Depends(get_session)
+    request: Request, session: Session = Depends(get_session)
 ) -> User | None:
+    token = token_from_request(request)
     if not token:
         return None
     try:
@@ -93,10 +102,24 @@ def get_current_user_optional(
         if not token_data.sub:
             return None
         user_id = int(token_data.sub)
+        iat = payload.get("iat")
     except (JWTError, ValueError, TypeError):
         return None
 
     user = session.get(User, user_id)
+    if user is None:
+        return None
+    # Mirror the same invalidation check `get_current_user` enforces so
+    # a stale JWT after logout-everywhere doesn't smuggle a stale user
+    # into optional-auth endpoints.
+    if user.token_invalidation_at is not None and iat is not None:
+        from datetime import UTC as _UTC, datetime as _dt
+
+        bound = user.token_invalidation_at
+        if bound.tzinfo is None:
+            bound = bound.replace(tzinfo=_UTC)
+        if _dt.fromtimestamp(int(iat), tz=_UTC) < bound:
+            return None
     return user
 
 

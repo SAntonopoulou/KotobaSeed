@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import client from '../api/client';
 import { useConfirm } from '../context/ModalContext';
+import { getErrorMessage } from '../utils/errors';
 
 // Tutor's lesson modules — curriculum bundles of articles + homework
 // sold as one-time purchases. Inline editor for v1; if Sophia wants a
@@ -51,7 +52,7 @@ const ModulesManager = () => {
       setTemplates(t.data || []);
       setTutor(tut.data || null);
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not load modules.');
+      setError(getErrorMessage(err, 'Could not load modules.'));
     } finally {
       setLoading(false);
     }
@@ -89,7 +90,7 @@ const ModulesManager = () => {
         is_published: full?.is_published ?? m.is_published,
       });
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not load module.');
+      setError(getErrorMessage(err, 'Could not load module.'));
     }
   };
 
@@ -115,7 +116,14 @@ const ModulesManager = () => {
 
   const addItem = (kind, refId) => {
     if (!refId) return;
-    const next = [...editing.items, { kind, ref_id: parseInt(refId, 10) }];
+    // The first item gets marked as a free preview by default — most
+    // tutors want at least one taster, and it nudges them to think
+    // about which item is the strongest hook.
+    const isFirst = editing.items.length === 0;
+    const next = [
+      ...editing.items,
+      { kind, ref_id: parseInt(refId, 10), preview: isFirst },
+    ];
     setEditing({ ...editing, items: next });
   };
   const removeItem = (idx) =>
@@ -125,6 +133,11 @@ const ModulesManager = () => {
     const target = idx + delta;
     if (target < 0 || target >= next.length) return;
     [next[idx], next[target]] = [next[target], next[idx]];
+    setEditing({ ...editing, items: next });
+  };
+  const togglePreview = (idx) => {
+    const next = [...editing.items];
+    next[idx] = { ...next[idx], preview: !next[idx].preview };
     setEditing({ ...editing, items: next });
   };
 
@@ -156,7 +169,7 @@ const ModulesManager = () => {
       cancel();
       await load();
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not save.');
+      setError(getErrorMessage(err, 'Could not save.'));
     } finally {
       setBusy(false);
     }
@@ -174,7 +187,7 @@ const ModulesManager = () => {
       await client.delete(`/tutor/modules/${m.id}`);
       await load();
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not unpublish.');
+      setError(getErrorMessage(err, 'Could not unpublish.'));
     } finally {
       setBusy(false);
     }
@@ -315,13 +328,30 @@ const ModulesManager = () => {
                   const found = source.find((s) => s.id === it.ref_id);
                   return (
                     <li key={`${it.kind}-${it.ref_id}-${idx}`} className="px-3 py-2 flex items-center justify-between gap-2">
-                      <span className="text-sm text-kotoba-text truncate">
-                        <span className="text-xs px-1.5 py-0.5 rounded bg-kotoba-background mr-2 font-mono">
+                      <span className="text-sm text-kotoba-text truncate flex items-center gap-2">
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-kotoba-background font-mono">
                           {it.kind}
                         </span>
                         {found?.title || `(deleted #${it.ref_id})`}
+                        {it.preview && (
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-kotoba-primary bg-kotoba-primary/15 px-1.5 py-0.5 rounded">
+                            Free preview
+                          </span>
+                        )}
                       </span>
                       <div className="flex items-center gap-1 flex-shrink-0">
+                        <label
+                          className="inline-flex items-center gap-1 text-xs text-kotoba-text/70 cursor-pointer mr-1"
+                          title="Show this item as a free preview to non-purchasers"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={!!it.preview}
+                            onChange={() => togglePreview(idx)}
+                            className="h-3.5 w-3.5"
+                          />
+                          Preview
+                        </label>
                         <button type="button" onClick={() => moveItem(idx, -1)} aria-label="Move item up" title="Move up" className="text-kotoba-text/50 hover:text-kotoba-text px-1">↑</button>
                         <button type="button" onClick={() => moveItem(idx, 1)} aria-label="Move item down" title="Move down" className="text-kotoba-text/50 hover:text-kotoba-text px-1">↓</button>
                         <button type="button" onClick={() => removeItem(idx)} aria-label="Remove item" title="Remove" className="text-red-500 hover:text-red-700 text-lg px-1">×</button>

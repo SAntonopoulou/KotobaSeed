@@ -26,6 +26,14 @@ const Help = () => (
     </Section>
 
     <Section title="As a tutor">
+      <p>
+        <strong>New here?</strong> Start with the{' '}
+        <Link to="/help/tutor-getting-started" className="text-kotoba-primary underline">
+          tutor getting-started guide
+        </Link>{' '}
+        — a long-form walkthrough of every piece. Signed-in tutors can also run the
+        interactive version from the dashboard overview.
+      </p>
       <p><strong>How do I get paid?</strong> Stripe pays you directly to your bank account on the standard schedule (we hold a 14-day rolling reserve as a buffer against chargebacks). Open the Stripe dashboard from your Money tab.</p>
       <p><strong>How do I set my availability?</strong> Lessons → Availability. Click the grid to add weekly slots; the public site picks them up automatically.</p>
       <p><strong>What's the page builder?</strong> A Pro feature — rearrange and customise the sections on your tutor site. Pick a theme, hide sections you don't need, edit hero/about copy.</p>

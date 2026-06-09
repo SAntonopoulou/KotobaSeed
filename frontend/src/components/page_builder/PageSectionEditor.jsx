@@ -1,5 +1,6 @@
 import React from 'react';
 import { SECTION_VARIANTS } from '../tutor_sections';
+import SchemaForm from '../SchemaForm';
 
 // Inline editors per section_type. Each one renders form fields and
 // calls onChange with the next content object. Kept inline so the
@@ -372,9 +373,39 @@ const EDITORS = {
       />
     </div>
   ),
+  newsletter_signup: () => (
+    <div className="space-y-3">
+      <div className="bg-kotoba-primary/5 border border-kotoba-primary/15 rounded-xl p-4 text-sm text-kotoba-text/80">
+        <p className="font-medium text-kotoba-primary mb-1">Copy comes from your newsletter settings</p>
+        <p>
+          The headline and short pitch on this card come from your newsletter preferences (Dashboard → Content → Newsletter). Edit them there once and they update everywhere the signup form appears — including the footer and any homepage placement.
+        </p>
+      </div>
+    </div>
+  ),
 };
 
-const PageSectionEditor = ({ sectionType, content, onChange }) => {
+const PageSectionEditor = ({ sectionType, content, onChange, variantSchema }) => {
+  // When the tutor's tenant is on a v2 custom theme, PageBuilder hands
+  // us the active variant's contentSchema for this section type. We
+  // render it through SchemaForm — the exact same machinery the admin
+  // theme editor uses to author themes. So tutor + designer use one
+  // pipeline for content editing, no parallel schemas.
+  if (variantSchema) {
+    return (
+      <div className="space-y-3">
+        <p className="text-[10px] uppercase tracking-[0.16em] font-bold text-kotoba-secondary-dark">
+          Fields from your theme
+        </p>
+        <SchemaForm
+          schema={variantSchema}
+          value={content}
+          onChange={onChange}
+        />
+      </div>
+    );
+  }
+
   const Editor = EDITORS[sectionType];
   return (
     <div className="space-y-3">

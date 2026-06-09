@@ -36,18 +36,18 @@ const PledgeForm = ({ projectId, projectName }) => {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label htmlFor="pledgeAmount" className="block text-sm font-medium text-gray-700">
+        <label htmlFor="pledgeAmount" className="block text-sm font-medium text-kotoba-text/80">
           Pledge Amount (EUR)
         </label>
         <div className="mt-1 relative rounded-md shadow-sm">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <span className="text-gray-500 sm:text-sm">€</span>
+            <span className="text-kotoba-text/60 sm:text-sm">€</span>
           </div>
           <input
             type="number"
             name="pledgeAmount"
             id="pledgeAmount"
-            className="focus:ring-kotoba-primary focus:border-kotoba-primary block w-full pl-7 pr-12 sm:text-sm border-gray-300 rounded-md"
+            className="focus:ring-kotoba-primary focus:border-kotoba-primary block w-full pl-7 pr-12 sm:text-sm border-kotoba-text/20 rounded-md"
             placeholder="10.00"
             min="1"
             step="0.01"

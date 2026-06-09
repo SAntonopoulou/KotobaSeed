@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import client from '../api/client';
+import { getErrorMessage } from '../utils/errors';
 
 // Lists the tutor's assignments with quick visibility into submissions.
 // Click an assignment with a submission to read it and (for short-answer
@@ -32,7 +33,7 @@ const SubmissionGrader = ({ assignment, onSaved, onClose }) => {
       });
       onSaved();
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not save the grade.');
+      setError(getErrorMessage(err, 'Could not save the grade.'));
     } finally {
       setBusy(false);
     }
@@ -107,7 +108,7 @@ const HomeworkAssignmentsManager = () => {
       const res = await client.get('/tutor/homework/assignments');
       setItems(res.data || []);
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not load assignments.');
+      setError(getErrorMessage(err, 'Could not load assignments.'));
     } finally {
       setLoading(false);
     }

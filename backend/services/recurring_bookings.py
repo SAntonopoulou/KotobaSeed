@@ -125,9 +125,30 @@ def generate_bookings_for_plan(
 
     created = 0
     now = datetime.now(UTC)
+    # Earliest acceptable slot: the later of the tutor's booking lead
+    # time and the cancellation cutoff. Recurring plans that anchor to
+    # "tomorrow 9am" used to slip a child through ahead of either gate
+    # at generation time — close to the lesson, the student would see
+    # an unpaid PENDING_PAYMENT row and the tutor would have lost prep
+    # time to reshuffle. Skip those slots; the next `lookahead_weeks`
+    # tick will pick them up once they're far enough out.
+    lead_min = getattr(tutor, "min_booking_lead_minutes", 0) or 0
+    cutoff_hours = getattr(tutor, "cancellation_cutoff_hours", 0) or 0
+    earliest_acceptable = now + max(
+        timedelta(minutes=lead_min),
+        timedelta(hours=cutoff_hours),
+    )
+    # Fast-forward the anchor so the loop doesn't spin through years of
+    # weekly increments when the plan's start_date is far in the past
+    # (e.g. a long-running plan whose tutor recently bumped the lead
+    # time). One week back of the earliest acceptable slot is enough
+    # padding for `_next_occurrence` to still land on the right
+    # weekday/time for the very first emitted booking.
+    if anchor < earliest_acceptable - timedelta(weeks=1):
+        anchor = earliest_acceptable - timedelta(weeks=1)
     while created < needed:
         next_slot = _next_occurrence(plan, after=anchor)
-        if next_slot <= now:
+        if next_slot <= now or next_slot < earliest_acceptable:
             anchor = next_slot
             continue
         # Skip slots that already have a refunded/cancelled child so we
@@ -159,11 +180,15 @@ def generate_bookings_for_plan(
         if overlap is not None:
             anchor = next_slot
             continue
+        # Stamp team_id at booking time so the non-compete protection has
+        # a faithful audit trail even if the tutor later leaves the team.
+        tutor_for_team = session.get(Tutor, plan.tutor_id)
         booking = Booking(
             tutor_id=plan.tutor_id,
             student_user_id=plan.student_user_id,
             lesson_pack_id=plan.lesson_pack_id,
             recurring_plan_id=plan.id,
+            tutor_team_id=tutor_for_team.team_id if tutor_for_team else None,
             scheduled_at=next_slot,
             duration_minutes=plan.duration_minutes,
             price_cents=plan.price_cents,
@@ -175,6 +200,13 @@ def generate_bookings_for_plan(
         created += 1
         anchor = next_slot
     if created:
+        # Recurring plans imply enrollment — make sure it's recorded.
+        from . import enrollment as _enroll
+        _enroll.ensure_enrollment(
+            student_user_id=plan.student_user_id,
+            tutor_id=plan.tutor_id,
+            session=session,
+        )
         session.commit()
     return created
 

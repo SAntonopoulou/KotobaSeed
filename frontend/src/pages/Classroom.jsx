@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import client from '../api/client';
 import { useTenant } from '../hooks/useTenant';
+import { getErrorMessage } from '../utils/errors';
 
 /**
  * Single page that works for both tutor and student joins.
@@ -45,7 +46,7 @@ const Classroom = () => {
           const code = err?.response?.status;
           if (code && [400, 409, 503].includes(code)) {
             if (!cancelled) {
-              setError(err?.response?.data?.detail || 'Cannot join the classroom right now.');
+              setError(getErrorMessage(err, 'Cannot join the classroom right now.'));
             }
             return;
           }
@@ -53,7 +54,7 @@ const Classroom = () => {
       }
       if (!cancelled) {
         setError(
-          lastErr?.response?.data?.detail || 'Could not join — make sure you are logged in.'
+          getErrorMessage(lastErr, 'Could not join — make sure you are logged in.')
         );
       }
     })();
@@ -71,7 +72,7 @@ const Classroom = () => {
           <p className="text-kotoba-text mb-6">{error}</p>
           <Link
             to="/"
-            className="inline-block px-6 py-2.5 rounded-lg bg-kotoba-primary text-white font-semibold hover:bg-green-800"
+            className="inline-block px-6 py-2.5 rounded-lg bg-kotoba-primary text-white font-semibold hover:bg-kotoba-primary/90"
           >
             Back
           </Link>

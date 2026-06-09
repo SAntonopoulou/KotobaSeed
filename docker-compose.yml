@@ -1,0 +1,196 @@
+# Kotobaseed production stack.
+#
+# Services:
+#   postgres  — primary DB. Internal network only, no host port mapping.
+#   redis     — rate-limit storage + scheduler signals. Internal only.
+#   backend   — FastAPI + APScheduler. Reaches DB + Redis on the
+#               internal docker network; serves on :8000 inside the net.
+#   frontend  — nginx + Vite build output. Serves on :80 inside the net.
+#   caddy     — TLS termination + reverse proxy. The only service that
+#               binds host ports (80, 443).
+#
+# Single shared network (docker compose creates it implicitly). Only
+# Caddy publishes to the host; everything else is reachable solely via
+# service DNS names inside the network.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-kotobaseed}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      POSTGRES_DB: ${POSTGRES_DB:-kotobaseed}
+      # Faster fsync acceptable on a single-server deploy w/ daily backups;
+      # we sacrifice a tiny bit of crash safety for noticeable speed wins
+      # on write-heavy paths (audit log, webhook fan-out).
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-kotobaseed} -d ${POSTGRES_DB:-kotobaseed}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # AOF persistence — small write overhead, but rate-limit + scheduler
+    # state surviving a restart is worth it.
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD must be set}"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # Service-DNS connection strings so backend never needs to know IPs.
+      DATABASE_URL: "postgresql+psycopg2://${POSTGRES_USER:-kotobaseed}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-kotobaseed}"
+      REDIS_URL: "redis://:${REDIS_PASSWORD}@redis:6379/0"
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set}
+      FRONTEND_URL: ${FRONTEND_URL:-https://kotobaseed.net}
+      PLATFORM_APEX: ${PLATFORM_APEX:-kotobaseed.net}
+      TENANT_SUBDOMAIN_SUFFIX: ${TENANT_SUBDOMAIN_SUFFIX:-.kotobaseed.net}
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://kotobaseed.net}
+      CORS_ORIGIN_REGEX: ${CORS_ORIGIN_REGEX:-^https://([a-z0-9-]+\.)?kotobaseed\.net$$}
+      # Cross-subdomain SSO — must be a leading-dot domain so the auth
+      # cookie carries from the apex to every tenant subdomain.
+      AUTH_COOKIE_DOMAIN: ${AUTH_COOKIE_DOMAIN:-.kotobaseed.net}
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-true}
+      AUTH_COOKIE_SAMESITE: ${AUTH_COOKIE_SAMESITE:-lax}
+      # Stripe
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
+      STRIPE_PLUS_PRICE_ID: ${STRIPE_PLUS_PRICE_ID:-}
+      STRIPE_PRO_PRICE_ID: ${STRIPE_PRO_PRICE_ID:-}
+      STRIPE_BUSINESS_PRICE_ID: ${STRIPE_BUSINESS_PRICE_ID:-}
+      STRIPE_PLUS_ANNUAL_PRICE_ID: ${STRIPE_PLUS_ANNUAL_PRICE_ID:-}
+      STRIPE_PRO_ANNUAL_PRICE_ID: ${STRIPE_PRO_ANNUAL_PRICE_ID:-}
+      STRIPE_BUSINESS_ANNUAL_PRICE_ID: ${STRIPE_BUSINESS_ANNUAL_PRICE_ID:-}
+      # Connect onboarding bounce URLs
+      CONNECT_ONBOARDING_RETURN_URL: ${CONNECT_ONBOARDING_RETURN_URL:-https://kotobaseed.net/onboarding/return}
+      CONNECT_ONBOARDING_REFRESH_URL: ${CONNECT_ONBOARDING_REFRESH_URL:-https://kotobaseed.net/onboarding/refresh}
+      # Resend
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-noreply@kotobaseed.net}
+      RESEND_FROM_NAME: ${RESEND_FROM_NAME:-Kotobaseed}
+      # Daily.co
+      DAILY_API_KEY: ${DAILY_API_KEY:-}
+      DAILY_DOMAIN: ${DAILY_DOMAIN:-}
+      CLASSROOM_ENABLE_RECORDING: ${CLASSROOM_ENABLE_RECORDING:-false}
+      # Custom domains
+      KOTOBASEED_SERVER_IP: ${KOTOBASEED_SERVER_IP:-}
+      CUSTOM_DOMAIN_AUTO_VERIFY: "false"
+      # Admin seed
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      # Backups inside /data — mounted volume below
+      BACKUP_DIR: /data/backups
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30}
+      # Offsite backups to Cloudflare R2 (S3-compatible). All four R2_*
+      # must be set or the upload short-circuits silently and local
+      # backups still happen — see backend/services/db_backup.py.
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
+      R2_BUCKET: ${R2_BUCKET:-}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      R2_PUBLIC_URL_BASE: ${R2_PUBLIC_URL_BASE:-}
+      # Hard ceiling on R2 bucket size. Once exceeded, new uploads are
+      # refused (local backups still happen, Sentry gets a warning).
+      # Default 7 GiB leaves headroom below the 10 GB R2 free tier.
+      R2_BACKUP_QUOTA_BYTES: ${R2_BACKUP_QUOTA_BYTES:-7516192768}
+      # Belt-and-braces cap on how many backup objects we ever keep on
+      # R2, regardless of date-based retention. Stops a clock bug from
+      # ballooning the bucket.
+      R2_BACKUP_MAX_OBJECTS: ${R2_BACKUP_MAX_OBJECTS:-60}
+      # Sentry (optional)
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0.1}
+    volumes:
+      - backend_data:/data
+    # No `ports:` — Caddy is the only ingress.
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/healthz"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        # Baked into the JS bundle at build time.
+        VITE_API_URL: ${VITE_API_URL:-https://api.kotobaseed.net}
+        VITE_PLATFORM_APEX: ${PLATFORM_APEX:-kotobaseed.net}
+        VITE_DEMO_MODE: ${DEMO_MODE:-false}
+        # Sentry — same DSN works in any environment because we tag the
+        # environment label below; absent here means the SDK init no-ops
+        # and zero bytes go to Sentry.
+        VITE_SENTRY_DSN: ${VITE_SENTRY_DSN:-}
+        VITE_SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
+        VITE_SENTRY_RELEASE: ${SENTRY_RELEASE:-}
+        SENTRY_AUTH_TOKEN: ${SENTRY_AUTH_TOKEN:-}
+        SENTRY_ORG: ${SENTRY_ORG:-}
+        SENTRY_PROJECT: ${SENTRY_PROJECT_FRONTEND:-kotobaseed-frontend}
+    restart: unless-stopped
+    depends_on:
+      - backend
+    # No host ports — Caddy reaches us via the docker network.
+
+  maintenance:
+    # Tiny always-on static page. Caddy falls through to it whenever
+    # the backend AND frontend are unreachable, so a deploy-time
+    # outage shows the branded "back soon" page instead of a raw 502.
+    # /classroom/* and a few read-only routes get whitelisted in the
+    # Caddyfile so in-progress lessons aren't kicked off.
+    build:
+      context: ./maintenance-page
+      dockerfile: Dockerfile
+    restart: unless-stopped
+
+  caddy:
+    build:
+      context: .
+      dockerfile: caddy/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - backend
+      - frontend
+      - maintenance
+    environment:
+      PLATFORM_APEX: ${PLATFORM_APEX:-kotobaseed.net}
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:?CLOUDFLARE_API_TOKEN must be set}
+      LETSENCRYPT_EMAIL: ${LETSENCRYPT_EMAIL:?LETSENCRYPT_EMAIL must be set}
+    ports:
+      # The only host-bound ports in the entire stack.
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"  # HTTP/3 / QUIC
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  postgres_data:
+  redis_data:
+  backend_data:
+  caddy_data:
+  caddy_config:

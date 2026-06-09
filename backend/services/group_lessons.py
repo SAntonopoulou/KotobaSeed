@@ -16,12 +16,11 @@ import contextlib
 import logging
 import os
 from datetime import UTC, datetime
-from typing import Iterable
 
 import stripe
 from sqlmodel import Session, select
 
-from ..models import Booking, BookingStatus, GroupSession, LessonPack, Tutor, User
+from ..models import Booking, BookingStatus, GroupSession, LessonPack
 
 log = logging.getLogger(__name__)
 
@@ -127,8 +126,12 @@ def evaluate_session(session: Session, gs: GroupSession) -> dict:
             "seats": count,
             "newly_confirmed": confirmed,
         }
-    # Minimum not met — cancel + refund everyone.
+    # Minimum not met — cancel + refund everyone, release the quota
+    # reservation so the tutor doesn't burn minutes on a session that
+    # never happened.
     refunded = refund_session_bookings(session, gs, reason="min_not_met")
+    from . import minute_quota
+    minute_quota.release_group_session_minutes(gs, session)
     gs.is_cancelled = True
     gs.min_evaluated_at = now
     gs.updated_at = now

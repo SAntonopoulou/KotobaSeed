@@ -2,13 +2,20 @@ import { useMemo } from 'react';
 
 const RESERVED = new Set(['www', 'api', 'admin']);
 
+// The apex domain is baked in at build time so the same source tree
+// boots correctly on prod (`kotobaseed.net`), staging
+// (`demo.kotobaseed.net`), and dev (`localhost`). Without this, the
+// staging build mis-resolves its own apex as `slug=demo` and tries
+// to render a non-existent tutor site.
+const PLATFORM_APEX = (import.meta.env.VITE_PLATFORM_APEX || 'kotobaseed.net').toLowerCase();
+
 const APEX_HOSTS = new Set([
-  'kotobaseed.net',
+  PLATFORM_APEX,
   'localhost',
   '127.0.0.1',
 ]);
 
-const APEX_SUFFIX = '.kotobaseed.net';
+const APEX_SUFFIX = `.${PLATFORM_APEX}`;
 const DEV_SUFFIX = '.localhost';
 
 /**
@@ -51,10 +58,10 @@ export function useTenant() {
 }
 
 function _apex() {
-  if (typeof window === 'undefined') return 'kotobaseed.net';
+  if (typeof window === 'undefined') return PLATFORM_APEX;
   let apex = window.location.hostname;
   if (apex.endsWith('.localhost')) apex = 'localhost';
-  if (apex.endsWith('.kotobaseed.net')) apex = 'kotobaseed.net';
+  if (apex.endsWith(`.${PLATFORM_APEX}`)) apex = PLATFORM_APEX;
   return apex;
 }
 

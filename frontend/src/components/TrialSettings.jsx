@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import client from '../api/client';
 import { SkeletonCard } from './Skeleton';
+import { getErrorMessage } from '../utils/errors';
 
 const TrialSettings = () => {
   const [config, setConfig] = useState(null);
@@ -15,7 +16,7 @@ const TrialSettings = () => {
       const res = await client.get('/tutor/trial');
       setConfig(res.data);
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not load trial settings.');
+      setError(getErrorMessage(err, 'Could not load trial settings.'));
     } finally {
       setLoading(false);
     }
@@ -34,7 +35,7 @@ const TrialSettings = () => {
       setConfig(res.data);
       setInfo('Saved.');
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not save.');
+      setError(getErrorMessage(err, 'Could not save.'));
     } finally {
       setSaving(false);
     }

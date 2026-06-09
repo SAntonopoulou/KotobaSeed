@@ -27,28 +27,28 @@ const LinkVideoModal = ({ projectId, onClose, onSuccess }) => {
     <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
       <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
         <div className="mt-3 text-center">
-          <h3 className="text-lg leading-6 font-medium text-gray-900">Link a Video</h3>
+          <h3 className="text-lg leading-6 font-medium text-kotoba-text">Link a Video</h3>
           <form onSubmit={handleSubmit} className="mt-2 text-left space-y-4">
             <div>
-              <label htmlFor="title" className="block text-sm font-medium text-gray-700">Video Title</label>
+              <label htmlFor="title" className="block text-sm font-medium text-kotoba-text/80">Video Title</label>
               <input
                 type="text"
                 id="title"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 required
-                className="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md"
+                className="mt-1 block w-full shadow-sm sm:text-sm border-kotoba-text/20 rounded-md"
               />
             </div>
             <div>
-              <label htmlFor="url" className="block text-sm font-medium text-gray-700">Video URL</label>
+              <label htmlFor="url" className="block text-sm font-medium text-kotoba-text/80">Video URL</label>
               <input
                 type="url"
                 id="url"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 required
-                className="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md"
+                className="mt-1 block w-full shadow-sm sm:text-sm border-kotoba-text/20 rounded-md"
                 placeholder="https://www.youtube.com/watch?v=..."
               />
             </div>
@@ -62,7 +62,7 @@ const LinkVideoModal = ({ projectId, onClose, onSuccess }) => {
               <button
                 type="button"
                 onClick={onClose}
-                className="mt-2 px-4 py-2 bg-gray-200 text-gray-800 text-base font-medium rounded-md w-full shadow-sm hover:bg-gray-300 focus:outline-none"
+                className="mt-2 px-4 py-2 bg-kotoba-text/10 text-kotoba-text/90 text-base font-medium rounded-md w-full shadow-sm hover:bg-kotoba-text/20 focus:outline-none"
               >
                 Cancel
               </button>

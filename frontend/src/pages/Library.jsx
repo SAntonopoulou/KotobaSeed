@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import client from '../api/client';
+import { getErrorMessage } from '../utils/errors';
 
 // Apex marketplace directory — students discover tutors across the whole
 // platform. Lives at /library on the apex; each card links out to the
@@ -52,7 +53,7 @@ const Library = () => {
       const res = await client.get(path);
       setTutors(res.data || []);
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not load the directory.');
+      setError(getErrorMessage(err, 'Could not load the directory.'));
     } finally {
       setLoading(false);
     }

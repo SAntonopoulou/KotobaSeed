@@ -1,13 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import client from '../api/client';
 import { SkeletonCard } from './Skeleton';
+import { getErrorMessage } from '../utils/errors';
 
 // Tutor sets the minimum hours-before-lesson at which students can still
-// cancel. Platform floor is 48; the input enforces 48-720 (30 days).
+// cancel. Platform floor is 24; the input enforces 24-720 (30 days).
 // Pre-baked presets cover the common cases — strict tutors can type a
 // custom value.
 
 const PRESETS = [
+  { label: '24 hours (1 day)', hours: 24 },
   { label: '48 hours (platform default)', hours: 48 },
   { label: '72 hours (3 days)', hours: 72 },
   { label: '168 hours (1 week)', hours: 168 },
@@ -29,7 +31,7 @@ const CancellationPolicy = () => {
       setHours(h);
       setSavedHours(h);
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not load your policy.');
+      setError(getErrorMessage(err, 'Could not load your policy.'));
     } finally {
       setLoading(false);
     }
@@ -52,7 +54,7 @@ const CancellationPolicy = () => {
       setSavedHours(h);
       setInfo('Saved.');
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not save.');
+      setError(getErrorMessage(err, 'Could not save.'));
     } finally {
       setSaving(false);
     }
@@ -66,7 +68,7 @@ const CancellationPolicy = () => {
   const handleCustomBlur = () => {
     let next = parseInt(hours, 10);
     if (!Number.isFinite(next)) next = 48;
-    if (next < 48) next = 48;
+    if (next < 24) next = 24;
     if (next > 720) next = 720;
     setHours(next);
     if (next !== savedHours) {
@@ -82,7 +84,7 @@ const CancellationPolicy = () => {
     <section className="bg-white rounded-2xl shadow-sm p-6">
       <h2 className="text-lg font-bold text-kotoba-primary">Cancellation policy</h2>
       <p className="text-sm text-kotoba-text/70 mt-1">
-        Students can cancel and get a refund up to this many hours before a lesson. After that, the booking is locked in — protects you from last-minute cancellations and no-shows. The platform floor is 48 hours; you can be stricter but not more lenient.
+        Students can cancel and get a refund up to this many hours before a lesson. After that, the booking is locked in — protects you from last-minute cancellations and no-shows. The platform floor is 24 hours; you can be stricter but not more lenient.
       </p>
 
       {error && (
@@ -124,7 +126,7 @@ const CancellationPolicy = () => {
         <input
           id="cutoff-custom"
           type="number"
-          min={48}
+          min={24}
           max={720}
           step={24}
           value={hours}

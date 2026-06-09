@@ -19,7 +19,6 @@ import sys
 import urllib.error
 import urllib.request
 
-
 CHECKS: list[tuple[str, str]] = [
     ("apex healthz", "/healthz"),
     ("apex readyz", "/readyz"),

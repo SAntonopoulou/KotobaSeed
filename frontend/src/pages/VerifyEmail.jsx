@@ -1,11 +1,21 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import client from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import { getErrorMessage } from '../utils/errors';
+
+// Same-origin allow-list — see Login.jsx for the rationale.
+const safeNext = (raw) => {
+  if (!raw) return null;
+  if (raw.startsWith('//') || /^[a-z]+:/i.test(raw)) return null;
+  return raw.startsWith('/') ? raw : null;
+};
 
 const VerifyEmail = () => {
   const navigate = useNavigate();
-  const { token, currentUser } = useAuth();
+  const { token, currentUser, setCurrentUser } = useAuth();
+  const [params] = useSearchParams();
+  const next = safeNext(params.get('next'));
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
@@ -13,17 +23,32 @@ const VerifyEmail = () => {
   const [resending, setResending] = useState(false);
 
   // If the user landed here without a token, they probably refreshed or
-  // navigated directly. Send them to /login.
+  // navigated directly. Send them to /login (carry ?next=… through).
   if (!token) {
-    navigate('/login');
+    navigate(next ? `/login?next=${encodeURIComponent(next)}` : '/login');
     return null;
   }
 
-  // If they're already verified, send them home.
+  // If they're already verified, take them where they were headed (the
+  // booking page they came from, or home).
   if (currentUser?.email_verified_at) {
-    navigate('/');
+    navigate(next || '/');
     return null;
   }
+
+  // Tutor signups stash the Stripe onboarding URL in sessionStorage so
+  // we can hand the user straight to KYC after they verify. Reading it
+  // here keeps the verify page agnostic about role and avoids passing
+  // sensitive URLs through the query string.
+  const popPendingKycUrl = () => {
+    try {
+      const url = sessionStorage.getItem('koto_pending_kyc_url');
+      if (url) sessionStorage.removeItem('koto_pending_kyc_url');
+      return url || null;
+    } catch {
+      return null;
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -33,12 +58,30 @@ const VerifyEmail = () => {
     try {
       const res = await client.post('/auth/verify-email', { code: code.trim() });
       if (res.data?.verified) {
-        navigate('/');
+        // Refresh the cached user so the banner disappears without a reload.
+        try {
+          const me = await client.get('/users/me');
+          setCurrentUser(me.data);
+        } catch (_) {
+          // Non-fatal — the next route navigation will pick it up.
+        }
+        const kycUrl = popPendingKycUrl();
+        if (kycUrl) {
+          // Same one-shot Stripe handoff curtain Register shows pre-verify.
+          setInfo('Verified! Opening Stripe to finish your identity check…');
+          window.location.href = kycUrl;
+          return;
+        }
+        // Take them where they were headed before signup if `next` was
+        // preserved through the chain; otherwise home. NEVER navigate(-1)
+        // because that lands them back on the registration form they
+        // just completed.
+        navigate(next || '/');
       } else {
         setError("That didn't match — try again.");
       }
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not verify the code.');
+      setError(getErrorMessage(err, 'Could not verify the code.'));
     } finally {
       setSubmitting(false);
     }
@@ -52,7 +95,7 @@ const VerifyEmail = () => {
       await client.post('/auth/resend-verification');
       setInfo("Sent a fresh code to your email.");
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not resend.');
+      setError(getErrorMessage(err, 'Could not resend.'));
     } finally {
       setResending(false);
     }
@@ -112,7 +155,7 @@ const VerifyEmail = () => {
             </button>
           </form>
 
-          <div className="mt-6 text-center">
+          <div className="mt-6 text-center space-y-3">
             <button
               type="button"
               onClick={handleResend}
@@ -121,6 +164,16 @@ const VerifyEmail = () => {
             >
               {resending ? 'Sending…' : "Didn't get one? Resend code"}
             </button>
+            {/* Sophia's partner asked for a way to skip Stripe KYC at
+                signup and come back to it later. If we have a pending
+                Stripe URL stashed in sessionStorage, surface the
+                "I'll do it later" escape hatch — but only after they've
+                verified their email. */}
+            {typeof window !== 'undefined' && window.sessionStorage?.getItem('koto_pending_kyc_url') && (
+              <p className="text-xs text-kotoba-text/60">
+                You'll be sent to Stripe for identity verification right after this. Need a minute? You can finish KYC from your dashboard later.
+              </p>
+            )}
           </div>
 
           <p className="mt-4 text-xs text-center text-kotoba-text/60">

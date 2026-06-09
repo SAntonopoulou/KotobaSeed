@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import client from '../api/client';
 import { SkeletonCard } from './Skeleton';
+import { getErrorMessage } from '../utils/errors';
 
 // Business summary panel — first thing the tutor sees on their dashboard.
 // Three metric clusters: this month, lifetime, upcoming. Plus a six-month
@@ -48,7 +49,7 @@ const TutorAnalytics = () => {
         const res = await client.get('/tutor/analytics');
         setData(res.data);
       } catch (err) {
-        setError(err?.response?.data?.detail || 'Could not load analytics.');
+        setError(getErrorMessage(err, 'Could not load analytics.'));
       } finally {
         setLoading(false);
       }

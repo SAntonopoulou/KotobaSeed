@@ -3,6 +3,8 @@ import client from '../api/client';
 import { useConfirm } from '../context/ModalContext';
 import QuestionBuilder, { makeQuestion } from './homework/QuestionBuilder';
 import { SkeletonCard } from './Skeleton';
+import { getErrorMessage } from '../utils/errors';
+import { formatDateTime } from '../utils/dates';
 
 // Tutor's single placement test + the optional level bands that map
 // percentage → suggested CEFR-style label. Public URL is /placement-test
@@ -35,7 +37,7 @@ const PlacementTestManager = () => {
       setTest(t.data);
       setSubmissions(s.data || []);
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not load the placement test.');
+      setError(getErrorMessage(err, 'Could not load the placement test.'));
     } finally {
       setLoading(false);
     }
@@ -111,7 +113,7 @@ const PlacementTestManager = () => {
       cancel();
       await load();
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not save.');
+      setError(getErrorMessage(err, 'Could not save.'));
     } finally {
       setBusy(false);
     }
@@ -128,7 +130,7 @@ const PlacementTestManager = () => {
       await client.delete('/tutor/placement-test');
       await load();
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not remove.');
+      setError(getErrorMessage(err, 'Could not remove.'));
     } finally {
       setBusy(false);
     }
@@ -302,7 +304,7 @@ const PlacementTestManager = () => {
                     {s.student_name || s.student_email || `Student #${s.student_user_id}`}
                   </p>
                   <p className="text-xs text-kotoba-text/60">
-                    {new Date(s.submitted_at).toLocaleString()}
+                    {formatDateTime(s.submitted_at)}
                     {s.student_email && s.student_name ? ` · ${s.student_email}` : ''}
                   </p>
                 </div>

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import client from '../api/client';
 import { useConfirm } from '../context/ModalContext';
 import { SkeletonCard } from './Skeleton';
+import { getErrorMessage } from '../utils/errors';
 
 // Single per-tutor recurring content subscription. The price field is
 // in euros for the UI; we convert to cents at save time. Existing
@@ -39,7 +40,7 @@ const SubscriptionPlanManager = () => {
       setDraftCredits(res.data.monthly_grading_credits || 0);
       setDraftRollover(Boolean(res.data.credits_roll_over));
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not load subscription plan.');
+      setError(getErrorMessage(err, 'Could not load subscription plan.'));
     } finally {
       setLoading(false);
     }
@@ -66,7 +67,7 @@ const SubscriptionPlanManager = () => {
       setPlan(res.data);
       setInfo(plan?.is_active ? 'Updated. New subscribers will pay this price.' : 'Subscription is live.');
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not save.');
+      setError(getErrorMessage(err, 'Could not save.'));
     } finally {
       setBusy(false);
     }
@@ -84,7 +85,7 @@ const SubscriptionPlanManager = () => {
       await load();
       setInfo('Subscription paused. Existing subscribers stay until period end.');
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not pause.');
+      setError(getErrorMessage(err, 'Could not pause.'));
     } finally {
       setBusy(false);
     }

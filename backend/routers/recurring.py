@@ -121,6 +121,22 @@ def create_recurring_plan(
     pack = session.get(LessonPack, payload.lesson_pack_id)
     if pack is None or pack.tutor_id != tutor.id or not pack.is_active:
         raise HTTPException(status_code=404, detail="Lesson pack not found.")
+
+    # Non-compete: a recurring plan IS a booking commitment, block it
+    # if the student is in this tutor's active protection window.
+    from ..services import team_protection as _protection
+    blocked = _protection.is_student_protected_from_tutor(
+        tutor_id=tutor.id, student_user_id=current.id, session=session
+    )
+    if blocked is not None:
+        ends = blocked.protection_ends_at.strftime("%d %b %Y")
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                f"This tutor recently moved from a school where you studied. "
+                f"Direct bookings between you re-open on {ends}."
+            ),
+        )
     if pack.is_group:
         raise HTTPException(
             status_code=400,

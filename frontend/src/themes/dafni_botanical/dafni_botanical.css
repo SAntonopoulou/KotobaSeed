@@ -1,0 +1,2849 @@
+/* ============================================================
+ * Dafni's custom theme — warm botanical.
+ *
+ * Bespoke design pack: cream / terracotta / sage. Fraunces (display)
+ * + Inter (body). Editorial feel — large photo hero, vertical layouts,
+ * hand-drawn divider treatments, drop-cap essays.
+ *
+ * NEVER use these classes outside Dafni's tenant. Every selector lives
+ * under `.theme-dafni-botanical-site` so the design ships scoped — no
+ * leak risk into the apex, Vasso's tenant, or default tutors.
+ *
+ * Variant files (frontend/src/themes/dafni_botanical/variants/) all
+ * use these classes; the layout (DafniLayout.jsx) does too.
+ *
+ * Tokens are defined on the scope root itself so descendant variants
+ * can read them as plain CSS vars without needing to know the root
+ * class name.
+ * ============================================================ */
+
+.theme-dafni-botanical-site {
+  /* ---- palette: raw colours (warm botanical) ---- */
+  --terracotta-900: #5b2a1d;
+  --terracotta-800: #7a3a28;
+  --terracotta-700: #934931;
+  --terracotta-600: #b45f4a;    /* core brand */
+  --terracotta-500: #c7745f;
+  --terracotta-400: #d99884;
+  --terracotta-300: #e6b8a8;
+  --terracotta-200: #f1d6ca;
+  --terracotta-100: #f8eae2;
+
+  --sage-900: #2a3a2e;
+  --sage-800: #3d5444;
+  --sage-700: #4f6b56;
+  --sage-600: #6b8f71;    /* core accent */
+  --sage-500: #84a98c;
+  --sage-400: #a6c0ab;
+  --sage-300: #c5d8c9;
+  --sage-200: #ddead0;
+  --sage-100: #ebf2e2;
+
+  --cream-900: #2d2823;    /* deep coffee for body text */
+  --cream-800: #4a4138;
+  --cream-700: #6b5f52;
+  --cream-600: #8b7c6a;
+  --cream-500: #b5a692;
+  --cream-400: #cdbfa8;
+  --cream-300: #e5d6bd;
+  --cream-200: #efe5d2;
+  --cream-100: #f5eee3;    /* page background */
+  --cream-050: #faf5ec;    /* card / surface */
+
+  /* ---- semantic roles ---- */
+  --bg: var(--cream-100);
+  --surface: var(--cream-050);
+  --surface-deep: #fff;
+  --surface-warm: var(--terracotta-100);
+
+  --fg: var(--cream-900);
+  --fg-muted: var(--cream-700);
+  --fg-subtle: var(--cream-600);
+  --fg-on-brand: #fff;
+
+  --border: var(--cream-300);
+  --border-strong: var(--cream-400);
+
+  --brand: var(--terracotta-600);
+  --brand-hover: var(--terracotta-700);
+  --brand-soft: var(--terracotta-100);
+
+  --accent: var(--sage-600);
+  --accent-hover: var(--sage-700);
+  --accent-soft: var(--sage-100);
+
+  --focus-ring: color-mix(in srgb, var(--terracotta-600) 35%, transparent);
+
+  /* ---- typography ---- */
+  --font-display: 'Fraunces', 'Cormorant Garamond', Georgia, serif;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-script: 'Fraunces', Georgia, serif;
+
+  /* ---- shape + shadow ---- */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 24px;
+
+  --shadow-xs: 0 1px 2px rgba(45, 40, 35, 0.05);
+  --shadow-sm: 0 2px 8px rgba(45, 40, 35, 0.06);
+  --shadow-md: 0 12px 28px -16px rgba(45, 40, 35, 0.18);
+  --shadow-lg: 0 28px 60px -32px rgba(45, 40, 35, 0.22);
+
+  /* ---- motion ---- */
+  --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --dur: 240ms;
+
+  /* page baseline */
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+
+.theme-dafni-botanical-site *,
+.theme-dafni-botanical-site *::before,
+.theme-dafni-botanical-site *::after {
+  box-sizing: border-box;
+}
+
+.theme-dafni-botanical-site a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.theme-dafni-botanical-site .d-wrap {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 0 32px;
+}
+.theme-dafni-botanical-site .d-narrow {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+/* ============================================================
+ * Buttons — calm + understated. No shadows; rely on weight + tone.
+ * ============================================================ */
+.theme-dafni-botanical-site .d-btn {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: 0.01em;
+  border: 1.5px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 12px 22px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  transition: all var(--dur) var(--ease-out);
+  text-align: center;
+}
+.theme-dafni-botanical-site .d-btn-primary {
+  background: var(--brand);
+  color: #fff;
+  border-color: var(--brand);
+}
+.theme-dafni-botanical-site .d-btn-primary:hover {
+  background: var(--brand-hover);
+  border-color: var(--brand-hover);
+  color: #fff;
+}
+.theme-dafni-botanical-site .d-btn-outline {
+  background: transparent;
+  color: var(--brand);
+  border-color: var(--brand);
+}
+.theme-dafni-botanical-site .d-btn-outline:hover {
+  background: var(--brand);
+  color: #fff;
+}
+.theme-dafni-botanical-site .d-btn-ghost {
+  background: transparent;
+  color: var(--fg);
+  border-color: transparent;
+}
+.theme-dafni-botanical-site .d-btn-ghost:hover {
+  background: var(--surface-warm);
+  color: var(--brand);
+}
+.theme-dafni-botanical-site .d-btn-lg {
+  font-size: 16px;
+  padding: 14px 28px;
+}
+
+/* ============================================================
+ * Eyebrow + display heading primitives
+ * ============================================================ */
+.theme-dafni-botanical-site .d-eyebrow {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent);
+  display: inline-block;
+}
+.theme-dafni-botanical-site h1,
+.theme-dafni-botanical-site h2,
+.theme-dafni-botanical-site h3 {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--fg);
+  margin: 0;
+}
+.theme-dafni-botanical-site h1 { font-weight: 600; }
+
+/* ============================================================
+ * Header — flat, sand background, calm
+ * ============================================================ */
+.theme-dafni-botanical-site .d-hd {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: color-mix(in srgb, var(--cream-100) 92%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border);
+}
+.theme-dafni-botanical-site .d-hd-row {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  height: 78px;
+}
+.theme-dafni-botanical-site .d-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+.theme-dafni-botanical-site .d-logo-mark {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: var(--brand);
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 24px;
+  color: #fff;
+  font-style: italic;
+  box-shadow: 0 0 0 4px var(--cream-100), 0 0 0 5.5px var(--sage-300);
+}
+.theme-dafni-botanical-site .d-logo-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1;
+}
+.theme-dafni-botanical-site .d-logo-l1 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 22px;
+  letter-spacing: -0.015em;
+  color: var(--fg);
+}
+.theme-dafni-botanical-site .d-logo-l2 {
+  font-family: var(--font-body);
+  font-style: italic;
+  font-size: 13px;
+  color: var(--accent);
+  margin-top: 3px;
+}
+.theme-dafni-botanical-site .d-nav {
+  display: flex;
+  gap: 28px;
+  margin-left: auto;
+  margin-right: auto;
+}
+.theme-dafni-botanical-site .d-nav a {
+  font-size: 14.5px;
+  font-weight: 500;
+  color: var(--fg-muted);
+  position: relative;
+  padding: 6px 0;
+  transition: color var(--dur) var(--ease-out);
+}
+.theme-dafni-botanical-site .d-nav a:hover { color: var(--brand); }
+.theme-dafni-botanical-site .d-hd-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.theme-dafni-botanical-site .d-burger {
+  display: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  color: var(--fg);
+  align-items: center;
+  justify-content: center;
+}
+.theme-dafni-botanical-site .d-burger:hover { background: var(--surface-warm); }
+
+/* ============================================================
+ * Section frame
+ * ============================================================ */
+.theme-dafni-botanical-site .d-section {
+  padding: 112px 0;
+  position: relative;
+}
+.theme-dafni-botanical-site .d-section-sand {
+  padding: 112px 0;
+  background: var(--terracotta-100);
+  position: relative;
+}
+.theme-dafni-botanical-site .d-section-sage {
+  padding: 112px 0;
+  background: var(--sage-100);
+  position: relative;
+}
+/* Sections inherit warm-band positions by structural order so the page
+ * reads as a designed editorial spread. Variant order is:
+ *   hero (own bg) → features (cream) → levels (sand) → pricing (cream)
+ *   → about (sand) → reviews (sage)
+ * Variant components render the wrapper as <section className="d-section">,
+ * so we promote alternating ones to sand/sage from the section nesting. */
+.theme-dafni-botanical-site .d-section:nth-of-type(2n) {
+  background: var(--terracotta-100);
+}
+.theme-dafni-botanical-site .d-section:nth-of-type(4n) {
+  background: var(--sage-100);
+}
+
+/* ============================================================
+ * Hero — editorial layout
+ * Large photo on right or full-width above, simple typography.
+ * ============================================================ */
+.theme-dafni-botanical-site .d-hero {
+  position: relative;
+  background:
+    radial-gradient(ellipse 80% 60% at 85% 30%, var(--terracotta-100) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at 10% 80%, var(--sage-100) 0%, transparent 65%);
+  overflow: hidden;
+}
+.theme-dafni-botanical-site .d-hero::before {
+  content: '';
+  position: absolute;
+  left: -120px;
+  bottom: -80px;
+  width: 320px;
+  height: 320px;
+  border-radius: 50%;
+  border: 2px dashed var(--sage-400);
+  opacity: 0.5;
+  pointer-events: none;
+}
+.theme-dafni-botanical-site .d-hero .d-wrap {
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 72px;
+  align-items: center;
+  padding-top: 112px;
+  padding-bottom: 128px;
+  position: relative;
+}
+.theme-dafni-botanical-site .d-hero-copy h1 {
+  font-size: clamp(3rem, 1.6rem + 5.5vw, 6rem);
+  font-weight: 600;
+  font-variation-settings: 'opsz' 144, 'SOFT' 100;
+  line-height: 1.0;
+  margin: 18px 0 28px;
+  letter-spacing: -0.025em;
+  color: var(--terracotta-900);
+}
+.theme-dafni-botanical-site .d-hero-copy h1 em {
+  font-style: italic;
+  font-weight: 500;
+  color: var(--brand);
+}
+.theme-dafni-botanical-site .d-hero-sub {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 400;
+  font-size: 22px;
+  line-height: 1.55;
+  color: var(--fg-muted);
+  max-width: 38ch;
+  margin: 0 0 36px;
+}
+.theme-dafni-botanical-site .d-hero-ctas {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.theme-dafni-botanical-site .d-hero-photo {
+  position: relative;
+  justify-self: center;
+  width: 100%;
+  max-width: 460px;
+  aspect-ratio: 4 / 5;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: var(--shadow-lg);
+  transform: rotate(0.6deg);
+}
+.theme-dafni-botanical-site .d-hero-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.theme-dafni-botanical-site .d-hero-photo-fallback {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, var(--terracotta-200) 0%, var(--sage-200) 100%);
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 600;
+  font-size: 120px;
+  color: var(--terracotta-800);
+}
+.theme-dafni-botanical-site .d-hero-decoration {
+  position: absolute;
+  top: -56px;
+  right: -56px;
+  width: 240px;
+  height: 240px;
+  border-radius: 50%;
+  border: 2px solid var(--sage-500);
+  opacity: 0.55;
+  pointer-events: none;
+}
+.theme-dafni-botanical-site .d-hero-decoration::after {
+  content: '';
+  position: absolute;
+  inset: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--terracotta-400);
+  opacity: 0.7;
+}
+
+/* Inline Greek phrase in the headline — italic terracotta, slightly
+   smaller than the surrounding display type so it reads as a label
+   rather than dominating. */
+.theme-dafni-botanical-site .d-hero-copy h1 .d-hero-greek {
+  display: inline-block;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 0.62em;
+  color: var(--brand);
+  letter-spacing: 0;
+  margin-right: 0.12em;
+  vertical-align: 0.18em;
+}
+
+/* Olive branch SVG behind the portrait. Sage stroke, large, partly
+   obscured by the photo so it reads as a backdrop motif, not an
+   illustration on top. */
+.theme-dafni-botanical-site .d-hero-branch {
+  position: absolute;
+  top: -64px;
+  left: -84px;
+  width: 380px;
+  height: auto;
+  color: var(--sage-500);
+  opacity: 0.65;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.theme-dafni-botanical-site .d-hero-photo-wrap {
+  position: relative;
+}
+.theme-dafni-botanical-site .d-hero-photo {
+  position: relative;
+  z-index: 1;
+}
+
+/* Floating pills around the portrait — terracotta level badge bottom-
+   left, sage booking indicator top-right. Cream surfaces with sage
+   hairline borders so they sit above the deeper decoration without
+   feeling stuck on. */
+.theme-dafni-botanical-site .d-hero-float {
+  position: absolute;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--cream-050);
+  border: 1px solid var(--sage-300);
+  border-radius: 999px;
+  padding: 12px 18px 12px 14px;
+  box-shadow: var(--shadow-md);
+  min-width: 168px;
+}
+.theme-dafni-botanical-site .d-hero-float-level {
+  left: -56px;
+  bottom: 52px;
+}
+.theme-dafni-botanical-site .d-hero-float-booking {
+  right: -32px;
+  top: 28px;
+  background: var(--sage-100);
+  border-color: var(--sage-400);
+}
+.theme-dafni-botanical-site .d-hero-float-glyph {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--brand);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.theme-dafni-botanical-site .d-hero-float-letter {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-style: italic;
+  font-size: 18px;
+  line-height: 1;
+  color: #fff;
+}
+.theme-dafni-botanical-site .d-hero-float-glyph svg {
+  width: 22px;
+  height: 22px;
+}
+.theme-dafni-botanical-site .d-hero-float-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--sage-700);
+  flex-shrink: 0;
+  position: relative;
+  box-shadow: 0 0 0 0 var(--sage-600);
+  animation: d-hero-pulse 2.4s ease-out infinite;
+}
+@keyframes d-hero-pulse {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--sage-600) 55%, transparent); }
+  70%  { box-shadow: 0 0 0 10px color-mix(in srgb, var(--sage-600) 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--sage-600) 0%, transparent); }
+}
+.theme-dafni-botanical-site .d-hero-float-tx {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+  gap: 2px;
+}
+.theme-dafni-botanical-site .d-hero-float-tx b {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--terracotta-900);
+}
+.theme-dafni-botanical-site .d-hero-float-paused {
+  background: var(--cream-300);
+  border-color: var(--cream-400);
+}
+.theme-dafni-botanical-site .d-hero-float-paused .d-hero-float-tx b {
+  color: var(--cream-900);
+}
+.theme-dafni-botanical-site .d-hero-float-booking .d-hero-float-tx b {
+  color: var(--sage-900);
+}
+.theme-dafni-botanical-site .d-hero-float-tx small {
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: var(--fg-muted);
+  letter-spacing: 0.01em;
+}
+
+/* Social proof row under the CTAs — overlapping avatar dots with a
+   sage rim then a small two-line note. */
+.theme-dafni-botanical-site .d-hero-proof {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 32px;
+}
+.theme-dafni-botanical-site .d-hero-proof-avs {
+  display: inline-flex;
+}
+.theme-dafni-botanical-site .d-hero-proof-avs span {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2.5px solid var(--cream-100);
+  outline: 1px solid var(--sage-300);
+  margin-left: -10px;
+}
+.theme-dafni-botanical-site .d-hero-proof-avs span:first-child { margin-left: 0; }
+.theme-dafni-botanical-site .d-hero-proof small {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--fg-muted);
+  line-height: 1.4;
+  display: inline-block;
+}
+.theme-dafni-botanical-site .d-hero-proof small b {
+  font-weight: 600;
+  color: var(--terracotta-900);
+}
+
+/* ============================================================
+ * Features — vertical stack, leaf-stem dividers
+ * ============================================================ */
+.theme-dafni-botanical-site .d-features-stack {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 36px;
+  align-items: start;
+}
+.theme-dafni-botanical-site .d-feat-step {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 32px 28px;
+  align-items: flex-start;
+  width: 100%;
+  position: relative;
+}
+.theme-dafni-botanical-site .d-feat-step-n {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 700;
+  font-size: 48px;
+  color: var(--brand);
+  text-align: left;
+  line-height: 0.9;
+  font-variation-settings: 'opsz' 144, 'SOFT' 100, 'WONK' 1;
+}
+.theme-dafni-botanical-site .d-feat-step h3 {
+  font-size: 24px;
+  font-weight: 600;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+.theme-dafni-botanical-site .d-feat-step p {
+  margin: 0;
+  font-size: 15.5px;
+  line-height: 1.65;
+  color: var(--fg-muted);
+}
+/* In horizontal layout the leaf-stem dividers between steps no longer
+   make sense — the grid carries the rhythm. Hide them so the variant
+   doesn't need a code change. */
+.theme-dafni-botanical-site .d-feat-divider { display: none; }
+
+/* ============================================================
+ * Levels — leaf pillar cards (vertical stack)
+ * ============================================================ */
+.theme-dafni-botanical-site .d-levels-stack {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 28px;
+  max-width: 1080px;
+  margin: 0 auto;
+  align-items: stretch;
+}
+.theme-dafni-botanical-site .d-level {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 32px 28px;
+  align-items: flex-start;
+  height: 100%;
+}
+.theme-dafni-botanical-site .d-level-leaf {
+  color: var(--accent);
+  opacity: 0.7;
+  width: 90px;
+  height: auto;
+}
+.theme-dafni-botanical-site .d-level h3 {
+  font-size: 28px;
+  font-weight: 500;
+  margin: 0 0 8px;
+  letter-spacing: -0.005em;
+}
+.theme-dafni-botanical-site .d-level-desc {
+  margin: 0 0 18px;
+  font-size: 16px;
+  line-height: 1.65;
+  color: var(--fg-muted);
+}
+.theme-dafni-botanical-site .d-level ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.theme-dafni-botanical-site .d-level li {
+  position: relative;
+  padding-left: 22px;
+  font-size: 15.5px;
+  color: var(--fg);
+}
+.theme-dafni-botanical-site .d-level li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 9px;
+  width: 12px;
+  height: 1.5px;
+  background: var(--accent);
+  border-radius: 1px;
+}
+
+/* Deep terracotta Levels band — the page's dramatic mid-section.
+   Overrides the cream nth-of-type alternation so this break feels
+   intentional and editorial, not just another tonal stripe. */
+.theme-dafni-botanical-site #levels.d-section {
+  background:
+    radial-gradient(ellipse 60% 50% at 15% 18%, rgba(244, 224, 200, 0.10) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 60% at 88% 88%, rgba(244, 224, 200, 0.08) 0%, transparent 65%),
+    var(--terracotta-800);
+  color: var(--cream-100);
+  position: relative;
+  overflow: hidden;
+}
+.theme-dafni-botanical-site #levels.d-section::before {
+  content: '';
+  position: absolute;
+  left: -120px;
+  top: -120px;
+  width: 360px;
+  height: 360px;
+  border-radius: 50%;
+  border: 1.5px dashed var(--cream-300);
+  opacity: 0.18;
+  pointer-events: none;
+}
+.theme-dafni-botanical-site #levels.d-section::after {
+  content: '';
+  position: absolute;
+  right: -100px;
+  bottom: -100px;
+  width: 280px;
+  height: 280px;
+  border-radius: 50%;
+  border: 1.5px solid var(--terracotta-300);
+  opacity: 0.30;
+  pointer-events: none;
+}
+.theme-dafni-botanical-site #levels .d-eyebrow { color: var(--terracotta-200); }
+.theme-dafni-botanical-site #levels h2 { color: var(--cream-100); }
+.theme-dafni-botanical-site #levels h3 { color: var(--cream-100); }
+.theme-dafni-botanical-site #levels .d-level {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(2px);
+}
+.theme-dafni-botanical-site #levels .d-level-desc { color: var(--cream-200); }
+.theme-dafni-botanical-site #levels .d-level li { color: var(--cream-200); }
+.theme-dafni-botanical-site #levels .d-level li::before {
+  background: var(--terracotta-300);
+}
+.theme-dafni-botanical-site #levels .d-level-leaf {
+  color: var(--terracotta-200);
+  opacity: 0.95;
+}
+
+/* ============================================================
+ * Pricing — horizontal 3-up grid, featured plan in centre stands out
+ * ============================================================ */
+.theme-dafni-botanical-site .d-pricing-list {
+  max-width: 1080px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 28px;
+  align-items: stretch;
+}
+.theme-dafni-botanical-site .d-price-row {
+  padding: 32px 28px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+/* Squiggle dividers no longer make sense in a side-by-side layout. */
+.theme-dafni-botanical-site .d-price-divider { display: none; }
+.theme-dafni-botanical-site .d-price-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.theme-dafni-botanical-site .d-price-row h3 {
+  font-size: 32px;
+  font-weight: 600;
+  margin: 0;
+  letter-spacing: -0.015em;
+}
+.theme-dafni-botanical-site .d-price-amt {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-style: italic;
+  font-size: 44px;
+  color: var(--brand);
+  letter-spacing: -0.02em;
+  font-variation-settings: 'opsz' 144, 'SOFT' 100;
+}
+.theme-dafni-botanical-site .d-price-amt span {
+  font-size: 16px;
+  color: var(--fg-muted);
+  font-weight: 400;
+  margin-left: 4px;
+}
+.theme-dafni-botanical-site .d-price-desc {
+  font-style: italic;
+  color: var(--fg-muted);
+  margin: 0 0 14px;
+  font-size: 16px;
+  line-height: 1.6;
+}
+.theme-dafni-botanical-site .d-price-bullets {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.theme-dafni-botanical-site .d-price-bullets li {
+  position: relative;
+  padding-left: 18px;
+  font-size: 15.5px;
+  color: var(--fg);
+}
+.theme-dafni-botanical-site .d-price-bullets li::before {
+  content: '·';
+  position: absolute;
+  left: 6px;
+  top: 0;
+  color: var(--accent);
+  font-size: 22px;
+  line-height: 1.1;
+}
+
+/* Free trial card — distinct from single lesson. Soft sage-tinted
+   background, sage dashed border, prominent FREE label. Reads as
+   "calm invitation" vs the single lesson's "paid commitment". */
+.theme-dafni-botanical-site .d-price-trial {
+  position: relative;
+  background:
+    radial-gradient(ellipse 80% 60% at 20% 20%, var(--sage-100) 0%, transparent 60%),
+    var(--cream-050);
+  border: 2px dashed var(--sage-400);
+}
+.theme-dafni-botanical-site .d-price-trial::before {
+  content: 'FREE';
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  font-family: var(--font-body);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  color: var(--sage-800);
+  background: var(--sage-100);
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--sage-400);
+}
+.theme-dafni-botanical-site .d-price-trial h3 { color: var(--sage-800); }
+.theme-dafni-botanical-site .d-price-trial .d-price-amt { color: var(--sage-700); }
+.theme-dafni-botanical-site .d-price-trial .d-btn-outline {
+  border-color: var(--sage-600);
+  color: var(--sage-800);
+}
+.theme-dafni-botanical-site .d-price-trial .d-btn-outline:hover {
+  background: var(--sage-600);
+  color: #fff;
+}
+
+/* Featured pricing card — the membership plan is the conversion goal,
+   so it gets a confident terracotta panel with cream type. In the
+   horizontal grid it lifts slightly off the row so the eye lands on
+   it without a hard-sell ribbon. */
+.theme-dafni-botanical-site .d-price-featured {
+  position: relative;
+  background:
+    radial-gradient(ellipse 70% 80% at 90% 10%, rgba(255, 255, 255, 0.10) 0%, transparent 60%),
+    var(--terracotta-600);
+  border: 1px solid var(--terracotta-700);
+  border-radius: var(--radius-lg);
+  padding: 36px 32px 32px;
+  margin: 0;
+  color: #fff;
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-12px);
+}
+.theme-dafni-botanical-site .d-price-featured::before {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: calc(var(--radius-lg) - 4px);
+  pointer-events: none;
+}
+.theme-dafni-botanical-site .d-price-featured-eyebrow {
+  display: inline-block;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 11.5px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--terracotta-100);
+  background: rgba(255, 255, 255, 0.10);
+  padding: 6px 14px;
+  border-radius: 999px;
+  margin-bottom: 18px;
+}
+.theme-dafni-botanical-site .d-price-featured h3 { color: #fff; }
+.theme-dafni-botanical-site .d-price-featured .d-price-amt {
+  color: #fff;
+  font-size: 40px;
+}
+.theme-dafni-botanical-site .d-price-featured .d-price-amt span {
+  color: var(--terracotta-200);
+}
+.theme-dafni-botanical-site .d-price-featured .d-price-desc {
+  color: var(--terracotta-100);
+  opacity: 0.92;
+}
+.theme-dafni-botanical-site .d-price-featured .d-price-bullets li { color: #fff; }
+.theme-dafni-botanical-site .d-price-featured .d-price-bullets li::before {
+  color: var(--terracotta-200);
+}
+.theme-dafni-botanical-site .d-price-featured .d-btn-primary {
+  background: #fff;
+  color: var(--brand);
+  border-color: #fff;
+}
+.theme-dafni-botanical-site .d-price-featured .d-btn-primary:hover {
+  background: var(--cream-100);
+  border-color: var(--cream-100);
+  color: var(--terracotta-800);
+}
+/* Hide squiggle dividers immediately around the featured card so it
+   reads as standalone. */
+.theme-dafni-botanical-site .d-price-featured + .d-price-divider,
+.theme-dafni-botanical-site .d-price-divider:has(+ .d-price-featured) {
+  display: none;
+}
+
+/* ============================================================
+ * About — long-form essay layout with drop cap
+ * ============================================================ */
+.theme-dafni-botanical-site .d-about {
+  max-width: 720px;
+  margin: 0 auto;
+  text-align: center;
+}
+.theme-dafni-botanical-site .d-about-photo {
+  width: 220px;
+  height: 220px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  margin: 0 auto 40px;
+  box-shadow: var(--shadow-sm);
+}
+.theme-dafni-botanical-site .d-about-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.theme-dafni-botanical-site .d-about-essay {
+  text-align: left;
+  font-family: var(--font-body);
+  font-size: 18px;
+  line-height: 1.8;
+  color: var(--fg);
+}
+.theme-dafni-botanical-site .d-about-essay::first-letter {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 700;
+  font-size: 108px;
+  float: left;
+  line-height: 0.82;
+  margin: 6px 16px 0 -4px;
+  color: var(--brand);
+  font-variation-settings: 'opsz' 144, 'SOFT' 100, 'WONK' 1;
+}
+.theme-dafni-botanical-site .d-about-signoff {
+  margin-top: 28px;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 18px;
+  color: var(--fg-muted);
+  text-align: right;
+}
+.theme-dafni-botanical-site .d-about-cta {
+  margin-top: 40px;
+  text-align: center;
+}
+
+/* ============================================================
+ * Reviews — quiet quoted strip
+ * ============================================================ */
+.theme-dafni-botanical-site .d-reviews-list {
+  max-width: 720px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 56px;
+}
+.theme-dafni-botanical-site .d-review {
+  position: relative;
+}
+.theme-dafni-botanical-site .d-review::before {
+  content: '\201C';
+  position: absolute;
+  top: -48px;
+  left: -32px;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 700;
+  font-size: 180px;
+  color: var(--terracotta-400);
+  opacity: 0.55;
+  line-height: 1;
+  font-variation-settings: 'opsz' 144, 'SOFT' 100;
+}
+.theme-dafni-botanical-site .d-review blockquote {
+  margin: 0;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 400;
+  font-size: 26px;
+  line-height: 1.5;
+  color: var(--fg);
+  padding-left: 8px;
+  position: relative;
+  z-index: 1;
+}
+.theme-dafni-botanical-site .d-review-by {
+  margin-top: 18px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--fg-muted);
+  letter-spacing: 0.04em;
+}
+.theme-dafni-botanical-site .d-review-by b {
+  color: var(--fg);
+  font-weight: 600;
+  margin-right: 8px;
+}
+
+/* ============================================================
+ * Footer — sage botanical
+ * ============================================================ */
+.theme-dafni-botanical-site .d-ft {
+  background: var(--sage-800);
+  color: var(--cream-200);
+  padding: 72px 0 36px;
+}
+.theme-dafni-botanical-site .d-ft-top {
+  display: grid;
+  grid-template-columns: 1.5fr repeat(3, 1fr);
+  gap: 40px;
+}
+.theme-dafni-botanical-site .d-ft .d-logo-l1 { color: var(--cream-100); }
+.theme-dafni-botanical-site .d-ft .d-logo-l2 { color: var(--terracotta-300); }
+.theme-dafni-botanical-site .d-ft .d-logo-mark {
+  background: var(--cream-100);
+  color: var(--sage-800);
+}
+.theme-dafni-botanical-site .d-ft-tagline {
+  margin: 32px 0 0;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 15.5px;
+  line-height: 1.7;
+  color: var(--cream-300);
+  max-width: 30ch;
+}
+.theme-dafni-botanical-site .d-ft .d-logo {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 26px;
+  margin-bottom: 8px;
+}
+.theme-dafni-botanical-site .d-ft .d-logo-mark {
+  width: 42px;
+  height: 42px;
+  font-size: 21px;
+  /* The header halo (cream ring + sage outer ring) reads loud on a dark
+     footer background and visually eats into the gap. Quieter halo here. */
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.10);
+}
+.theme-dafni-botanical-site .d-ft h4 {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--cream-100);
+  margin: 0 0 14px;
+}
+.theme-dafni-botanical-site .d-ft a {
+  display: block;
+  padding: 6px 0;
+  font-size: 14.5px;
+  color: var(--cream-300);
+  transition: color var(--dur) var(--ease-out);
+}
+.theme-dafni-botanical-site .d-ft a:hover { color: var(--terracotta-300); }
+.theme-dafni-botanical-site .d-ft-bottom {
+  margin-top: 48px;
+  padding-top: 24px;
+  border-top: 1px solid var(--sage-700);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-size: 13px;
+  color: var(--sage-400);
+}
+.theme-dafni-botanical-site .d-ft-cross {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--sage-400);
+  transition: color var(--dur) var(--ease-out);
+}
+.theme-dafni-botanical-site .d-ft-cross:hover { color: var(--terracotta-300); }
+
+/* ============================================================
+ * Mobile drawer
+ * ============================================================ */
+.theme-dafni-botanical-site .d-mob-ov {
+  position: fixed;
+  inset: 0;
+  background: rgba(45, 40, 35, 0.4);
+  backdrop-filter: blur(3px);
+  z-index: 80;
+}
+.theme-dafni-botanical-site .d-mob-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(360px, 90vw);
+  background: var(--cream-100);
+  z-index: 90;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -16px 0 40px rgba(45, 40, 35, 0.2);
+}
+.theme-dafni-botanical-site .d-mob-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 18px;
+}
+.theme-dafni-botanical-site .d-mob-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+.theme-dafni-botanical-site .d-mob-nav a {
+  font-size: 18px;
+  font-weight: 500;
+  font-family: var(--font-display);
+  padding: 14px 12px;
+  border-radius: 8px;
+  color: var(--fg);
+}
+.theme-dafni-botanical-site .d-mob-nav a:hover {
+  background: var(--surface-warm);
+  color: var(--brand);
+}
+.theme-dafni-botanical-site .d-mob-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+.theme-dafni-botanical-site .d-mob-foot .d-btn { width: 100%; justify-content: center; }
+
+/* ============================================================
+ * Content / sub-page primitives
+ * ============================================================ */
+.theme-dafni-botanical-site .d-content {
+  margin: 0 auto;
+  max-width: 720px;
+  padding: 40px 32px 80px;
+}
+.theme-dafni-botanical-site .d-content-wide {
+  margin: 0 auto;
+  max-width: 1020px;
+  padding: 40px 32px 80px;
+}
+.theme-dafni-botanical-site .d-pt {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 40px;
+  margin: 12px 0 14px;
+  letter-spacing: -0.015em;
+  color: var(--fg);
+}
+.theme-dafni-botanical-site .d-pt-sub {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 18px;
+  color: var(--fg-muted);
+  margin: 0 0 36px;
+  line-height: 1.6;
+}
+.theme-dafni-botanical-site .d-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 28px;
+  margin-bottom: 18px;
+  transition: border-color var(--dur) var(--ease-out);
+}
+.theme-dafni-botanical-site a.d-panel:hover {
+  border-color: var(--brand);
+}
+
+/* Form fields — used across Login, Register, ForgotPassword,
+   ResetPassword, BookingDialog, and any future Dafni form surface. */
+.theme-dafni-botanical-site .d-field { margin: 0 0 18px; }
+.theme-dafni-botanical-site .d-field-label {
+  display: block;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: 0.01em;
+  color: var(--fg);
+  margin: 0 0 7px;
+}
+.theme-dafni-botanical-site .d-input,
+.theme-dafni-botanical-site .d-textarea,
+.theme-dafni-botanical-site .d-select {
+  width: 100%;
+  font-family: var(--font-body);
+  font-size: 15.5px;
+  color: var(--fg);
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  transition: border-color var(--dur) var(--ease-out), box-shadow var(--dur) var(--ease-out);
+  box-sizing: border-box;
+}
+.theme-dafni-botanical-site .d-textarea {
+  min-height: 100px;
+  resize: vertical;
+  line-height: 1.55;
+}
+.theme-dafni-botanical-site .d-input::placeholder,
+.theme-dafni-botanical-site .d-textarea::placeholder {
+  color: var(--fg-subtle);
+}
+.theme-dafni-botanical-site .d-input:focus,
+.theme-dafni-botanical-site .d-textarea:focus,
+.theme-dafni-botanical-site .d-select:focus {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-soft, rgba(189, 99, 73, 0.18));
+}
+.theme-dafni-botanical-site .d-input[disabled],
+.theme-dafni-botanical-site .d-textarea[disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background: var(--surface);
+}
+.theme-dafni-botanical-site .d-field-hint {
+  font-size: 12.5px;
+  color: var(--fg-subtle);
+  margin: 6px 0 0;
+}
+.theme-dafni-botanical-site .d-field-error {
+  font-size: 12.5px;
+  color: var(--terra-700, #8a3a25);
+  margin: 6px 0 0;
+}
+.theme-dafni-botanical-site .d-form-error {
+  background: #fce9e3;
+  border: 1px solid #f3c8b8;
+  color: var(--terra-700, #8a3a25);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-size: 14px;
+  margin: 10px 0 4px;
+}
+.theme-dafni-botanical-site .d-form-success {
+  background: var(--sage-100);
+  border: 1px solid var(--sage-300);
+  color: var(--sage-700, #355942);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-size: 14px;
+  margin: 10px 0 4px;
+}
+.theme-dafni-botanical-site .d-form-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 18px;
+  font-size: 13.5px;
+}
+.theme-dafni-botanical-site .d-form-link {
+  color: var(--brand);
+  font-weight: 600;
+}
+.theme-dafni-botanical-site .d-form-link:hover { text-decoration: underline; }
+.theme-dafni-botanical-site .d-checkbox-row {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  margin-top: 4px;
+}
+.theme-dafni-botanical-site .d-checkbox-row input[type="checkbox"] {
+  margin-top: 4px;
+  accent-color: var(--brand);
+}
+.theme-dafni-botanical-site .d-checkbox-row span {
+  font-size: 13.5px;
+  color: var(--fg);
+  line-height: 1.55;
+}
+.theme-dafni-botanical-site .d-btn-block {
+  display: flex;
+  width: 100%;
+  justify-content: center;
+  margin-top: 18px;
+}
+
+/* Centered narrow form layout — Login/Register/Forgot/Reset/Verify */
+.theme-dafni-botanical-site .d-form-page {
+  margin: 0 auto;
+  max-width: 480px;
+  padding: 48px 24px 80px;
+}
+.theme-dafni-botanical-site .d-form-page .d-pt {
+  text-align: center;
+  margin-bottom: 8px;
+}
+.theme-dafni-botanical-site .d-form-page .d-pt-sub {
+  text-align: center;
+  margin-bottom: 28px;
+}
+.theme-dafni-botanical-site .d-form-page .d-panel {
+  padding: 30px;
+}
+.theme-dafni-botanical-site .d-empty {
+  text-align: center;
+  padding: 48px 24px;
+  color: var(--fg-subtle);
+  font-style: italic;
+}
+.theme-dafni-botanical-site .d-prose {
+  font-family: var(--font-body);
+  font-size: 17px;
+  line-height: 1.78;
+  color: var(--fg);
+  max-width: 660px;
+}
+.theme-dafni-botanical-site .d-prose h2 {
+  font-size: 26px;
+  margin: 1.8em 0 0.5em;
+}
+.theme-dafni-botanical-site .d-prose h3 {
+  font-size: 21px;
+  margin: 1.4em 0 0.4em;
+}
+.theme-dafni-botanical-site .d-prose p { margin: 0 0 1.2em; }
+.theme-dafni-botanical-site .d-prose a {
+  color: var(--brand);
+  border-bottom: 1px solid var(--brand);
+}
+.theme-dafni-botanical-site .d-prose blockquote {
+  border-left: 2px solid var(--accent);
+  margin: 1.4em 0;
+  padding: 4px 0 4px 20px;
+  font-family: var(--font-display);
+  font-style: italic;
+  color: var(--fg-muted);
+}
+
+/* ============================================================
+ * Article surfaces — editorial index + reader
+ * Used by DafniArticlesIndex.jsx and DafniArticleReader.jsx.
+ * Cream-card listings with a terracotta accent rule, a fully
+ * editorial reader layout with drop-cap opener, sage dividers,
+ * italic terracotta byline, and a warm botanical lesson CTA.
+ * ============================================================ */
+.theme-dafni-botanical-site .d-eyebrow-inline {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+
+/* Article index card: cream surface, generous padding, no border —
+   relies on a soft terracotta accent rule + a hairline divider above
+   the meta row. */
+.theme-dafni-botanical-site .d-article-card {
+  display: block;
+  background: var(--surface);
+  border: none;
+  border-left: 3px solid var(--brand);
+  border-radius: var(--radius-md);
+  padding: 30px 34px;
+  margin-bottom: 22px;
+  transition: transform var(--dur) var(--ease-out),
+              box-shadow var(--dur) var(--ease-out),
+              border-color var(--dur) var(--ease-out);
+}
+.theme-dafni-botanical-site .d-article-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-left-color: var(--accent);
+}
+.theme-dafni-botanical-site .d-article-card-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 26px;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  color: var(--fg);
+  margin: 0 0 10px;
+}
+.theme-dafni-botanical-site .d-article-card-summary {
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.65;
+  color: var(--fg-muted);
+  margin: 0 0 18px;
+}
+.theme-dafni-botanical-site .d-article-card-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--fg-subtle);
+  letter-spacing: 0.04em;
+}
+.theme-dafni-botanical-site .d-article-card-read {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--brand);
+  font-weight: 600;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 15px;
+  letter-spacing: 0;
+}
+
+/* Editorial back link above the article title. */
+.theme-dafni-botanical-site .d-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--fg-subtle);
+  font-family: var(--font-body);
+  font-size: 13.5px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  margin-bottom: 22px;
+  transition: color var(--dur) var(--ease-out);
+}
+.theme-dafni-botanical-site .d-back-link:hover { color: var(--brand); }
+
+/* Article reader masthead — date eyebrow, large Fraunces title,
+   italic terracotta byline. */
+.theme-dafni-botanical-site .d-article-date {
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 0 0 14px;
+}
+.theme-dafni-botanical-site .d-article-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: clamp(2.4rem, 1.6rem + 2.4vw, 3.6rem);
+  line-height: 1.08;
+  letter-spacing: -0.025em;
+  color: var(--terracotta-900);
+  margin: 0 0 18px;
+}
+.theme-dafni-botanical-site .d-article-byline {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 18.5px;
+  color: var(--brand);
+  margin: 0 0 36px;
+  letter-spacing: 0.005em;
+}
+
+/* Hairline sage divider — used between masthead, body, ratings,
+   CTA, and comments. */
+.theme-dafni-botanical-site .d-rule {
+  border: none;
+  height: 1px;
+  background: var(--sage-300);
+  opacity: 0.7;
+  margin: 40px 0;
+}
+
+/* Article body: no card chrome, just generous prose width with a
+   drop cap on the very first paragraph. */
+.theme-dafni-botanical-site .d-article-body {
+  font-family: var(--font-body);
+  font-size: 17.5px;
+  line-height: 1.78;
+  color: var(--fg);
+}
+.theme-dafni-botanical-site .d-article-body .d-prose > p:first-of-type::first-letter {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 700;
+  font-size: 88px;
+  float: left;
+  line-height: 0.82;
+  margin: 8px 14px 0 -2px;
+  color: var(--brand);
+  font-variation-settings: 'opsz' 144, 'SOFT' 100, 'WONK' 1;
+}
+
+/* Section block used for ratings + comments + CTA — soft cream
+   surface, no harsh border. */
+.theme-dafni-botanical-site .d-article-block {
+  margin-top: 36px;
+}
+.theme-dafni-botanical-site .d-section-eyebrow {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 0 0 6px;
+}
+.theme-dafni-botanical-site .d-section-heading {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 26px;
+  letter-spacing: -0.01em;
+  color: var(--fg);
+  margin: 0 0 6px;
+}
+.theme-dafni-botanical-site .d-section-sub {
+  font-family: var(--font-body);
+  font-size: 14.5px;
+  color: var(--fg-muted);
+  margin: 0;
+  line-height: 1.55;
+}
+
+/* Star picker */
+.theme-dafni-botanical-site .d-star-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.theme-dafni-botanical-site .d-star-row button {
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  color: var(--cream-400);
+  display: inline-flex;
+  transition: color var(--dur) var(--ease-out), transform var(--dur) var(--ease-out);
+}
+.theme-dafni-botanical-site .d-star-row button:hover {
+  transform: scale(1.05);
+}
+.theme-dafni-botanical-site .d-star-row button.on {
+  color: var(--brand);
+}
+
+.theme-dafni-botanical-site .d-rating-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+.theme-dafni-botanical-site .d-rating-meta {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--fg-subtle);
+  margin: 0;
+}
+.theme-dafni-botanical-site .d-rating-summary {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+.theme-dafni-botanical-site .d-rating-avg {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 600;
+  font-size: 36px;
+  color: var(--brand);
+  line-height: 1;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+.theme-dafni-botanical-site .d-rating-count {
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: var(--fg-subtle);
+  margin: 4px 0 0;
+}
+.theme-dafni-botanical-site .d-btn-sm {
+  font-size: 13.5px;
+  padding: 9px 16px;
+}
+.theme-dafni-botanical-site .d-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+.theme-dafni-botanical-site .d-actions-end {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+/* Comments */
+.theme-dafni-botanical-site .d-comments-list {
+  list-style: none;
+  padding: 0;
+  margin: 18px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.theme-dafni-botanical-site .d-comments-list li {
+  list-style: none;
+}
+.theme-dafni-botanical-site .d-comment {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 18px 22px;
+}
+.theme-dafni-botanical-site .d-comment.is-hidden {
+  background: var(--cream-200);
+  opacity: 0.65;
+}
+.theme-dafni-botanical-site .d-comment-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.theme-dafni-botanical-site .d-comment-author {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--fg);
+}
+.theme-dafni-botanical-site .d-comment-date {
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  color: var(--fg-subtle);
+  letter-spacing: 0.04em;
+}
+.theme-dafni-botanical-site .d-tag-hidden {
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--terracotta-800);
+  background: var(--terracotta-100);
+  padding: 3px 8px;
+  border-radius: 4px;
+  margin-left: 10px;
+}
+.theme-dafni-botanical-site .d-comment-body {
+  font-family: var(--font-body);
+  font-size: 15.5px;
+  line-height: 1.65;
+  color: var(--fg);
+}
+.theme-dafni-botanical-site .d-comment-body p { margin: 0 0 0.6em; }
+.theme-dafni-botanical-site .d-comment-body p:last-child { margin-bottom: 0; }
+.theme-dafni-botanical-site .d-comment-actions {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.theme-dafni-botanical-site .d-link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--brand);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  letter-spacing: 0.02em;
+}
+.theme-dafni-botanical-site .d-link-btn:hover { color: var(--brand-hover); }
+.theme-dafni-botanical-site .d-link-btn.is-danger { color: var(--terracotta-800); }
+.theme-dafni-botanical-site .d-link-btn.is-muted { color: var(--fg-muted); }
+.theme-dafni-botanical-site .d-link-btn.is-muted:hover { color: var(--brand); }
+.theme-dafni-botanical-site .d-replies {
+  list-style: none;
+  padding: 0;
+  margin: 14px 0 0 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-left: 2px solid var(--sage-300);
+  padding-left: 18px;
+}
+.theme-dafni-botanical-site .d-reply-banner {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--fg-muted);
+  margin: 0 0 8px;
+}
+.theme-dafni-botanical-site .d-reply-banner b {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+/* Lesson CTA at the foot of an article — warm botanical card with a
+   sage backdrop and a terracotta accent disc, no harsh shadow. */
+.theme-dafni-botanical-site .d-article-cta {
+  position: relative;
+  margin-top: 48px;
+  background: var(--sage-700);
+  color: #fff;
+  border-radius: var(--radius-lg);
+  padding: 40px 42px;
+  overflow: hidden;
+  box-shadow: var(--shadow-md);
+}
+.theme-dafni-botanical-site .d-article-cta::before {
+  content: '';
+  position: absolute;
+  top: -90px;
+  right: -90px;
+  width: 280px;
+  height: 280px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 40%, var(--terracotta-300) 0%, transparent 70%);
+  opacity: 0.55;
+  pointer-events: none;
+}
+.theme-dafni-botanical-site .d-article-cta::after {
+  content: '';
+  position: absolute;
+  left: -40px;
+  bottom: -40px;
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  border: 1.5px dashed var(--sage-400);
+  opacity: 0.45;
+  pointer-events: none;
+}
+.theme-dafni-botanical-site .d-article-cta-inner {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+.theme-dafni-botanical-site .d-article-cta-eyebrow {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 11.5px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--terracotta-200);
+  margin: 0;
+}
+.theme-dafni-botanical-site .d-article-cta h3 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 30px;
+  line-height: 1.15;
+  letter-spacing: -0.015em;
+  color: #fff;
+  margin: 8px 0 0;
+}
+.theme-dafni-botanical-site .d-article-cta h3 em {
+  font-style: italic;
+  font-weight: 500;
+  color: var(--terracotta-200);
+}
+.theme-dafni-botanical-site .d-article-cta-body {
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.65;
+  color: var(--cream-200);
+  max-width: 44ch;
+  margin: 12px 0 0;
+}
+.theme-dafni-botanical-site .d-article-cta-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.theme-dafni-botanical-site .d-btn-cta-primary {
+  background: var(--brand);
+  color: #fff;
+  border-color: var(--brand);
+}
+.theme-dafni-botanical-site .d-btn-cta-primary:hover {
+  background: var(--brand-hover);
+  border-color: var(--brand-hover);
+  color: #fff;
+}
+.theme-dafni-botanical-site .d-btn-cta-secondary {
+  background: transparent;
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.4);
+}
+.theme-dafni-botanical-site .d-btn-cta-secondary:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: #fff;
+  color: #fff;
+}
+.theme-dafni-botanical-site .d-cta-meta {
+  margin-left: 8px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.theme-dafni-botanical-site .d-article-error {
+  text-align: center;
+  padding: 80px 24px 48px;
+}
+.theme-dafni-botanical-site .d-article-error-mark {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 700;
+  font-size: 96px;
+  color: var(--brand);
+  line-height: 1;
+  margin: 0;
+  font-variation-settings: 'opsz' 144, 'SOFT' 100, 'WONK' 1;
+}
+.theme-dafni-botanical-site .d-article-error h1 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 28px;
+  margin: 18px 0 24px;
+  color: var(--fg);
+}
+
+/* ============================================================
+ * Classroom — themed wrapper for the Daily.co iframe.
+ * Cream stage, sage rounded border around the video frame.
+ * Connecting state uses a soft pulsing terracotta dot.
+ * ============================================================ */
+.theme-dafni-botanical-site.d-classroom-stage {
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 80% 60% at 85% 30%, var(--terracotta-100) 0%, transparent 65%),
+    radial-gradient(ellipse 60% 50% at 10% 80%, var(--sage-100) 0%, transparent 65%),
+    var(--cream-100);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+}
+.theme-dafni-botanical-site .d-classroom-frame {
+  flex: 1;
+  width: 100%;
+  border: 2px solid var(--sage-400);
+  border-radius: var(--radius-lg);
+  background: var(--cream-900);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+.theme-dafni-botanical-site .d-classroom-iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+.theme-dafni-botanical-site .d-classroom-connecting {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  padding: 80px 24px;
+}
+.theme-dafni-botanical-site .d-classroom-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--brand);
+  animation: d-classroom-pulse 1.6s var(--ease-out) infinite;
+}
+@keyframes d-classroom-pulse {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--brand) 35%, transparent); }
+  70%  { box-shadow: 0 0 0 18px color-mix(in srgb, var(--brand) 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--brand) 0%, transparent); }
+}
+.theme-dafni-botanical-site .d-classroom-connecting-label {
+  margin: 0;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 22px;
+  color: var(--fg);
+}
+.theme-dafni-botanical-site .d-classroom-connecting-sub {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 15px;
+  color: var(--fg-muted);
+}
+
+/* ============================================================
+ * Reviews page — editorial single column of large italic quotes
+ * with a terracotta-200 left rule and sage author names.
+ * Mirrors the variant ReviewsQuietQuotes treatment but tuned for
+ * the dedicated /reviews page (no centred header block).
+ * ============================================================ */
+.theme-dafni-botanical-site .d-reviews-page-list {
+  margin: 40px 0 56px;
+  display: flex;
+  flex-direction: column;
+  gap: 44px;
+}
+.theme-dafni-botanical-site .d-review-quiet {
+  margin: 0;
+  padding: 4px 0 4px 28px;
+  border-left: 3px solid var(--terracotta-200);
+  position: relative;
+}
+.theme-dafni-botanical-site .d-review-quiet-body {
+  margin: 0;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 400;
+  font-size: 24px;
+  line-height: 1.55;
+  color: var(--fg);
+  font-variation-settings: 'opsz' 144, 'SOFT' 100;
+}
+.theme-dafni-botanical-site .d-review-quiet-by {
+  margin-top: 14px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--fg-muted);
+  letter-spacing: 0.04em;
+}
+.theme-dafni-botanical-site .d-review-quiet-by b {
+  color: var(--accent);
+  font-weight: 600;
+  font-style: normal;
+  margin-right: 4px;
+  font-family: var(--font-display);
+  font-size: 16px;
+  letter-spacing: 0;
+}
+
+/* ============================================================
+ * Review submission — cream panel + terracotta star picker.
+ * ============================================================ */
+.theme-dafni-botanical-site .d-review-submit {
+  margin-top: 40px;
+}
+.theme-dafni-botanical-site .d-review-submit-eyebrow {
+  margin-bottom: 12px;
+}
+.theme-dafni-botanical-site .d-review-submit-helper {
+  margin: 0 0 22px;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 17px;
+  line-height: 1.55;
+  color: var(--fg-muted);
+}
+.theme-dafni-botanical-site .d-star-picker {
+  display: inline-flex;
+  gap: 6px;
+}
+.theme-dafni-botanical-site .d-star-picker button {
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  color: var(--terracotta-300);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--dur) var(--ease-out), transform var(--dur) var(--ease-out);
+}
+.theme-dafni-botanical-site .d-star-picker button:hover {
+  transform: translateY(-1px);
+  color: var(--terracotta-500);
+}
+.theme-dafni-botanical-site .d-star-picker button.on {
+  color: var(--terracotta-600);
+}
+.theme-dafni-botanical-site .d-star-picker button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ============================================================
+ * Booking dialog — modal overlay used by DafniBookingDialog.
+ * Calm dark overlay, cream dialog body, sage hairline border,
+ * Fraunces italic title, terracotta accent rule under header.
+ * ============================================================ */
+.theme-dafni-botanical-site.d-bd-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(3px);
+}
+.theme-dafni-botanical-site .d-bd-dialog {
+  background: var(--cream-050);
+  border: 1px solid var(--sage-300);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: 32px;
+  max-width: 560px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--sage-400) transparent;
+}
+.theme-dafni-botanical-site .d-bd-dialog::-webkit-scrollbar { width: 6px; }
+.theme-dafni-botanical-site .d-bd-dialog::-webkit-scrollbar-track { background: transparent; }
+.theme-dafni-botanical-site .d-bd-dialog::-webkit-scrollbar-thumb {
+  background: var(--sage-300);
+  border-radius: 3px;
+}
+.theme-dafni-botanical-site .d-bd-dialog::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}
+.theme-dafni-botanical-site .d-bd-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+.theme-dafni-botanical-site .d-bd-title {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 600;
+  font-size: 28px;
+  letter-spacing: -0.015em;
+  color: var(--terracotta-900);
+  margin: 0;
+  line-height: 1.15;
+  font-variation-settings: 'opsz' 144, 'SOFT' 100;
+}
+.theme-dafni-botanical-site .d-bd-sub {
+  margin: 8px 0 0;
+  font-size: 14.5px;
+  color: var(--fg-muted);
+  font-family: var(--font-body);
+}
+.theme-dafni-botanical-site .d-bd-close {
+  background: none;
+  border: none;
+  color: var(--fg-subtle);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: var(--radius-sm);
+  display: grid;
+  place-items: center;
+  transition: background var(--dur) var(--ease-out), color var(--dur) var(--ease-out);
+}
+.theme-dafni-botanical-site .d-bd-close:hover {
+  background: var(--surface-warm);
+  color: var(--brand);
+}
+.theme-dafni-botanical-site .d-bd-rule {
+  height: 2px;
+  width: 56px;
+  background: var(--brand);
+  border-radius: 1px;
+  margin: 6px 0 22px;
+}
+.theme-dafni-botanical-site .d-bd-section-label {
+  font-family: var(--font-body);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--fg);
+  margin: 0 0 10px;
+  letter-spacing: 0.01em;
+}
+.theme-dafni-botanical-site .d-bd-loading {
+  font-size: 14px;
+  color: var(--fg-muted);
+  font-style: italic;
+  margin: 0;
+}
+.theme-dafni-botanical-site .d-bd-empty-slots {
+  font-size: 14px;
+  color: var(--fg-muted);
+  background: var(--surface-warm);
+  border: 1px solid var(--terracotta-200);
+  padding: 16px;
+  border-radius: var(--radius-md);
+}
+.theme-dafni-botanical-site .d-bd-slot-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding-right: 6px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--sage-400) transparent;
+}
+.theme-dafni-botanical-site .d-bd-slot-scroll::-webkit-scrollbar { width: 6px; }
+.theme-dafni-botanical-site .d-bd-slot-scroll::-webkit-scrollbar-track { background: transparent; }
+.theme-dafni-botanical-site .d-bd-slot-scroll::-webkit-scrollbar-thumb {
+  background: var(--sage-300);
+  border-radius: 3px;
+}
+.theme-dafni-botanical-site .d-bd-slot-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}
+.theme-dafni-botanical-site .d-bd-day-label {
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  margin: 0 0 8px;
+}
+.theme-dafni-botanical-site .d-bd-slot-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.theme-dafni-botanical-site .d-bd-slot {
+  font-family: var(--font-body);
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1.5px solid var(--border-strong);
+  background: var(--cream-050);
+  color: var(--fg);
+  transition: all var(--dur) var(--ease-out);
+}
+.theme-dafni-botanical-site .d-bd-slot:hover {
+  border-color: var(--brand);
+  color: var(--brand);
+  background: var(--brand-soft);
+}
+.theme-dafni-botanical-site .d-bd-slot-picked {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+.theme-dafni-botanical-site .d-bd-slot-picked:hover {
+  background: var(--brand-hover);
+  border-color: var(--brand-hover);
+  color: #fff;
+}
+.theme-dafni-botanical-site .d-bd-tz-note {
+  margin: 10px 0 0;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 13px;
+  color: var(--sage-700);
+  background: var(--sage-100);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+}
+.theme-dafni-botanical-site .d-bd-total {
+  margin-top: 22px;
+  background: var(--surface-warm);
+  border-radius: var(--radius-md);
+  padding: 18px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.theme-dafni-botanical-site .d-bd-total-label {
+  font-size: 14.5px;
+  color: var(--fg);
+  font-weight: 600;
+}
+.theme-dafni-botanical-site .d-bd-total-amt {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 700;
+  font-size: 30px;
+  color: var(--brand);
+  letter-spacing: -0.015em;
+  font-variation-settings: 'opsz' 144, 'SOFT' 100;
+}
+.theme-dafni-botanical-site .d-bd-trial-note {
+  margin-top: 22px;
+  background: var(--sage-100);
+  border: 1px solid var(--sage-300);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 15px;
+  color: var(--sage-800);
+}
+.theme-dafni-botanical-site .d-bd-intro-hint {
+  font-size: 12.5px;
+  color: var(--fg-subtle);
+  margin: 6px 0 0;
+}
+.theme-dafni-botanical-site .d-bd-intro-warn {
+  display: block;
+  color: var(--terracotta-700);
+  margin-top: 3px;
+}
+.theme-dafni-botanical-site .d-bd-cutoff {
+  margin-top: 16px;
+  background: var(--terracotta-100);
+  border: 1px solid var(--terracotta-300);
+  color: var(--fg);
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+}
+.theme-dafni-botanical-site .d-bd-cutoff-title {
+  font-weight: 700;
+  margin: 0 0 4px;
+  color: var(--terracotta-900);
+}
+.theme-dafni-botanical-site .d-bd-cutoff-body {
+  margin: 0 0 10px;
+}
+.theme-dafni-botanical-site .d-bd-signin-note {
+  margin-top: 14px;
+  font-size: 12.5px;
+  color: var(--fg-subtle);
+  font-style: italic;
+}
+.theme-dafni-botanical-site .d-bd-confirm {
+  width: 100%;
+  justify-content: center;
+  margin-top: 20px;
+}
+.theme-dafni-botanical-site .d-bd-foot-note {
+  margin-top: 10px;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--fg-subtle);
+}
+
+/* ============================================================
+ * Booking success / cancelled pages — DafniLayout(simple) content
+ * ============================================================ */
+.theme-dafni-botanical-site .d-bs-wrap,
+.theme-dafni-botanical-site .d-bc-wrap {
+  text-align: center;
+  padding-top: 72px;
+}
+.theme-dafni-botanical-site .d-bs-mark {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: var(--sage-100);
+  display: grid;
+  place-items: center;
+  margin: 0 auto 24px;
+  color: var(--sage-700);
+  box-shadow: 0 0 0 6px var(--cream-100), 0 0 0 7px var(--sage-300);
+}
+.theme-dafni-botanical-site .d-bs-check { color: var(--sage-700); }
+.theme-dafni-botanical-site .d-bs-title,
+.theme-dafni-botanical-site .d-bc-title {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 600;
+  font-size: clamp(2.4rem, 1.4rem + 3.2vw, 4rem);
+  letter-spacing: -0.02em;
+  color: var(--terracotta-900);
+  margin: 0 0 18px;
+  font-variation-settings: 'opsz' 144, 'SOFT' 100;
+  line-height: 1.05;
+}
+.theme-dafni-botanical-site .d-bs-sub,
+.theme-dafni-botanical-site .d-bc-sub {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 19px;
+  line-height: 1.6;
+  color: var(--fg-muted);
+  margin: 0 auto 32px;
+  max-width: 480px;
+}
+.theme-dafni-botanical-site .d-bs-actions,
+.theme-dafni-botanical-site .d-bc-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+}
+
+/* ============================================================
+ * Modules storefront + detail
+ * Used by DafniModulesStorefront.jsx and DafniModuleDetail.jsx.
+ *
+ * Editorial treatment: cream cards with a terracotta accent rule,
+ * generous whitespace, sage row divider, Fraunces module titles,
+ * italic terracotta price tags. Lesson list uses a leaf marker +
+ * terracotta lesson number on a sage left rule. Lock state is a
+ * calm terracotta tint — no aggressive treatment.
+ * ============================================================ */
+
+/* Inline eyebrow with leading icon (storefront header) */
+.theme-dafni-botanical-site .d-mod-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+/* Storefront grid: airy, multi-column */
+.theme-dafni-botanical-site .d-mod-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 36px 28px;
+  margin-top: 12px;
+  padding-top: 8px;
+}
+
+/* Module card: cream surface, no shadow, terracotta accent rule on top */
+.theme-dafni-botanical-site .d-mod-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--brand);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  transition: border-color var(--dur) var(--ease-out);
+  color: inherit;
+}
+.theme-dafni-botanical-site .d-mod-card:hover {
+  border-color: var(--brand);
+  border-top-color: var(--brand-hover);
+}
+
+/* Card image + fallback initial */
+.theme-dafni-botanical-site .d-mod-card-img {
+  width: 100%;
+  height: 180px;
+  object-fit: cover;
+  display: block;
+  border-bottom: 1px solid var(--border);
+}
+.theme-dafni-botanical-site .d-mod-card-img-fallback {
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, var(--terracotta-100) 0%, var(--sage-100) 100%);
+}
+.theme-dafni-botanical-site .d-mod-card-img-fallback span {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 600;
+  font-size: 80px;
+  color: var(--terracotta-700);
+  opacity: 0.55;
+}
+
+/* Card body: generous padding, Fraunces title */
+.theme-dafni-botanical-site .d-mod-card-body {
+  padding: 26px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+.theme-dafni-botanical-site .d-mod-card-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 22px;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--fg);
+  margin: 0;
+}
+.theme-dafni-botanical-site .d-mod-card-summary {
+  margin: 10px 0 0;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--fg-muted);
+  flex: 1;
+}
+.theme-dafni-botanical-site .d-mod-card-meta {
+  margin-top: 22px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.theme-dafni-botanical-site .d-mod-card-price {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 600;
+  font-size: 26px;
+  color: var(--brand);
+  letter-spacing: -0.01em;
+  font-variation-settings: 'opsz' 144, 'SOFT' 100;
+}
+.theme-dafni-botanical-site .d-mod-card-count {
+  font-family: var(--font-body);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--fg-subtle);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.theme-dafni-botanical-site .d-mod-card-free { color: var(--accent); }
+.theme-dafni-botanical-site .d-mod-card-cta {
+  margin-top: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 13.5px;
+  color: var(--brand);
+}
+
+/* Module detail page wrapper — wider editorial layout */
+.theme-dafni-botanical-site .d-mod-detail {
+  max-width: 820px;
+  padding-top: 32px;
+}
+.theme-dafni-botanical-site .d-mod-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--fg-subtle);
+  margin-bottom: 22px;
+  transition: color var(--dur) var(--ease-out);
+}
+.theme-dafni-botanical-site .d-mod-back:hover { color: var(--brand); }
+.theme-dafni-botanical-site .d-mod-hero-img {
+  width: 100%;
+  max-height: 340px;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+  margin-bottom: 32px;
+  box-shadow: var(--shadow-sm);
+  display: block;
+}
+
+/* Detail header: editorial, Fraunces title, italic summary lede */
+.theme-dafni-botanical-site .d-mod-head {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 28px;
+  margin-bottom: 36px;
+}
+.theme-dafni-botanical-site .d-mod-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: clamp(2.2rem, 1.4rem + 2.4vw, 3.2rem);
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  color: var(--terracotta-900);
+  margin: 14px 0 18px;
+}
+.theme-dafni-botanical-site .d-mod-summary {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 20px;
+  line-height: 1.55;
+  color: var(--fg-muted);
+  margin: 0 0 18px;
+}
+.theme-dafni-botanical-site .d-mod-desc {
+  font-family: var(--font-body);
+  font-size: 16.5px;
+  line-height: 1.75;
+  color: var(--fg);
+  margin: 0;
+  white-space: pre-line;
+}
+
+/* Lessons section */
+.theme-dafni-botanical-site .d-mod-section {
+  margin-bottom: 40px;
+}
+.theme-dafni-botanical-site .d-mod-section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 22px;
+}
+.theme-dafni-botanical-site .d-mod-section-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 26px;
+  letter-spacing: -0.01em;
+  color: var(--fg);
+  margin: 0;
+}
+.theme-dafni-botanical-site .d-mod-section-meta {
+  font-family: var(--font-body);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--fg-subtle);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.theme-dafni-botanical-site .d-mod-empty {
+  font-size: 15px;
+  color: var(--fg-muted);
+  font-style: italic;
+}
+.theme-dafni-botanical-site .d-mod-lessons {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Lesson card: cream bg, sage left rule, terracotta lesson number */
+.theme-dafni-botanical-site .d-mod-lesson {
+  display: grid;
+  grid-template-columns: 58px 1fr;
+  gap: 16px;
+  padding: 18px 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-md);
+  transition: border-color var(--dur) var(--ease-out);
+}
+.theme-dafni-botanical-site .d-mod-lesson:hover {
+  border-color: var(--border-strong);
+  border-left-color: var(--accent-hover);
+}
+.theme-dafni-botanical-site .d-mod-lesson-locked {
+  background: var(--terracotta-100);
+  border-color: var(--terracotta-200);
+  border-left-color: var(--terracotta-400);
+}
+.theme-dafni-botanical-site .d-mod-lesson-locked:hover {
+  border-color: var(--terracotta-300);
+  border-left-color: var(--terracotta-500);
+}
+.theme-dafni-botanical-site .d-mod-lesson-marker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding-top: 2px;
+}
+.theme-dafni-botanical-site .d-mod-leaf {
+  color: var(--accent);
+  opacity: 0.75;
+}
+.theme-dafni-botanical-site .d-mod-lesson-locked .d-mod-leaf {
+  color: var(--terracotta-500);
+  opacity: 0.7;
+}
+.theme-dafni-botanical-site .d-mod-lesson-n {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--brand);
+  letter-spacing: -0.01em;
+  line-height: 1;
+}
+.theme-dafni-botanical-site .d-mod-lesson-body {
+  min-width: 0;
+}
+.theme-dafni-botanical-site .d-mod-lesson-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.theme-dafni-botanical-site .d-mod-lesson-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 18px;
+  letter-spacing: -0.005em;
+  color: var(--fg);
+  line-height: 1.3;
+}
+.theme-dafni-botanical-site .d-mod-lesson-link {
+  color: var(--brand);
+  transition: color var(--dur) var(--ease-out);
+}
+.theme-dafni-botanical-site .d-mod-lesson-link:hover {
+  color: var(--brand-hover);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+.theme-dafni-botanical-site .d-mod-lesson-title-locked { color: var(--fg-muted); }
+.theme-dafni-botanical-site .d-mod-lesson-summary {
+  margin: 6px 0 0;
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--fg-muted);
+}
+
+/* Lesson row pills — preview, locked, kind tag */
+.theme-dafni-botanical-site .d-mod-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-body);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 4px 8px;
+  border-radius: var(--radius-xs);
+  white-space: nowrap;
+}
+.theme-dafni-botanical-site .d-mod-pill-preview {
+  color: var(--accent-hover);
+  background: var(--accent-soft);
+}
+.theme-dafni-botanical-site .d-mod-pill-locked {
+  color: var(--terracotta-800);
+  background: transparent;
+  letter-spacing: 0.06em;
+  text-transform: none;
+  font-weight: 600;
+  font-size: 12px;
+  padding: 0;
+}
+.theme-dafni-botanical-site .d-mod-pill-tag {
+  color: var(--fg-subtle);
+  background: var(--cream-200);
+  letter-spacing: 0.08em;
+}
+
+/* Buy panel — quiet centred CTA */
+.theme-dafni-botanical-site .d-mod-buy {
+  text-align: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 40px 32px;
+}
+.theme-dafni-botanical-site .d-mod-buy .d-eyebrow {
+  margin-bottom: 14px;
+}
+.theme-dafni-botanical-site .d-mod-buy-price {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 600;
+  font-size: 56px;
+  color: var(--brand);
+  letter-spacing: -0.02em;
+  line-height: 1;
+  margin: 4px 0 8px;
+  font-variation-settings: 'opsz' 144, 'SOFT' 100;
+}
+.theme-dafni-botanical-site .d-mod-buy-meta {
+  font-size: 14.5px;
+  color: var(--fg-muted);
+  margin: 0 0 22px;
+}
+.theme-dafni-botanical-site .d-mod-buy-cta {
+  min-width: 240px;
+  justify-content: center;
+}
+
+/* Detail not-found state */
+.theme-dafni-botanical-site .d-mod-notfound {
+  text-align: center;
+  padding-top: 64px;
+}
+.theme-dafni-botanical-site .d-mod-notfound-mark {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 700;
+  font-size: 88px;
+  color: var(--brand);
+  line-height: 1;
+  margin: 0;
+  font-variation-settings: 'opsz' 144, 'SOFT' 100, 'WONK' 1;
+}
+.theme-dafni-botanical-site .d-mod-notfound-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 26px;
+  color: var(--fg);
+  margin: 14px 0 22px;
+}
+
+/* ============================================================
+ * Responsive
+ * ============================================================ */
+@media (max-width: 1024px) {
+  .theme-dafni-botanical-site .d-hero .d-wrap {
+    grid-template-columns: 1fr;
+    gap: 48px;
+    padding-bottom: 80px;
+  }
+  .theme-dafni-botanical-site .d-hero-photo { max-width: 320px; }
+  .theme-dafni-botanical-site .d-hero-branch { width: 240px; left: -32px; top: -32px; }
+  .theme-dafni-botanical-site .d-hero-float { min-width: 152px; padding: 10px 16px 10px 12px; }
+  .theme-dafni-botanical-site .d-hero-float-level { left: -16px; bottom: 16px; }
+  .theme-dafni-botanical-site .d-hero-float-booking { right: -16px; top: 8px; }
+  .theme-dafni-botanical-site .d-price-featured { padding: 32px 28px; transform: none; }
+  .theme-dafni-botanical-site .d-price-featured .d-price-amt { font-size: 38px; }
+  .theme-dafni-botanical-site .d-features-stack,
+  .theme-dafni-botanical-site .d-levels-stack,
+  .theme-dafni-botanical-site .d-pricing-list {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  .theme-dafni-botanical-site .d-nav { display: none; }
+  .theme-dafni-botanical-site .d-hd-right .d-btn { display: none; }
+  .theme-dafni-botanical-site .d-burger { display: grid; }
+  .theme-dafni-botanical-site .d-level {
+    grid-template-columns: 80px 1fr;
+    gap: 24px;
+    padding: 24px;
+  }
+  .theme-dafni-botanical-site .d-ft-top {
+    grid-template-columns: 1fr 1fr;
+    gap: 30px;
+  }
+}
+
+@media (max-width: 600px) {
+  .theme-dafni-botanical-site .d-wrap { padding: 0 22px; }
+  .theme-dafni-botanical-site .d-section,
+  .theme-dafni-botanical-site .d-section-sand,
+  .theme-dafni-botanical-site .d-section-sage { padding: 64px 0; }
+  .theme-dafni-botanical-site .d-hero .d-wrap {
+    padding-top: 56px;
+    padding-bottom: 56px;
+    gap: 36px;
+  }
+  .theme-dafni-botanical-site .d-feat-step {
+    grid-template-columns: 44px 1fr;
+    gap: 18px;
+  }
+  .theme-dafni-botanical-site .d-feat-step-n { font-size: 26px; }
+  .theme-dafni-botanical-site .d-feat-step h3 { font-size: 22px; }
+  .theme-dafni-botanical-site .d-level {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+  .theme-dafni-botanical-site .d-level-leaf {
+    width: 80px;
+    height: 80px;
+  }
+  .theme-dafni-botanical-site .d-pt { font-size: 32px; }
+  .theme-dafni-botanical-site .d-price-row h3 { font-size: 22px; }
+  .theme-dafni-botanical-site .d-price-amt { font-size: 28px; }
+  .theme-dafni-botanical-site .d-about-essay { font-size: 17px; }
+  .theme-dafni-botanical-site .d-about-essay::first-letter { font-size: 60px; }
+  .theme-dafni-botanical-site .d-review blockquote { font-size: 19px; }
+  .theme-dafni-botanical-site .d-ft-top { grid-template-columns: 1fr; }
+  .theme-dafni-botanical-site .d-article-card { padding: 24px 22px; }
+  .theme-dafni-botanical-site .d-article-card-title { font-size: 22px; }
+  .theme-dafni-botanical-site .d-mod-grid { gap: 24px 18px; }
+  .theme-dafni-botanical-site .d-mod-card-body { padding: 22px 20px; }
+  .theme-dafni-botanical-site .d-mod-card-title { font-size: 20px; }
+  .theme-dafni-botanical-site .d-mod-title { font-size: 32px; }
+  .theme-dafni-botanical-site .d-mod-summary { font-size: 17px; }
+  .theme-dafni-botanical-site .d-mod-lesson {
+    grid-template-columns: 44px 1fr;
+    gap: 12px;
+    padding: 16px;
+  }
+  .theme-dafni-botanical-site .d-mod-lesson-title { font-size: 16.5px; }
+  .theme-dafni-botanical-site .d-mod-buy { padding: 32px 22px; }
+  .theme-dafni-botanical-site .d-mod-buy-price { font-size: 44px; }
+  .theme-dafni-botanical-site .d-article-cta { padding: 30px 26px; }
+  .theme-dafni-botanical-site .d-article-cta h3 { font-size: 24px; }
+  .theme-dafni-botanical-site .d-article-body { font-size: 16.5px; }
+  .theme-dafni-botanical-site .d-article-body .d-prose > p:first-of-type::first-letter {
+    font-size: 60px;
+  }
+  .theme-dafni-botanical-site .d-replies { margin-left: 14px; padding-left: 12px; }
+  .theme-dafni-botanical-site.d-classroom-stage { padding: 12px; }
+  .theme-dafni-botanical-site .d-classroom-frame { border-radius: var(--radius-md); }
+  .theme-dafni-botanical-site .d-review-quiet { padding-left: 18px; }
+  .theme-dafni-botanical-site .d-review-quiet-body { font-size: 19px; }
+  .theme-dafni-botanical-site .d-review-submit-helper { font-size: 15.5px; }
+  .theme-dafni-botanical-site .d-bd-dialog { padding: 24px; border-radius: var(--radius-md); }
+  .theme-dafni-botanical-site .d-bd-title { font-size: 24px; }
+  .theme-dafni-botanical-site .d-bs-wrap,
+  .theme-dafni-botanical-site .d-bc-wrap { padding-top: 48px; }
+  .theme-dafni-botanical-site .d-bs-mark { width: 96px; height: 96px; }
+  .theme-dafni-botanical-site .d-bs-mark svg { width: 72px; height: 72px; }
+}

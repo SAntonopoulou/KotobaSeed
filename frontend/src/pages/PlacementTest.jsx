@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import client from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { apexUrl } from '../hooks/useTenant';
+import { getErrorMessage } from '../utils/errors';
 
 // Public take-the-placement-test page on a tutor subdomain. Students who
 // aren't logged in get redirected to /login first; the redirect carries
@@ -30,7 +31,7 @@ const PlacementTest = () => {
         setTutor(tutorRes.data || null);
         setTest(testRes.data || null);
       } catch (err) {
-        setError(err?.response?.data?.detail || 'Could not load this page.');
+        setError(getErrorMessage(err, 'Could not load this page.'));
       } finally {
         setLoading(false);
       }
@@ -59,7 +60,7 @@ const PlacementTest = () => {
       const res = await client.post('/tutor/placement-test/submit', { answers });
       setResult(res.data);
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not submit.');
+      setError(getErrorMessage(err, 'Could not submit.'));
     } finally {
       setSubmitting(false);
     }

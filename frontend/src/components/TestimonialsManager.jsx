@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import client from '../api/client';
 import { useConfirm } from '../context/ModalContext';
+import { useToast } from '../context/ToastContext';
 import { SkeletonCard } from './Skeleton';
+import { getErrorMessage } from '../utils/errors';
 
 // Per-tutor testimonials manager. Tutor types in their own student
 // testimonials (no public submission flow in v1). Each row has student
@@ -40,6 +42,7 @@ const StarRating = ({ value, onChange, disabled }) => (
 
 const TestimonialsManager = () => {
   const confirm = useConfirm();
+  const { addToast } = useToast();
   const [items, setItems] = useState([]);
   const [editingId, setEditingId] = useState(null); // null = list view, 'new' = add form, number = edit row
   const [form, setForm] = useState(blank);
@@ -53,7 +56,7 @@ const TestimonialsManager = () => {
       const res = await client.get('/testimonials/all');
       setItems(res.data || []);
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not load testimonials.');
+      setError(getErrorMessage(err, 'Could not load testimonials.'));
     } finally {
       setLoading(false);
     }
@@ -112,7 +115,7 @@ const TestimonialsManager = () => {
       cancelEdit();
       await load();
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not save.');
+      setError(getErrorMessage(err, 'Could not save.'));
     } finally {
       setSaving(false);
     }
@@ -121,7 +124,7 @@ const TestimonialsManager = () => {
   const handleDelete = async (item) => {
     if (!(await confirm({
       title: 'Delete testimonial',
-      message: `Delete the testimonial from ${item.student_name}?`,
+      message: `Delete the testimonial from ${item.student_name}? You can undo from the toast.`,
       confirmText: 'Delete',
       destructive: true,
     }))) return;
@@ -130,8 +133,22 @@ const TestimonialsManager = () => {
     try {
       await client.delete(`/testimonials/${item.id}`);
       await load();
+      addToast({
+        message: `Deleted testimonial from ${item.student_name}.`,
+        type: 'success',
+        undo: {
+          onUndo: async () => {
+            try {
+              await client.post(`/testimonials/${item.id}/restore`);
+              await load();
+            } catch (err) {
+              setError(getErrorMessage(err, 'Restore failed.'));
+            }
+          },
+        },
+      });
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not delete.');
+      setError(getErrorMessage(err, 'Could not delete.'));
     } finally {
       setSaving(false);
     }
@@ -146,7 +163,7 @@ const TestimonialsManager = () => {
       });
       await load();
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not save.');
+      setError(getErrorMessage(err, 'Could not save.'));
     } finally {
       setSaving(false);
     }

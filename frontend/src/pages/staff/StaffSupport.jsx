@@ -4,6 +4,8 @@ import client from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { useConfirm } from '../../context/ModalContext';
+import { getErrorMessage } from '../../utils/errors';
+import { formatDateTime } from '../../utils/dates';
 
 const STATUS_LABEL = {
   open: 'Open',
@@ -30,7 +32,7 @@ const PRIORITY_TONE = {
 
 const formatWhen = (iso) => {
   try {
-    return new Date(iso).toLocaleString();
+    return formatDateTime(iso);
   } catch {
     return iso;
   }
@@ -103,7 +105,7 @@ const StaffTicketDetail = ({ id, currentUser }) => {
       const res = await client.get(`/support/tickets/${id}`);
       setTicket(res.data);
     } catch (err) {
-      addToast(err?.response?.data?.detail || 'Ticket not found.', 'error');
+      addToast(getErrorMessage(err, 'Ticket not found.'), 'error');
       navigate('/staff/support');
     } finally {
       setLoading(false);
@@ -129,7 +131,7 @@ const StaffTicketDetail = ({ id, currentUser }) => {
       setTicket(res.data);
       addToast('Status updated.', 'success');
     } catch (err) {
-      addToast(err?.response?.data?.detail || 'Could not change status.', 'error');
+      addToast(getErrorMessage(err, 'Could not change status.'), 'error');
     } finally {
       setBusy(false);
     }
@@ -144,7 +146,7 @@ const StaffTicketDetail = ({ id, currentUser }) => {
       setTicket(res.data);
       addToast('Priority updated.', 'success');
     } catch (err) {
-      addToast(err?.response?.data?.detail || 'Could not change priority.', 'error');
+      addToast(getErrorMessage(err, 'Could not change priority.'), 'error');
     } finally {
       setBusy(false);
     }
@@ -159,7 +161,7 @@ const StaffTicketDetail = ({ id, currentUser }) => {
       setTicket(res.data);
       addToast(userId ? 'Assigned.' : 'Unassigned.', 'success');
     } catch (err) {
-      addToast(err?.response?.data?.detail || 'Could not assign.', 'error');
+      addToast(getErrorMessage(err, 'Could not assign.'), 'error');
     } finally {
       setBusy(false);
     }
@@ -177,7 +179,7 @@ const StaffTicketDetail = ({ id, currentUser }) => {
       setTicket(res.data);
       addToast('Escalated.', 'success');
     } catch (err) {
-      addToast(err?.response?.data?.detail || 'Could not escalate.', 'error');
+      addToast(getErrorMessage(err, 'Could not escalate.'), 'error');
     } finally {
       setBusy(false);
     }
@@ -195,7 +197,7 @@ const StaffTicketDetail = ({ id, currentUser }) => {
       setReply('');
       addToast('Reply sent.', 'success');
     } catch (err) {
-      addToast(err?.response?.data?.detail || 'Could not send reply.', 'error');
+      addToast(getErrorMessage(err, 'Could not send reply.'), 'error');
     } finally {
       setBusy(false);
     }
@@ -213,7 +215,7 @@ const StaffTicketDetail = ({ id, currentUser }) => {
       setInternalNote('');
       addToast('Internal note saved.', 'success');
     } catch (err) {
-      addToast(err?.response?.data?.detail || 'Could not save note.', 'error');
+      addToast(getErrorMessage(err, 'Could not save note.'), 'error');
     } finally {
       setBusy(false);
     }
@@ -387,7 +389,9 @@ const StaffTicketDetail = ({ id, currentUser }) => {
 };
 
 const StaffSupport = () => {
-  const { token } = useAuth();
+  // Source of truth: AuthContext.currentUser. Per-origin localStorage
+  // would bounce a cookie-only SSO session straight to /login.
+  const { currentUser: authUser, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const { ticketId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -400,7 +404,8 @@ const StaffSupport = () => {
   const assignedFilter = searchParams.get('assigned_to_me') === '1';
 
   useEffect(() => {
-    if (!token) {
+    if (authLoading) return;
+    if (!authUser) {
       navigate('/login');
       return;
     }
@@ -415,7 +420,7 @@ const StaffSupport = () => {
         navigate('/login');
       }
     })();
-  }, [token, navigate]);
+  }, [authLoading, authUser, navigate]);
 
   const load = async () => {
     setLoading(true);

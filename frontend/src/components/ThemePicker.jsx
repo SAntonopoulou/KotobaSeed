@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import client from '../api/client';
 import { SkeletonCard } from './Skeleton';
+import { getErrorMessage } from '../utils/errors';
 
 // Pro+ feature. We render the picker for everyone so free tutors can see
 // what they'd unlock; save calls 402 for non-Pro and we show the upgrade
@@ -43,7 +44,7 @@ const ThemePicker = ({ tutor, onSaved }) => {
         }
       } catch (err) {
         if (!cancelled) {
-          setError(err?.response?.data?.detail || 'Could not load themes.');
+          setError(getErrorMessage(err, 'Could not load themes.'));
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -71,7 +72,7 @@ const ThemePicker = ({ tutor, onSaved }) => {
       if (status === 402) {
         setError('Themes are a Pro feature. Upgrade your plan to switch from Sage.');
       } else {
-        setError(err?.response?.data?.detail || 'Could not save the theme.');
+        setError(getErrorMessage(err, 'Could not save the theme.'));
       }
     } finally {
       setSaving(false);

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import client from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import { getErrorMessage } from '../utils/errors';
 
 const DAY_LABEL = new Intl.DateTimeFormat(undefined, {
   weekday: 'short',
@@ -23,11 +24,22 @@ const BookingDialog = ({ pack, tutorDisplayName, onClose }) => {
   const [error, setError] = useState('');
   const [cutoffHours, setCutoffHours] = useState(48);
   const [acknowledgedCutoff, setAcknowledgedCutoff] = useState(false);
+  // Tutor's IANA timezone — used to compute the day_of_week +
+  // start_minute for recurring plans. Backend availability windows
+  // live in the tutor's local timezone, so converting through UTC
+  // (the previous approach) silently lands recurring slots in the
+  // wrong window on any non-zero offset.
+  const [tutorTimezone, setTutorTimezone] = useState('UTC');
   // Recurring opt-in. Available only for single-lesson, non-trial,
   // non-group packs — recurring binds the student to a standing slot.
   const canRecur = !pack.isTrial && !pack.is_group && pack.num_lessons === 1;
   const [makeRecurring, setMakeRecurring] = useState(false);
   const [recurringInfo, setRecurringInfo] = useState('');
+  // Optional intro message students can leave for the tutor on a trial
+  // booking. The backend creates a fresh direct conversation seeded
+  // with this text so the tutor knows what the student is hoping to
+  // get out of the lesson before they walk in.
+  const [introMessage, setIntroMessage] = useState('');
 
   useEffect(() => {
     const original = document.body.style.overflow;
@@ -53,7 +65,7 @@ const BookingDialog = ({ pack, tutorDisplayName, onClose }) => {
         if (!cancelled) setSlots(res.data || []);
       } catch (err) {
         if (!cancelled) {
-          setError(err?.response?.data?.detail || 'Could not load times.');
+          setError(getErrorMessage(err, 'Could not load times.'));
         }
       } finally {
         if (!cancelled) setLoadingSlots(false);
@@ -81,6 +93,19 @@ const BookingDialog = ({ pack, tutorDisplayName, onClose }) => {
     })();
   }, []);
 
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await client.get('/tutor/me');
+        const tz = res.data?.timezone || res.data?.user?.timezone;
+        if (tz) setTutorTimezone(tz);
+      } catch {
+        // Falls back to UTC — slight inaccuracy on recurring plans
+        // rather than blocking the booking.
+      }
+    })();
+  }, []);
+
   const groupedByDay = useMemo(() => {
     const groups = new Map();
     for (const slot of slots) {
@@ -102,6 +127,10 @@ const BookingDialog = ({ pack, tutorDisplayName, onClose }) => {
       navigate(`/login?next=${next}`);
       return;
     }
+    if (pack.isTrial && introMessage.trim().length < 20) {
+      setError("Add at least 20 characters about your goals so your tutor can prep.");
+      return;
+    }
     setSubmitting(true);
     setError('');
     try {
@@ -110,6 +139,7 @@ const BookingDialog = ({ pack, tutorDisplayName, onClose }) => {
         // the student to the success page.
         const res = await client.post('/tutor/trial/book', {
           scheduled_at: pickedSlot.scheduled_at,
+          initial_message: introMessage.trim() || null,
         });
         const bookingId = res.data?.booking_id;
         window.location.href = `/booking/success?booking=${bookingId ?? ''}&trial=1`;
@@ -119,10 +149,26 @@ const BookingDialog = ({ pack, tutorDisplayName, onClose }) => {
       // first — it auto-creates the first batch of bookings including
       // this slot, which they then pay for via the normal flow.
       if (makeRecurring && canRecur) {
+        // Compute the weekly recurrence in the tutor's LOCAL timezone,
+        // not UTC. Backend availability windows are stored as
+        // local-time weekday/minute; using UTC here would slot the
+        // recurring plan into the wrong day/hour for any tutor whose
+        // offset isn't zero. The Intl formatter handles DST.
         const slotDate = new Date(pickedSlot.scheduled_at);
-        const day_of_week = (slotDate.getUTCDay() + 6) % 7; // Sun=0 → Mon=0
-        const start_minute =
-          slotDate.getUTCHours() * 60 + slotDate.getUTCMinutes();
+        const fmt = new Intl.DateTimeFormat('en-US', {
+          timeZone: tutorTimezone,
+          weekday: 'short',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+        });
+        const parts = fmt.formatToParts(slotDate);
+        const wd = parts.find((p) => p.type === 'weekday')?.value || 'Mon';
+        const hh = parseInt(parts.find((p) => p.type === 'hour')?.value || '0', 10);
+        const mm = parseInt(parts.find((p) => p.type === 'minute')?.value || '0', 10);
+        const WEEKDAY = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 };
+        const day_of_week = WEEKDAY[wd] ?? 0;
+        const start_minute = hh * 60 + mm;
         await client.post('/recurring/plans', {
           lesson_pack_id: pack.id,
           day_of_week,
@@ -250,6 +296,38 @@ const BookingDialog = ({ pack, tutorDisplayName, onClose }) => {
         {pack.isTrial && (
           <div className="mt-5 bg-kotoba-primary/10 rounded-lg p-4 text-sm text-kotoba-primary font-medium">
             No payment needed — this one's on us.
+          </div>
+        )}
+
+        {pack.isTrial && (
+          <div className="mt-4">
+            <label
+              htmlFor="intro-message"
+              className="block text-sm font-medium text-kotoba-text"
+            >
+              Tell {tutorDisplayName || 'your tutor'} a bit about your goals
+            </label>
+            <textarea
+              id="intro-message"
+              value={introMessage}
+              onChange={(e) => setIntroMessage(e.target.value)}
+              placeholder="What languages, level, what you'd like to focus on…"
+              rows={3}
+              minLength={20}
+              maxLength={2000}
+              required
+              className="mt-1 block w-full rounded-md border border-kotoba-text/20 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-kotoba-primary"
+            />
+            <p className="mt-1 text-xs text-kotoba-text/60">
+              At least 20 characters — we'll send this as your first
+              message so {tutorDisplayName || 'they'} can prep. You'll be
+              able to reply once they respond.
+              {introMessage.trim().length > 0 && introMessage.trim().length < 20 && (
+                <span className="block mt-1 text-red-600">
+                  {20 - introMessage.trim().length} more characters please.
+                </span>
+              )}
+            </p>
           </div>
         )}
 

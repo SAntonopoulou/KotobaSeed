@@ -1,0 +1,83 @@
+# Kotobaseed edge — wildcard TLS via Cloudflare DNS-01.
+#
+# Routes:
+#   api.{$PLATFORM_APEX}            → backend
+#   {$PLATFORM_APEX}, *.{$PLATFORM_APEX} → frontend (SPA)
+#
+# Wildcard certs need DNS-01 because every tutor subdomain shares one
+# cert. The CLOUDFLARE_API_TOKEN must be scoped to Zone:Read + DNS:Edit
+# for the kotobaseed.net zone.
+#
+# PLATFORM_APEX defaults to kotobaseed.net but can be overridden via the
+# environment so the same Caddyfile boots in staging on a different host.
+
+{
+    # Email Let's Encrypt uses for expiry notifications.
+    email {$LETSENCRYPT_EMAIL}
+}
+
+# --- API host (apex.api.) --------------------------------------------
+api.{$PLATFORM_APEX} {
+    tls {
+        dns cloudflare {$CLOUDFLARE_API_TOKEN}
+    }
+
+    encode zstd gzip
+
+    # Raw client IP is needed by slowapi rate limiting + audit logging.
+    # uvicorn is launched with --proxy-headers so it honours these.
+    reverse_proxy backend:8000 {
+        header_up X-Forwarded-Proto {scheme}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Real-IP {remote_host}
+    }
+}
+
+# --- Apex + wildcard tenant subdomains -------------------------------
+# `*.kotobaseed.net` covers every tutor subdomain. The apex block is
+# listed alongside the wildcard so both share the same TLS certificate.
+*.{$PLATFORM_APEX}, {$PLATFORM_APEX} {
+    tls {
+        dns cloudflare {$CLOUDFLARE_API_TOKEN}
+    }
+
+    encode zstd gzip
+
+    # Maintenance fallback. When the frontend (or anything in the
+    # response chain) returns 5xx for a navigation request, serve the
+    # branded maintenance page instead of Caddy's default 502.
+    # /classroom/* is exempt — in-progress lessons must finish even if
+    # we're mid-deploy. The page itself returns 503 so caching layers
+    # know not to memoise this state.
+    handle_errors {
+        @5xx expression `int({err.status_code}) >= 500`
+        @notClassroom not path /classroom/*
+        handle @5xx {
+            handle @notClassroom {
+                reverse_proxy maintenance:80
+            }
+        }
+    }
+
+    # /api/* on the apex (and any tenant subdomain) forwards to the
+    # backend with the /api prefix stripped. The SPA uses VITE_API_URL=/api
+    # so it can talk to the API same-origin, which means the auth cookie
+    # carries automatically and WebSockets work without a separate origin.
+    # Must come BEFORE the SPA reverse_proxy below.
+    handle_path /api/* {
+        reverse_proxy backend:8000 {
+            header_up X-Forwarded-Proto {scheme}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Real-IP {remote_host}
+        }
+    }
+
+    # nginx in the frontend container serves the React SPA. The Host
+    # header is preserved so the React shell can read it via
+    # `window.location.host` and load the correct tenant.
+    reverse_proxy frontend:80 {
+        header_up Host {host}
+        header_up X-Forwarded-Proto {scheme}
+        header_up X-Forwarded-For {remote_host}
+    }
+}

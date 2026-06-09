@@ -18,7 +18,6 @@ import logging
 import secrets
 import string
 from datetime import UTC, datetime
-from typing import Iterable
 
 from sqlmodel import Session, select
 

@@ -1,11 +1,178 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import client from '../../api/client';
 import TutorAnalytics from '../TutorAnalytics';
+import NextLessonCard from './NextLessonCard';
 import SectionHeader from './SectionHeader';
+import { MODULE_COUNT, MODULES, moduleByKey } from '../../onboarding/modules';
 
-const STRIPE_EXPRESS_DASHBOARD = 'https://dashboard.stripe.com/express';
+// Stripe Connect dashboard button with a visible loading state. Both
+// the login-link and onboarding-link endpoints can take a couple of
+// seconds — Stripe round-trips on top of our round-trip. Without a
+// spinner the click feels broken. Spans both states (connected /
+// not-connected) so the rest of the panel doesn't need to branch.
+const StripeDashboardButton = ({ hasAccount }) => {
+  const [busy, setBusy] = useState(false);
+  const handleClick = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      if (hasAccount) {
+        const res = await client.post('/users/stripe-login-link');
+        if (res.data?.login_url) {
+          window.open(res.data.login_url, '_blank', 'noopener,noreferrer');
+        }
+      } else {
+        const res = await client.post('/users/stripe-onboarding-link');
+        if (res.data?.onboarding_url) {
+          window.location.href = res.data.onboarding_url;
+          return;
+        }
+      }
+    } catch (err) {
+      alert(err?.response?.data?.detail ||
+        (hasAccount
+          ? 'Could not generate a login link to your Stripe dashboard.'
+          : 'Could not start Stripe onboarding.'));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const cls = hasAccount
+    ? 'inline-flex items-center gap-2 px-4 py-2 rounded-md border-2 border-kotoba-primary text-kotoba-primary font-medium hover:bg-kotoba-primary hover:text-white transition-colors disabled:opacity-60 disabled:cursor-wait'
+    : 'inline-flex items-center gap-2 px-4 py-2 rounded-md bg-kotoba-primary text-white font-medium hover:bg-kotoba-primary/90 disabled:opacity-60 disabled:cursor-wait';
+  return (
+    <button type="button" onClick={handleClick} disabled={busy} className={cls}>
+      {busy && (
+        <span
+          className="inline-block w-4 h-4 rounded-full border-2 border-current border-r-transparent animate-spin"
+          aria-hidden="true"
+        />
+      )}
+      {busy
+        ? hasAccount ? 'Opening your Stripe dashboard…' : 'Connecting to Stripe…'
+        : hasAccount ? 'Open my Stripe dashboard' : 'Connect Stripe to receive payouts'}
+    </button>
+  );
+};
+
+// KYC status section — prominent amber banner when verification is
+// still pending (so a tutor can't miss "you need to finish KYC before
+// payouts work"), discreet white card once Stripe says they're good.
+// Pulls a fresh AccountLink on click because Stripe's hosted onboarding
+// URLs expire quickly; the stale URL from signup is no good once the
+// user navigates back through the dashboard.
+const KycStatusSection = ({ tutor, isPaused }) => {
+  const [resuming, setResuming] = useState(false);
+  const [resumeError, setResumeError] = useState('');
+
+  const handleResume = async () => {
+    setResuming(true);
+    setResumeError('');
+    try {
+      const res = await client.post('/onboarding/tutor/refresh-link');
+      const url = res.data?.onboarding_url;
+      if (url) {
+        window.location.href = url;
+        return;
+      }
+      setResumeError('Stripe didn\'t return a link. Try refreshing the page.');
+    } catch (err) {
+      setResumeError(
+        err?.response?.data?.detail
+        || 'Could not start Stripe verification. Try again in a moment.',
+      );
+    } finally {
+      setResuming(false);
+    }
+  };
+
+  if (isPaused) {
+    return (
+      <section className="rounded-2xl p-6 bg-amber-50 border-2 border-amber-300">
+        <div className="flex items-start gap-4 flex-wrap">
+          <div className="flex-1 min-w-0">
+            <p className="text-xs uppercase tracking-wider font-semibold text-amber-700">
+              Action required
+            </p>
+            <h2 className="mt-1 text-xl font-bold text-amber-900">
+              Finish Stripe identity verification
+            </h2>
+            <p className="mt-2 text-sm text-amber-900">
+              Until you finish Stripe's identity check, your tutor site stays in draft mode and you can't accept bookings or receive payouts. It takes 5–10 minutes — Stripe asks for ID and bank details.
+            </p>
+            {resumeError && (
+              <p className="mt-2 text-sm text-red-700" role="alert">{resumeError}</p>
+            )}
+            {tutor.stripe_connect_account_id && (
+              <p className="mt-3 text-xs text-amber-900/60 font-mono">
+                Stripe account: {tutor.stripe_connect_account_id}
+              </p>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={handleResume}
+            disabled={resuming}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-md bg-amber-600 hover:bg-amber-700 text-white font-semibold disabled:opacity-60"
+          >
+            {resuming && (
+              <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" aria-hidden="true" />
+            )}
+            {resuming ? 'Opening Stripe…' : 'Resume verification →'}
+          </button>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="rounded-2xl p-6 bg-white shadow-sm">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h2 className="text-lg font-bold text-kotoba-primary">Your site is live</h2>
+          <p className="mt-1 text-sm text-kotoba-text">
+            Bookings and payments are turned on.
+          </p>
+          {tutor.stripe_connect_account_id && (
+            <p className="mt-2 text-xs text-kotoba-text/60 font-mono">
+              Stripe account: {tutor.stripe_connect_account_id}
+            </p>
+          )}
+        </div>
+        <StripeDashboardButton hasAccount={Boolean(tutor.stripe_connect_account_id)} />
+      </div>
+    </section>
+  );
+};
 
 const OverviewPanel = ({ tutor, onJumpTo }) => {
   const isPaused = tutor.account_status !== 'active';
+  const [progress, setProgress] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await client.get('/tutor/onboarding/progress');
+        if (!cancelled) setProgress(res.data);
+      } catch {
+        /* not fatal — onboarding card just hides itself */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const doneCount = progress?.completed_module_keys?.length || 0;
+  const remaining = MODULE_COUNT - doneCount;
+  const resumeKey =
+    progress?.last_viewed_module_key && moduleByKey(progress.last_viewed_module_key)
+      ? progress.last_viewed_module_key
+      : MODULES[0].key;
+  const resumeModule = moduleByKey(resumeKey);
+  const onboardingDone = progress?.completed_at != null;
 
   return (
     <div className="space-y-6">
@@ -14,37 +181,49 @@ const OverviewPanel = ({ tutor, onJumpTo }) => {
         description="A snapshot of bookings, students, and revenue across your site."
       />
 
-      <section
-        className={`rounded-2xl p-6 ${
-          isPaused ? 'bg-kotoba-secondary/20' : 'bg-white shadow-sm'
-        }`}
-      >
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <h2 className="text-lg font-bold text-kotoba-primary">
-              {isPaused ? 'Stripe verification pending' : 'Your site is live'}
-            </h2>
-            <p className="mt-1 text-sm text-kotoba-text">
-              {isPaused
-                ? 'Finish Stripe identity verification to start taking bookings.'
-                : 'Bookings and payments are turned on.'}
+      <NextLessonCard />
+
+      {!onboardingDone && progress && (
+        <section className="rounded-2xl p-6 bg-kotoba-secondary/15 border border-kotoba-secondary/40 flex items-start justify-between gap-4 flex-wrap">
+          <div className="min-w-0">
+            <p className="text-xs uppercase tracking-wider font-semibold text-kotoba-text/60">
+              Onboarding · {doneCount} / {MODULE_COUNT} done
             </p>
-            {tutor.stripe_connect_account_id && (
-              <p className="mt-2 text-xs text-kotoba-text/60 font-mono">
-                Stripe account: {tutor.stripe_connect_account_id}
-              </p>
-            )}
+            <h2 className="mt-1 text-lg font-bold text-kotoba-primary">
+              {doneCount === 0
+                ? 'New here? Start the tutor tour.'
+                : `Pick up where you left off: ${resumeModule?.title || 'next module'}`}
+            </h2>
+            <p className="mt-1 text-sm text-kotoba-text/70">
+              {remaining === 1
+                ? 'One module to go.'
+                : `${remaining} short modules left — about 15 minutes total.`}
+            </p>
           </div>
-          <a
-            href={STRIPE_EXPRESS_DASHBOARD}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center px-4 py-2 rounded-md border-2 border-kotoba-primary text-kotoba-primary font-medium hover:bg-kotoba-primary hover:text-white transition-colors"
+          <Link
+            to={`/onboarding/tutor/${resumeKey}`}
+            className="px-5 py-2 rounded-md bg-kotoba-primary text-white font-semibold hover:bg-kotoba-primary/90"
           >
-            Open Stripe dashboard
-          </a>
-        </div>
-      </section>
+            {doneCount === 0 ? 'Start tour' : 'Resume'}
+          </Link>
+        </section>
+      )}
+
+      {onboardingDone && (
+        <section className="rounded-2xl p-4 bg-white shadow-sm flex items-center justify-between gap-3 flex-wrap">
+          <p className="text-sm text-kotoba-text/70">
+            You finished the tour. Run it again any time for a refresher.
+          </p>
+          <Link
+            to="/onboarding/tutor"
+            className="text-sm font-medium text-kotoba-primary hover:underline"
+          >
+            Replay onboarding →
+          </Link>
+        </section>
+      )}
+
+      <KycStatusSection tutor={tutor} isPaused={isPaused} />
 
       <TutorAnalytics />
 

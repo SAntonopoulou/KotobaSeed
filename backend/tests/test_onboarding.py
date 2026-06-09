@@ -20,9 +20,15 @@ from .conftest import auth_headers_for
 @pytest.fixture
 def stripe_account_state():
     """Mutable state the fake fetch_account returns. Tests tweak this dict
-    to simulate Stripe transitioning the account to charges/payouts enabled.
+    to simulate Stripe transitioning the account through the onboarding
+    capability flags. ``details_submitted`` flips when the tutor finishes
+    the Express form; the other two follow as Stripe's checks complete.
     """
-    return {"charges_enabled": False, "payouts_enabled": False}
+    return {
+        "details_submitted": False,
+        "charges_enabled": False,
+        "payouts_enabled": False,
+    }
 
 
 @pytest.fixture(autouse=True)
@@ -34,12 +40,13 @@ def stub_stripe(monkeypatch, stripe_account_state):
         counter["n"] += 1
         return f"acct_test_{counter['n']:04d}"
 
-    def fake_create_link(*, account_id: str) -> str:
+    def fake_create_link(*, account_id: str, locale: str | None = None) -> str:
         return f"https://connect.stripe.com/express/{account_id}/onboarding"
 
     def fake_fetch_account(*, account_id: str) -> dict:
         return {
             "id": account_id,
+            "details_submitted": stripe_account_state["details_submitted"],
             "charges_enabled": stripe_account_state["charges_enabled"],
             "payouts_enabled": stripe_account_state["payouts_enabled"],
         }
@@ -285,6 +292,7 @@ def test_status_self_heals_from_stripe(client, db_session: Session, stripe_accou
     assert tutor.account_status == TutorAccountStatus.PAUSED_KYC
 
     # Simulate Stripe finishing onboarding without firing the webhook.
+    stripe_account_state["details_submitted"] = True
     stripe_account_state["charges_enabled"] = True
     stripe_account_state["payouts_enabled"] = True
 
@@ -325,8 +333,47 @@ def test_account_updated_webhook_flips_tutor_to_active(client, db_session: Sessi
         db_session,
         {
             "id": acct_id,
+            "details_submitted": True,
             "charges_enabled": True,
             "payouts_enabled": True,
+        },
+    )
+    db_session.refresh(tutor)
+    assert tutor.account_status == TutorAccountStatus.ACTIVE
+
+
+def test_account_updated_activates_when_payouts_still_pending(
+    client, db_session: Session
+):
+    """Production-realistic case: Stripe approves identity + charges
+    immediately, holds payouts pending a side review. The tutor should be
+    treated as onboarded — they can take bookings, money sits in their
+    Stripe balance until payouts release. Gating ACTIVE on payouts_enabled
+    leaves verified tutors permanently stuck on the "finish setup" screen.
+    """
+    client.post(
+        "/onboarding/tutor",
+        json={
+            "email": "pending@example.com",
+            "password": "verysecret",
+            "full_name": "P",
+            "tutor_slug": "pending",
+            "display_name": "P",
+            "gdpr_consent": True,
+        },
+    )
+    tutor = db_session.exec(
+        select(Tutor).where(Tutor.tutor_slug == "pending")
+    ).first()
+    acct_id = tutor.stripe_connect_account_id
+
+    handle_account_updated(
+        db_session,
+        {
+            "id": acct_id,
+            "details_submitted": True,
+            "charges_enabled": True,
+            "payouts_enabled": False,  # ← Stripe still reviewing payouts
         },
     )
     db_session.refresh(tutor)
@@ -351,15 +398,25 @@ def test_account_updated_revocation_reverts_to_kyc(client, db_session: Session):
     # First: activate.
     handle_account_updated(
         db_session,
-        {"id": acct_id, "charges_enabled": True, "payouts_enabled": True},
+        {
+            "id": acct_id,
+            "details_submitted": True,
+            "charges_enabled": True,
+            "payouts_enabled": True,
+        },
     )
     db_session.refresh(tutor)
     assert tutor.account_status == TutorAccountStatus.ACTIVE
 
-    # Then: Stripe revokes a capability.
+    # Then: Stripe revokes charges.
     handle_account_updated(
         db_session,
-        {"id": acct_id, "charges_enabled": False, "payouts_enabled": True},
+        {
+            "id": acct_id,
+            "details_submitted": True,
+            "charges_enabled": False,
+            "payouts_enabled": True,
+        },
     )
     db_session.refresh(tutor)
     assert tutor.account_status == TutorAccountStatus.PAUSED_KYC

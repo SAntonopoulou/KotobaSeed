@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import client from '../api/client';
 import { useConfirm } from '../context/ModalContext';
 import { SkeletonCard } from './Skeleton';
+import { getErrorMessage } from '../utils/errors';
 
 // Dashboard module for editing transactional email subjects + markdown
 // bodies. Each template shows: label + description, current subject,
@@ -57,7 +58,7 @@ const TemplateEditor = ({ template, onChange, onSave, onRevert, onPreview }) => 
       await onSave(template);
       setInfo('Saved.');
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not save.');
+      setError(getErrorMessage(err, 'Could not save.'));
     } finally {
       setBusy(false);
     }
@@ -77,7 +78,7 @@ const TemplateEditor = ({ template, onChange, onSave, onRevert, onPreview }) => 
       await onRevert(template.key);
       setInfo('Reverted to default.');
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not revert.');
+      setError(getErrorMessage(err, 'Could not revert.'));
     } finally {
       setBusy(false);
     }
@@ -91,7 +92,7 @@ const TemplateEditor = ({ template, onChange, onSave, onRevert, onPreview }) => 
       setPreviewSubject(res.subject);
       setPreviewHtml(res.body_html);
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not preview.');
+      setError(getErrorMessage(err, 'Could not preview.'));
     } finally {
       setBusy(false);
     }
@@ -242,7 +243,7 @@ const EmailTemplatesManager = () => {
       const res = await client.get('/tutor/email-templates');
       setTemplates(res.data || []);
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not load templates.');
+      setError(getErrorMessage(err, 'Could not load templates.'));
     } finally {
       setLoading(false);
     }

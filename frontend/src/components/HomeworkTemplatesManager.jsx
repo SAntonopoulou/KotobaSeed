@@ -3,6 +3,7 @@ import client from '../api/client';
 import { useConfirm } from '../context/ModalContext';
 import QuestionBuilder, { makeQuestion } from './homework/QuestionBuilder';
 import { SkeletonCard } from './Skeleton';
+import { getErrorMessage } from '../utils/errors';
 
 // Tutor-side template CRUD. Inline editor — for v1 we keep templates
 // modest enough that an inline form works better than a dedicated route.
@@ -22,7 +23,7 @@ const HomeworkTemplatesManager = () => {
       const res = await client.get('/tutor/homework/templates');
       setTemplates(res.data || []);
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not load templates.');
+      setError(getErrorMessage(err, 'Could not load templates.'));
     } finally {
       setLoading(false);
     }
@@ -105,7 +106,7 @@ const HomeworkTemplatesManager = () => {
       cancel();
       await load();
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not save.');
+      setError(getErrorMessage(err, 'Could not save.'));
     } finally {
       setBusy(false);
     }
@@ -123,7 +124,7 @@ const HomeworkTemplatesManager = () => {
       await client.delete(`/tutor/homework/templates/${t.id}`);
       await load();
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not archive.');
+      setError(getErrorMessage(err, 'Could not archive.'));
     } finally {
       setBusy(false);
     }

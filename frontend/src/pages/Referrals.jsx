@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import client from '../api/client';
+import { getErrorMessage } from '../utils/errors';
+import { formatDateShort } from '../utils/dates';
 
 const KIND_LABEL = {
   tutor_peer: 'Tutor referral',
@@ -31,7 +33,7 @@ const formatPrice = (cents, currency = 'eur') => {
 const formatDate = (iso) => {
   if (!iso) return '';
   try {
-    return new Date(iso).toLocaleDateString();
+    return formatDateShort(iso);
   } catch {
     return iso;
   }
@@ -84,7 +86,7 @@ const Referrals = () => {
         if (!cancelled) setSummary(res.data);
       } catch (err) {
         if (!cancelled) {
-          setError(err?.response?.data?.detail || 'Could not load your referrals.');
+          setError(getErrorMessage(err, 'Could not load your referrals.'));
         }
       } finally {
         if (!cancelled) setLoading(false);

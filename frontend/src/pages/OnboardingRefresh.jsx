@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import client from '../api/client';
+import { getErrorMessage } from '../utils/errors';
 
 // Stripe redirects here when an AccountLink expires mid-onboarding. We
 // immediately mint a fresh link and bounce the user back to Stripe so
@@ -17,7 +18,7 @@ const OnboardingRefresh = () => {
         }
       } catch (err) {
         if (!cancelled) {
-          setError(err?.response?.data?.detail || 'Could not refresh onboarding link.');
+          setError(getErrorMessage(err, 'Could not refresh onboarding link.'));
         }
       }
     })();

@@ -9,7 +9,7 @@ import client from '../api/client';
 const formatDate = (iso) => {
   if (!iso) return '';
   try {
-    return new Date(iso).toLocaleDateString();
+    return formatDateShort(iso);
   } catch {
     return iso;
   }

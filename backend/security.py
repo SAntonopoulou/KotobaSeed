@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from fastapi import Request
+from fastapi import Request, Response
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 
@@ -71,3 +71,47 @@ def decode_access_token(token: str) -> dict | None:
         return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
     except JWTError:
         return None
+
+
+# --- Cross-subdomain auth cookie ------------------------------------------
+# A shared session cookie scoped to .kotobaseed.net so signing in on the
+# apex automatically authenticates the tutor's subdomain (and vice-versa).
+# Without this, the JWT lives in per-origin localStorage and the user has
+# to authenticate again on every subdomain.
+
+AUTH_COOKIE_NAME = settings.auth_cookie_name
+
+
+def set_auth_cookie(response: Response, token: str) -> None:
+    """Attach the shared auth cookie to ``response`` for cross-subdomain SSO."""
+    response.set_cookie(
+        key=AUTH_COOKIE_NAME,
+        value=token,
+        max_age=settings.access_token_expire_minutes * 60,
+        domain=settings.auth_cookie_domain,
+        path="/",
+        httponly=True,
+        secure=settings.auth_cookie_secure,
+        samesite=settings.auth_cookie_samesite,
+    )
+
+
+def clear_auth_cookie(response: Response) -> None:
+    """Drop the shared auth cookie on logout / hard token reset."""
+    response.delete_cookie(
+        key=AUTH_COOKIE_NAME,
+        domain=settings.auth_cookie_domain,
+        path="/",
+    )
+
+
+def token_from_request(request: Request) -> str | None:
+    """Pull the JWT from either the Authorization header (preferred) or the
+    shared auth cookie. Returns None when neither is present."""
+    auth = request.headers.get("authorization", "")
+    if auth.lower().startswith("bearer "):
+        candidate = auth.split(" ", 1)[1].strip()
+        if candidate:
+            return candidate
+    cookie_token = request.cookies.get(AUTH_COOKIE_NAME)
+    return cookie_token or None

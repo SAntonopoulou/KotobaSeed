@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import client from '../api/client';
 import { SkeletonCard } from './Skeleton';
+import { getErrorMessage } from '../utils/errors';
 
 const emptyForm = {
   name: '',
@@ -28,7 +29,7 @@ const LessonPackManager = () => {
       const res = await client.get('/tutor/lesson-packs/all');
       setPacks(res.data || []);
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not load lesson packs.');
+      setError(getErrorMessage(err, 'Could not load lesson packs.'));
     } finally {
       setLoading(false);
     }
@@ -84,7 +85,7 @@ const LessonPackManager = () => {
       }
       await load();
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not toggle pack.');
+      setError(getErrorMessage(err, 'Could not toggle pack.'));
     }
   };
 

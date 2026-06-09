@@ -38,7 +38,7 @@ const Btn = ({ active, onClick, title, children, disabled }) => (
 
 const Sep = () => <span className="w-px h-5 bg-kotoba-text/15 mx-1" />;
 
-const EditorToolbar = () => {
+const EditorToolbar = ({ enableVocab = true }) => {
   const prompt = usePrompt();
   const [editor] = useLexicalComposerContext();
   const [isBold, setIsBold] = useState(false);
@@ -133,7 +133,9 @@ const EditorToolbar = () => {
       <Btn onClick={setQuote} title="Quote">❝</Btn>
       <Sep />
       <Btn onClick={insertLink} title="Insert link">🔗</Btn>
-      <Btn onClick={insertVocab} title="Insert vocab tooltip">📖 Vocab</Btn>
+      {enableVocab && (
+        <Btn onClick={insertVocab} title="Insert vocab tooltip">📖 Vocab</Btn>
+      )}
     </div>
   );
 };

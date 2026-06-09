@@ -68,17 +68,31 @@ def _resolve_tutor_for_host(host: str, session: Session) -> Tutor | None:
 
 
 def _resolve_for_request(request: Request) -> tuple[int | None, str | None]:
-    """Return (tutor_id, tutor_slug) for the request, or (None, None)."""
-    if (
-        settings.environment in {"dev", "test"}
-        and (override := request.headers.get(settings.tenant_dev_override_header))
-    ):
+    """Return (tutor_id, tutor_slug) for the request, or (None, None).
+
+    Resolution order:
+    1. ``X-Tenant-Slug`` header (set by the SPA from window.location.hostname
+       when it's on a tutor subdomain). Honored in every environment —
+       tenancy is *informational*, not an authorization signal. Every
+       owner-only endpoint enforces ``tutor.user_id == current.id``
+       independently, so forging the header cannot escalate access.
+       This is also what fixes the prod case where the SPA sits on
+       ``vasso.kotobaseed.net`` and makes XHR calls to
+       ``api.kotobaseed.net`` — the Host on those calls is the reserved
+       ``api`` subdomain, so without the header the backend has no way
+       to know which tenant the SPA is acting on behalf of.
+    2. Host header (the original path; still authoritative for direct
+       browser navigations to a tutor's public site).
+    """
+    if override := request.headers.get(settings.tenant_dev_override_header):
         override_slug = override.strip().lower()
-        if not override_slug or override_slug in settings.reserved_subdomain_set:
-            return (None, None)
-        with Session(_database.engine) as s:
-            tutor = s.exec(select(Tutor).where(Tutor.tutor_slug == override_slug)).first()
-            return (tutor.id, tutor.tutor_slug) if tutor else (None, None)
+        if override_slug and override_slug not in settings.reserved_subdomain_set:
+            with Session(_database.engine) as s:
+                tutor = s.exec(
+                    select(Tutor).where(Tutor.tutor_slug == override_slug)
+                ).first()
+                if tutor:
+                    return (tutor.id, tutor.tutor_slug)
 
     host = _strip_port(request.headers.get("host", ""))
     with Session(_database.engine) as s:

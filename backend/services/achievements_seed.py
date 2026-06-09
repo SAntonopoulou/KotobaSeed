@@ -9,7 +9,6 @@ call wherever the unlock condition fires.
 from __future__ import annotations
 
 import logging
-from typing import Iterable
 
 from sqlmodel import Session, select
 

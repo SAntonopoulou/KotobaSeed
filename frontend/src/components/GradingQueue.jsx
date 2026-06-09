@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import client from '../api/client';
 import { SkeletonCard } from './Skeleton';
+import { getErrorMessage } from '../utils/errors';
 
 // Focused grading view: only submissions awaiting tutor review, oldest
 // first. We deliberately show ONE submission expanded at a time so the
@@ -57,7 +58,7 @@ const GradingQueue = () => {
       const res = await client.get('/tutor/homework/grading-queue');
       setItems(res.data || []);
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not load the grading queue.');
+      setError(getErrorMessage(err, 'Could not load the grading queue.'));
     } finally {
       setLoading(false);
     }
@@ -112,7 +113,7 @@ const GradingQueue = () => {
       setFeedback('');
       await load();
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not save the grade.');
+      setError(getErrorMessage(err, 'Could not save the grade.'));
     } finally {
       setBusy(false);
     }

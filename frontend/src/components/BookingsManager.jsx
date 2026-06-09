@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import client from '../api/client';
 import { useConfirm } from '../context/ModalContext';
 import { SkeletonCard } from './Skeleton';
+import { getErrorMessage } from '../utils/errors';
 
 const CLASSROOM_LEAD_MIN = 15;
 const CLASSROOM_GRACE_MIN = 30;
@@ -18,7 +19,7 @@ const canJoinClassroom = (booking) => {
 
 const formatDate = (iso) => {
   try {
-    return new Date(iso).toLocaleString();
+    return formatDateTime(iso);
   } catch {
     return iso;
   }
@@ -35,13 +36,26 @@ const formatPrice = (cents, currency = 'eur') => {
   }
 };
 
-const STATUS_LABELS = {
-  pending_payment: { label: 'Awaiting payment', tone: 'bg-yellow-100 text-yellow-800' },
-  confirmed: { label: 'Confirmed', tone: 'bg-emerald-100 text-emerald-800' },
-  completed: { label: 'Completed', tone: 'bg-gray-100 text-gray-700' },
-  cancelled: { label: 'Cancelled', tone: 'bg-gray-100 text-gray-500' },
-  refunded: { label: 'Refunded', tone: 'bg-orange-100 text-orange-800' },
-};
+import { BOOKING_STATUS_LABELS as STATUS_LABELS } from './BookingCard';
+
+// Mirror the backend timing gates so the UI shows accurate affordances
+// and disabled tooltips instead of just failing the API call.
+// Server allows complete from `end_at - 5min`; server allows no-show
+// from `start + 15min`. We hide the actions entirely until they're
+// usable rather than show a 400 toast.
+const COMPLETE_GRACE_MIN = 5;
+const NO_SHOW_GRACE_MIN = 15;
+
+const lessonEndMs = (b) =>
+  new Date(b.scheduled_at).getTime() + b.duration_minutes * 60_000;
+
+const canMarkComplete = (b) =>
+  b.status === 'confirmed' &&
+  Date.now() >= lessonEndMs(b) - COMPLETE_GRACE_MIN * 60_000;
+
+const canMarkNoShow = (b) =>
+  b.status === 'confirmed' &&
+  Date.now() >= new Date(b.scheduled_at).getTime() + NO_SHOW_GRACE_MIN * 60_000;
 
 const BookingsManager = () => {
   const confirm = useConfirm();
@@ -56,7 +70,7 @@ const BookingsManager = () => {
       const res = await client.get('/tutor/bookings');
       setBookings(res.data || []);
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not load bookings.');
+      setError(getErrorMessage(err, 'Could not load bookings.'));
     } finally {
       setLoading(false);
     }
@@ -79,7 +93,30 @@ const BookingsManager = () => {
       await client.post(`/tutor/bookings/${booking.id}/complete`);
       await load();
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not mark as complete.');
+      setError(getErrorMessage(err, 'Could not mark as complete.'));
+    } finally {
+      setPendingId(null);
+    }
+  };
+
+  const handleNoShow = async (booking) => {
+    if (!(await confirm({
+      title: 'Flag as no-show',
+      message: (
+        `Mark ${booking.student_name || 'this student'} as a no-show for the ` +
+        'lesson? They will be notified. The booking stays on the books — no refund.'
+      ),
+      confirmText: 'Flag no-show',
+      destructive: true,
+    }))) {
+      return;
+    }
+    setPendingId(booking.id);
+    try {
+      await client.post(`/tutor/bookings/${booking.id}/no-show`, {});
+      await load();
+    } catch (err) {
+      setError(getErrorMessage(err, 'Could not flag as no-show.'));
     } finally {
       setPendingId(null);
     }
@@ -94,12 +131,12 @@ const BookingsManager = () => {
   );
   const history = bookings.filter(
     (b) =>
-      ['completed', 'cancelled', 'refunded'].includes(b.status) ||
+      ['completed', 'cancelled', 'refunded', 'no_show'].includes(b.status) ||
       (b.status === 'pending_payment' && new Date(b.scheduled_at).getTime() <= now)
   );
 
   const Row = ({ booking, action }) => {
-    const meta = STATUS_LABELS[booking.status] || { label: booking.status, tone: 'bg-gray-100 text-gray-700' };
+    const meta = STATUS_LABELS[booking.status] || { label: booking.status, tone: 'bg-kotoba-background/60 text-kotoba-text/80' };
     const [recordings, setRecordings] = useState(null);
     const [loadingRec, setLoadingRec] = useState(false);
     const showRecordingButton = booking.status === 'completed';
@@ -157,7 +194,7 @@ const BookingsManager = () => {
                   const mins = Math.round((r.duration_seconds || 0) / 60);
                   return (
                     <li key={r.id}>
-                      {r.started_at && new Date(r.started_at).toLocaleString()} · {mins} min ·{' '}
+                      {r.started_at && formatDateTime(r.started_at)} · {mins} min ·{' '}
                       {r.download_url ? (
                         <a
                           href={r.download_url}
@@ -212,22 +249,44 @@ const BookingsManager = () => {
                 To mark complete ({todo.length})
               </h3>
               <ul className="border border-kotoba-text/10 rounded-lg divide-y divide-kotoba-text/10">
-                {todo.map((b) => (
-                  <Row
-                    key={b.id}
-                    booking={b}
-                    action={
-                      <button
-                        type="button"
-                        onClick={() => handleComplete(b)}
-                        disabled={pendingId === b.id}
-                        className="text-sm px-3 py-1.5 rounded-md bg-kotoba-secondary text-kotoba-text font-medium hover:bg-kotoba-secondary-dark disabled:opacity-60"
-                      >
-                        {pendingId === b.id ? 'Saving…' : 'Mark complete'}
-                      </button>
-                    }
-                  />
-                ))}
+                {todo.map((b) => {
+                  const completeReady = canMarkComplete(b);
+                  const noShowReady = canMarkNoShow(b);
+                  const completeTip = completeReady
+                    ? ''
+                    : `You can mark this complete after the lesson ends at ${new Date(lessonEndMs(b)).toLocaleTimeString()}.`;
+                  const noShowTip = noShowReady
+                    ? ''
+                    : 'Give the student 15 minutes after the lesson starts before flagging a no-show.';
+                  return (
+                    <Row
+                      key={b.id}
+                      booking={b}
+                      action={
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleComplete(b)}
+                            disabled={pendingId === b.id || !completeReady}
+                            title={completeTip}
+                            className="text-sm px-3 py-1.5 rounded-md bg-kotoba-secondary text-kotoba-text font-medium hover:bg-kotoba-secondary-dark disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {pendingId === b.id ? 'Saving…' : 'Mark complete'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleNoShow(b)}
+                            disabled={pendingId === b.id || !noShowReady}
+                            title={noShowTip}
+                            className="text-sm px-3 py-1.5 rounded-md border border-amber-300 text-amber-900 font-medium hover:bg-amber-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            No-show
+                          </button>
+                        </div>
+                      }
+                    />
+                  );
+                })}
               </ul>
             </div>
           )}

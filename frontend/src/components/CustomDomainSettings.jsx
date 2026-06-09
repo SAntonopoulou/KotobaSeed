@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import client from '../api/client';
 import { useConfirm } from '../context/ModalContext';
 import { SkeletonCard } from './Skeleton';
+import { getErrorMessage } from '../utils/errors';
 
 // Pro+ feature: point your own domain at the platform. Backend gates the
 // PUT on user.is_pro_subscriber; this widget renders an upgrade nudge when
@@ -10,7 +11,7 @@ import { SkeletonCard } from './Skeleton';
 const formatVerifiedAt = (iso) => {
   if (!iso) return null;
   try {
-    return new Date(iso).toLocaleString();
+    return formatDateTime(iso);
   } catch {
     return iso;
   }
@@ -106,7 +107,7 @@ const CustomDomainSettings = () => {
       setState(res.data);
       setDraft(res.data.domain || '');
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not load custom domain settings.');
+      setError(getErrorMessage(err, 'Could not load custom domain settings.'));
     } finally {
       setLoading(false);
     }
@@ -160,7 +161,7 @@ const CustomDomainSettings = () => {
     } catch (err) {
       // Genuine error (e.g. 400 "Save your domain first") rather than a
       // soft DNS-mismatch result.
-      setError(err?.response?.data?.detail || 'Verify request failed. Try again.');
+      setError(getErrorMessage(err, 'Verify request failed. Try again.'));
     } finally {
       setVerifying(false);
     }
@@ -184,7 +185,7 @@ const CustomDomainSettings = () => {
       await load();
       setInfo('Custom domain removed.');
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not remove.');
+      setError(getErrorMessage(err, 'Could not remove.'));
     } finally {
       setSaving(false);
     }

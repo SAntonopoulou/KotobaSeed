@@ -19,8 +19,7 @@ from sqlmodel import Session
 
 from ..config import settings
 from ..models import SupportTicket, SupportTicketStatus
-from . import email as email_service
-from . import platform_settings
+from . import email as email_service, platform_settings
 
 log = logging.getLogger(__name__)
 

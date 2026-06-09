@@ -23,7 +23,7 @@ from datetime import UTC, datetime
 from typing import Annotated, Any
 
 import stripe
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 
@@ -99,7 +99,10 @@ def _parse_items(items_json: str) -> list[dict[str, Any]]:
             continue
         if not isinstance(ref, int):
             continue
-        valid.append({"kind": kind, "ref_id": ref})
+        # `preview` is the free-sample flag. Backwards-compatible: rows
+        # written before this flag existed just default to False.
+        preview = bool(it.get("preview", False))
+        valid.append({"kind": kind, "ref_id": ref, "preview": preview})
     return valid
 
 
@@ -144,8 +147,34 @@ def _validate_items(
 
 
 class ModuleItem(BaseModel):
+    """Owner-facing item shape — bare references for the editor."""
+
     kind: str = Field(pattern=r"^(article|homework)$")
     ref_id: int
+    preview: bool = False
+
+
+class ModuleItemPublic(BaseModel):
+    """Storefront-facing item shape — kind/ref + display metadata,
+    plus the body when the viewer is allowed to see it.
+
+    Allowed when: the item is preview-flagged, OR the viewer has
+    purchased the module, OR the viewer is the tutor themselves.
+    Otherwise body fields are nulled out and the frontend renders the
+    "buy to unlock" surface. `slug` is always returned so the frontend
+    can deep-link to the reader for preview items.
+    """
+
+    kind: str
+    ref_id: int
+    preview: bool = False
+    title: str
+    slug: str | None = None
+    summary: str | None = None
+    body_markdown: str | None = None
+    lexical_json: str | None = None
+    # Homework templates expose a question count rather than a body.
+    question_count: int | None = None
 
 
 class ModuleSummary(BaseModel):
@@ -159,11 +188,22 @@ class ModuleSummary(BaseModel):
     is_published: bool
     published_at: datetime | None
     item_count: int
+    preview_item_count: int = 0
 
 
 class ModuleRead(ModuleSummary):
     description: str | None
     items: list[ModuleItem]
+    purchased: bool = False
+
+
+class ModulePublicRead(ModuleSummary):
+    """Storefront response — items expanded so a non-purchaser can
+    sample any item marked preview without making additional API calls
+    (and without the body of paid items leaking)."""
+
+    description: str | None
+    items: list[ModuleItemPublic]
     purchased: bool = False
 
 
@@ -177,6 +217,21 @@ class ModuleCreate(BaseModel):
     currency: str = Field(default="eur", min_length=3, max_length=3)
     is_published: bool = False
     slug: str | None = Field(default=None, max_length=120)
+
+
+def _items_for_storage(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Normalise items into the shape persisted in items_json. Strips
+    extra keys, coerces preview to bool, and ensures order is preserved."""
+    cleaned: list[dict[str, Any]] = []
+    for it in items:
+        cleaned.append(
+            {
+                "kind": it["kind"],
+                "ref_id": int(it["ref_id"]),
+                "preview": bool(it.get("preview", False)),
+            }
+        )
+    return cleaned
 
 
 class ModuleUpdate(BaseModel):
@@ -204,6 +259,7 @@ def _to_summary(m: LessonModule) -> ModuleSummary:
         is_published=m.is_published,
         published_at=m.published_at,
         item_count=len(items),
+        preview_item_count=sum(1 for it in items if it.get("preview")),
     )
 
 
@@ -220,8 +276,116 @@ def _to_read(m: LessonModule, *, purchased: bool = False) -> ModuleRead:
         is_published=m.is_published,
         published_at=m.published_at,
         item_count=len(items),
+        preview_item_count=sum(1 for it in items if it.get("preview")),
         description=m.description,
         items=[ModuleItem(**it) for it in items],
+        purchased=purchased,
+    )
+
+
+def _expand_items_for_storefront(
+    items: list[dict[str, Any]],
+    *,
+    tutor_id: int,
+    session: Session,
+    can_see_all: bool,
+) -> list[ModuleItemPublic]:
+    """Resolve each item ref to its display fields, gating body content.
+
+    `can_see_all` is true when the viewer is the tutor or has access
+    to the module (purchased or subscribed). When false, only items
+    marked `preview` get their bodies returned; everything else gets
+    title + summary only."""
+    article_ids = [it["ref_id"] for it in items if it["kind"] == "article"]
+    hw_ids = [it["ref_id"] for it in items if it["kind"] == "homework"]
+    article_rows: dict[int, Article] = {}
+    if article_ids:
+        for a in session.exec(
+            select(Article).where(
+                Article.tutor_id == tutor_id,
+                Article.id.in_(article_ids),
+            )
+        ).all():
+            article_rows[a.id] = a
+    hw_rows: dict[int, HomeworkTemplate] = {}
+    if hw_ids:
+        for h in session.exec(
+            select(HomeworkTemplate).where(
+                HomeworkTemplate.tutor_id == tutor_id,
+                HomeworkTemplate.id.in_(hw_ids),
+            )
+        ).all():
+            hw_rows[h.id] = h
+
+    out: list[ModuleItemPublic] = []
+    for it in items:
+        is_preview = bool(it.get("preview", False))
+        unlocked = can_see_all or is_preview
+        if it["kind"] == "article":
+            a = article_rows.get(it["ref_id"])
+            if a is None:
+                continue
+            out.append(
+                ModuleItemPublic(
+                    kind="article",
+                    ref_id=a.id,
+                    preview=is_preview,
+                    title=a.title,
+                    slug=a.slug,
+                    summary=a.summary,
+                    body_markdown=a.body_markdown if unlocked else None,
+                    lexical_json=a.lexical_json if unlocked else None,
+                )
+            )
+        else:  # homework
+            h = hw_rows.get(it["ref_id"])
+            if h is None:
+                continue
+            try:
+                question_count = len(json.loads(h.questions_json or "[]"))
+            except json.JSONDecodeError:
+                question_count = 0
+            out.append(
+                ModuleItemPublic(
+                    kind="homework",
+                    ref_id=h.id,
+                    preview=is_preview,
+                    title=h.title,
+                    summary=h.description,
+                    question_count=question_count,
+                )
+            )
+    return out
+
+
+def _to_public_read(
+    m: LessonModule,
+    *,
+    purchased: bool,
+    is_owner: bool,
+    session: Session,
+) -> ModulePublicRead:
+    items = _parse_items(m.items_json)
+    expanded = _expand_items_for_storefront(
+        items,
+        tutor_id=m.tutor_id,
+        session=session,
+        can_see_all=purchased or is_owner,
+    )
+    return ModulePublicRead(
+        id=m.id,
+        slug=m.slug,
+        title=m.title,
+        summary=m.summary,
+        featured_image_url=m.featured_image_url,
+        price_cents=m.price_cents,
+        currency=m.currency,
+        is_published=m.is_published,
+        published_at=m.published_at,
+        item_count=len(items),
+        preview_item_count=sum(1 for it in items if it.get("preview")),
+        description=m.description,
+        items=expanded,
         purchased=purchased,
     )
 
@@ -286,7 +450,7 @@ def create_module(
     session: Annotated[Session, Depends(get_session)],
 ) -> ModuleRead:
     _require_owner(tutor, current)
-    items_dicts = [it.model_dump() for it in payload.items]
+    items_dicts = _items_for_storage([it.model_dump() for it in payload.items])
     _validate_items(items_dicts, tutor, session)
     base = slugify(payload.slug) if payload.slug else slugify(payload.title)
     slug = _unique_slug_for(base, tutor.id, session)
@@ -324,9 +488,7 @@ def update_module(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Module not found.")
     changes = payload.model_dump(exclude_unset=True)
     if "items" in changes:
-        items_dicts = [
-            {"kind": it["kind"], "ref_id": int(it["ref_id"])} for it in changes["items"]
-        ]
+        items_dicts = _items_for_storage(changes["items"])
         _validate_items(items_dicts, tutor, session)
         row.items_json = json.dumps(items_dicts)
     if "slug" in changes:
@@ -399,13 +561,13 @@ def list_public_modules(
     return [_to_summary(m) for m in rows]
 
 
-@storefront_router.get("/{slug}", response_model=ModuleRead)
+@storefront_router.get("/{slug}", response_model=ModulePublicRead)
 def read_public_module(
     slug: str,
     tutor: CurrentTutor,
     session: Annotated[Session, Depends(get_session)],
     current: Annotated[User | None, Depends(get_current_user_optional)] = None,
-) -> ModuleRead:
+) -> ModulePublicRead:
     row = session.exec(
         select(LessonModule).where(
             LessonModule.tutor_id == tutor.id,
@@ -416,11 +578,14 @@ def read_public_module(
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Module not found.")
     purchased = False
-    if current is not None:
+    is_owner = current is not None and current.id == tutor.user_id
+    if current is not None and not is_owner:
         purchased = _has_access(
             session, module_id=row.id, tutor_id=tutor.id, student_id=current.id
         )
-    return _to_read(row, purchased=purchased)
+    return _to_public_read(
+        row, purchased=purchased, is_owner=is_owner, session=session
+    )
 
 
 router.include_router(storefront_router)
@@ -431,6 +596,13 @@ router.include_router(storefront_router)
 
 class ModuleCheckoutResponse(BaseModel):
     checkout_url: str
+
+
+class ModuleCheckoutBody(BaseModel):
+    # EU CRD 2011/83 Article 16(m) digital-content waiver — see articles
+    # router for the full rationale. We require an explicit True from the
+    # frontend checkbox before letting the Stripe session start.
+    waive_withdrawal: bool = False
 
 
 def _tenant_url(tutor: Tutor, path: str) -> str:
@@ -451,6 +623,8 @@ def _tenant_url(tutor: Tutor, path: str) -> str:
 )
 def start_module_checkout(
     module_id: int,
+    payload: ModuleCheckoutBody,
+    request: Request,
     current: CurrentUser,
     tutor: CurrentTutor,
     session: Annotated[Session, Depends(get_session)],
@@ -460,6 +634,14 @@ def start_module_checkout(
     Idempotent on the student side: if they already own this module
     the endpoint returns 409 rather than creating a duplicate session.
     """
+    if not payload.waive_withdrawal:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Please confirm you want immediate access and waive your "
+                "14-day right of withdrawal before purchasing."
+            ),
+        )
     module = session.get(LessonModule, module_id)
     if module is None or module.tutor_id != tutor.id or not module.is_published:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Module not found.")
@@ -523,6 +705,10 @@ def start_module_checkout(
                 "tutor_id": str(tutor.id),
                 "student_user_id": str(current.id),
                 "platform_fee_cents": str(fee),
+                "withdrawal_waiver_at": datetime.now(UTC).isoformat(),
+                "withdrawal_waiver_ip": (
+                    (request.client.host if request.client else "") or ""
+                )[:64],
             },
         )
     except stripe.error.StripeError as exc:

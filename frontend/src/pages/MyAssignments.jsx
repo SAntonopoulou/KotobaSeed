@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import client from '../api/client';
+import { getErrorMessage } from '../utils/errors';
 
 const formatDate = (iso) => {
   if (!iso) return '';
@@ -27,7 +28,7 @@ const MyAssignments = () => {
         const res = await client.get('/users/me/assignments');
         setItems(res.data || []);
       } catch (err) {
-        setError(err?.response?.data?.detail || 'Could not load your assignments.');
+        setError(getErrorMessage(err, 'Could not load your assignments.'));
       } finally {
         setLoading(false);
       }

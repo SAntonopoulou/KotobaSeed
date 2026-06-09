@@ -25,7 +25,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 import stripe
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, EmailStr, Field
 from sqlmodel import Session, select
 
@@ -34,7 +34,7 @@ from ..database import get_session
 from ..deps import CurrentUser, get_current_user_optional
 from ..models import Tutor, TutorAccountStatus, TutorPlan, User, UserRole
 from ..routers.auth import EMAIL_CODE_TTL_MINUTES, _issue_email_code
-from ..security import client_ip, create_access_token, hash_password
+from ..security import client_ip, create_access_token, hash_password, set_auth_cookie
 from ..services.email import send_verification_code
 from ..services.stripe_connect import (
     create_express_account,
@@ -48,6 +48,25 @@ router = APIRouter(prefix="/onboarding", tags=["onboarding"])
 
 # DNS-safe slug: 3–60 chars, lowercase alphanumerics + interior hyphens.
 _SLUG_RE = re.compile(r"^[a-z0-9]([a-z0-9-]{1,58}[a-z0-9])?$")
+
+
+_LOCALE_RE = re.compile(r"[a-zA-Z]{2,3}(?:[-_][a-zA-Z]{2})?")
+
+
+def _preferred_locale(request: Request) -> str:
+    """Pick a Stripe-compatible locale from the Accept-Language header.
+
+    Stripe's hosted onboarding picks the language for its KYC page from
+    this. Without a hint it falls back to the connected account's
+    country, which is why an English-speaking tutor with a Greek-country
+    account saw the Greek hosted page. We send the first reasonable
+    locale and let Stripe ignore anything it doesn't recognise.
+    """
+    raw = (request.headers.get("accept-language") or "").split(",")[0].strip()
+    if not raw:
+        return "en"
+    match = _LOCALE_RE.match(raw)
+    return match.group(0).replace("_", "-") if match else "en"
 
 
 def _validate_slug(slug: str) -> str:
@@ -106,6 +125,12 @@ class OnboardingStatus(BaseModel):
     account_status: TutorAccountStatus
     stripe_connect_account_id: str
     onboarding_complete: bool
+    # Stripe Connect capability flags, surfaced separately so the UI can
+    # distinguish "still needs identity info" from "verified, payouts under
+    # final review by Stripe". The former is a tutor problem; the latter is
+    # a Stripe-side wait that we shouldn't ask the tutor to keep "resuming".
+    charges_enabled: bool = False
+    payouts_enabled: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -125,6 +150,7 @@ class RefreshLinkResponse(BaseModel):
 def signup_tutor(
     payload: TutorSignupRequest,
     request: Request,
+    response: Response,
     session: Annotated[Session, Depends(get_session)],
     existing_user: Annotated[User | None, Depends(get_current_user_optional)] = None,
 ) -> TutorSignupResponse:
@@ -193,7 +219,10 @@ def signup_tutor(
         ) from None
 
     try:
-        onboarding_url = create_onboarding_link(account_id=connect_account_id)
+        onboarding_url = create_onboarding_link(
+            account_id=connect_account_id,
+            locale=_preferred_locale(request),
+        )
     except stripe.error.StripeError:
         log.exception("AccountLink creation failed for %s (acct %s)", email, connect_account_id)
         raise HTTPException(
@@ -214,9 +243,14 @@ def signup_tutor(
             user.languages = payload.languages_taught
         user.updated_at = now
         session.add(user)
-        # The existing-user branch doesn't need email verification re-sent;
-        # the user already verified (or is in the middle of doing so).
-        code = None
+        # Existing-user branch normally doesn't need email verification re-sent.
+        # The exception is a legacy user who registered but never verified —
+        # without issuing a fresh code here, the dashboard banner would
+        # surface but /auth/verify-email would 400 with "no code on file".
+        if user.email_verified_at is None:
+            code = _issue_email_code(user)
+        else:
+            code = None
     else:
         user = User(
             email=email,
@@ -246,6 +280,11 @@ def signup_tutor(
     session.commit()
     session.refresh(user)
     session.refresh(tutor)
+
+    # Mirror the brand-new Connect account onto the User row so the
+    # marketplace flows see the same Stripe identity as the tutor site.
+    from ..services import connect_sync
+    connect_sync.sync_tutor_to_user(tutor, session, commit=True)
 
     # Referral attribution + auto-issue codes for the new tutor.
     try:
@@ -277,6 +316,7 @@ def signup_tutor(
         subject=user.id,
         expires_delta=timedelta(minutes=settings.access_token_expire_minutes),
     )
+    set_auth_cookie(response, token)
     return TutorSignupResponse(
         access_token=token,
         expires_in_minutes=settings.access_token_expire_minutes,
@@ -298,6 +338,7 @@ def _tutor_for_user(current: User, session: Session) -> Tutor:
 
 @router.post("/tutor/refresh-link", response_model=RefreshLinkResponse)
 def refresh_onboarding_link(
+    request: Request,
     current: CurrentUser,
     session: Annotated[Session, Depends(get_session)],
 ) -> RefreshLinkResponse:
@@ -308,7 +349,10 @@ def refresh_onboarding_link(
             detail="No Stripe account attached to this tutor.",
         )
     try:
-        url = create_onboarding_link(account_id=tutor.stripe_connect_account_id)
+        url = create_onboarding_link(
+            account_id=tutor.stripe_connect_account_id,
+            locale=_preferred_locale(request),
+        )
     except stripe.error.StripeError:
         log.exception(
             "AccountLink refresh failed for tutor %s (acct %s)",
@@ -322,16 +366,24 @@ def refresh_onboarding_link(
     return RefreshLinkResponse(onboarding_url=url)
 
 
-def _sync_tutor_from_stripe(tutor: Tutor, session: Session) -> Tutor:
+def _sync_tutor_from_stripe(tutor: Tutor, session: Session) -> tuple[Tutor, dict]:
     """Pull live Stripe state and reconcile `tutor.account_status`.
 
     Self-healing path for when account.updated webhooks didn't reach us
     (e.g. `stripe listen` wasn't running, or the user returned from
     Stripe before the event was delivered). Mirrors the same transitions
     `handle_account_updated` makes from the webhook side.
+
+    A tutor is treated as onboarded once Stripe says
+    ``details_submitted AND charges_enabled`` — we don't wait on
+    ``payouts_enabled`` because Stripe routinely holds that flag false for
+    hours-to-days after KYC clears while it does a final payout review.
+    During that window the tutor can already accept bookings; funds sit in
+    their Stripe balance and release automatically once payouts flip on.
     """
+    blank_caps = {"charges_enabled": False, "payouts_enabled": False}
     if not tutor.stripe_connect_account_id:
-        return tutor
+        return tutor, blank_caps
     try:
         account = fetch_account(account_id=tutor.stripe_connect_account_id)
     except stripe.error.StripeError:
@@ -340,24 +392,42 @@ def _sync_tutor_from_stripe(tutor: Tutor, session: Session) -> Tutor:
             tutor.tutor_slug,
             tutor.stripe_connect_account_id,
         )
-        return tutor
+        return tutor, blank_caps
 
+    details_submitted = bool(account.get("details_submitted"))
     charges_enabled = bool(account.get("charges_enabled"))
     payouts_enabled = bool(account.get("payouts_enabled"))
+
     desired: TutorAccountStatus | None = None
-    if charges_enabled and payouts_enabled:
+    if details_submitted and charges_enabled:
         if tutor.account_status == TutorAccountStatus.PAUSED_KYC:
             desired = TutorAccountStatus.ACTIVE
     elif tutor.account_status == TutorAccountStatus.ACTIVE:
+        # Stripe revoked charges or wiped the submission — pull back to
+        # KYC-pending so the dashboard prompts a fix.
         desired = TutorAccountStatus.PAUSED_KYC
 
     if desired and desired != tutor.account_status:
         tutor.account_status = desired
         tutor.updated_at = datetime.now(UTC)
         session.add(tutor)
-        session.commit()
-        session.refresh(tutor)
-    return tutor
+
+    # Always mirror Stripe's view of the capabilities onto the owning
+    # User row so the marketplace + UI banners stay accurate even when
+    # the transition didn't move.
+    from ..services import connect_sync
+    connect_sync.sync_tutor_to_user(
+        tutor,
+        session,
+        charges_enabled=charges_enabled,
+        payouts_enabled=payouts_enabled,
+    )
+    session.commit()
+    session.refresh(tutor)
+    return tutor, {
+        "charges_enabled": charges_enabled,
+        "payouts_enabled": payouts_enabled,
+    }
 
 
 @router.post("/tutor/sync-stripe", response_model=OnboardingStatus)
@@ -373,13 +443,15 @@ def sync_tutor_from_stripe(
     `stripe listen`, or a brief webhook delivery outage in prod).
     """
     tutor = _tutor_for_user(current, session)
-    tutor = _sync_tutor_from_stripe(tutor, session)
+    tutor, caps = _sync_tutor_from_stripe(tutor, session)
     return OnboardingStatus(
         tutor_id=tutor.id,
         tutor_slug=tutor.tutor_slug,
         account_status=tutor.account_status,
         stripe_connect_account_id=tutor.stripe_connect_account_id or "",
         onboarding_complete=tutor.account_status != TutorAccountStatus.PAUSED_KYC,
+        charges_enabled=caps["charges_enabled"],
+        payouts_enabled=caps["payouts_enabled"],
     )
 
 
@@ -389,11 +461,13 @@ def onboarding_status(
     session: Annotated[Session, Depends(get_session)],
 ) -> OnboardingStatus:
     tutor = _tutor_for_user(current, session)
-    tutor = _sync_tutor_from_stripe(tutor, session)
+    tutor, caps = _sync_tutor_from_stripe(tutor, session)
     return OnboardingStatus(
         tutor_id=tutor.id,
         tutor_slug=tutor.tutor_slug,
         account_status=tutor.account_status,
         stripe_connect_account_id=tutor.stripe_connect_account_id or "",
         onboarding_complete=tutor.account_status != TutorAccountStatus.PAUSED_KYC,
+        charges_enabled=caps["charges_enabled"],
+        payouts_enabled=caps["payouts_enabled"],
     )

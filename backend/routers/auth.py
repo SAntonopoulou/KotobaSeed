@@ -19,19 +19,21 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, EmailStr, Field
 from sqlmodel import Session, select
 
 from ..config import settings
 from ..database import get_session
-from ..deps import CurrentUser
+from ..deps import CurrentUser, get_current_user_optional
 from ..models import User, UserRole
 from ..security import (
+    clear_auth_cookie,
     client_ip,
     create_access_token,
     hash_password,
+    set_auth_cookie,
     verify_password,
 )
 from ..services.email import send_verification_code
@@ -40,7 +42,9 @@ log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-from ..limiter import limiter as _limiter
+# E402: limiter is exposed as a module-level alias here so the
+# `@_limiter.limit(...)` decorators below can reference it.
+from ..limiter import limiter as _limiter  # noqa: E402
 
 EMAIL_CODE_TTL_MINUTES = 15
 
@@ -120,6 +124,7 @@ class VerifyEmailResponse(BaseModel):
 def register(
     payload: RegisterRequest,
     request: Request,
+    response: Response,
     session: Annotated[Session, Depends(get_session)],
 ) -> TokenResponse:
     if not payload.gdpr_consent:
@@ -182,6 +187,7 @@ def register(
         subject=user.id,
         expires_delta=timedelta(minutes=settings.access_token_expire_minutes),
     )
+    set_auth_cookie(response, token)
     return TokenResponse(
         access_token=token,
         expires_in_minutes=settings.access_token_expire_minutes,
@@ -255,7 +261,9 @@ def resend_verification(
     return VerifyEmailResponse(verified=False)
 
 
-def _login(email: str, password: str, session: Session) -> TokenResponse:
+def _login(
+    email: str, password: str, session: Session, response: Response
+) -> TokenResponse:
     email_norm = email.lower().strip()
     user = session.exec(select(User).where(User.email == email_norm)).first()
     if not user or not verify_password(password, user.hashed_password):
@@ -273,6 +281,7 @@ def _login(email: str, password: str, session: Session) -> TokenResponse:
         subject=user.id,
         expires_delta=timedelta(minutes=settings.access_token_expire_minutes),
     )
+    set_auth_cookie(response, token)
     return TokenResponse(
         access_token=token,
         expires_in_minutes=settings.access_token_expire_minutes,
@@ -343,6 +352,7 @@ def forgot_password(
 @_limiter.limit("10/hour")
 def reset_password(
     request: Request,
+    response: Response,
     payload: ResetPasswordRequest,
     session: Annotated[Session, Depends(get_session)],
 ) -> TokenResponse:
@@ -380,9 +390,11 @@ def reset_password(
 
     # Confirmation email — security best practice.
     try:
-        from ..services import email as _email
-        from ..services import email_templates as _templates
-        from ..services import platform_settings as _platform
+        from ..services import (
+            email as _email,
+            email_templates as _templates,
+            platform_settings as _platform,
+        )
 
         support_email = (
             _platform.get_setting(session, _platform.SETTING_SUPPORT_EMAIL)
@@ -407,6 +419,7 @@ def reset_password(
         subject=user.id,
         expires_delta=timedelta(minutes=settings.access_token_expire_minutes),
     )
+    set_auth_cookie(response, access_token)
     return TokenResponse(
         access_token=access_token,
         expires_in_minutes=settings.access_token_expire_minutes,
@@ -417,21 +430,51 @@ def reset_password(
 @_limiter.limit("20/minute")
 def login(
     request: Request,
+    response: Response,
     payload: LoginRequest,
     session: Annotated[Session, Depends(get_session)],
 ) -> TokenResponse:
-    return _login(payload.email, payload.password, session)
+    return _login(payload.email, payload.password, session, response)
 
 
 @router.post("/token", response_model=TokenResponse)
 @_limiter.limit("20/minute")
 def login_form(
     request: Request,
+    response: Response,
     form: Annotated[OAuth2PasswordRequestForm, Depends()],
     session: Annotated[Session, Depends(get_session)],
 ) -> TokenResponse:
     """OAuth2 password-grant form login. Kept for Swagger UI + legacy frontend."""
-    return _login(form.username, form.password, session)
+    return _login(form.username, form.password, session, response)
+
+
+@router.post("/logout")
+def logout(
+    response: Response,
+    session: Annotated[Session, Depends(get_session)],
+    current: Annotated[User | None, Depends(get_current_user_optional)] = None,
+) -> dict:
+    """Sign the user out everywhere.
+
+    Clears the shared ``.kotobaseed.net`` cookie AND bumps
+    ``User.token_invalidation_at`` so every JWT issued before this moment
+    is rejected on the next request. Without the timestamp bump, a
+    subdomain that had a localStorage token from a prior direct login
+    would keep authenticating its API calls via the ``Authorization``
+    header even after the cookie was cleared — i.e. the apex would log
+    out but the tutor site would still look signed in until the user
+    manually refreshed and the localStorage token happened to be wiped.
+
+    Auth is *optional* here so a stale-token client can still cleanly
+    drop its cookie even if the JWT has already been invalidated.
+    """
+    clear_auth_cookie(response)
+    if current is not None:
+        current.token_invalidation_at = datetime.now(UTC)
+        session.add(current)
+        session.commit()
+    return {"ok": True}
 
 
 @router.get("/me", response_model=UserPublic)
@@ -440,12 +483,15 @@ def me(current: CurrentUser) -> UserPublic:
 
 
 # --- 2FA / device session management --------------------------------------
+# E402: this block intentionally lives below the standard auth endpoints
+# above. The imports are grouped here so the 2FA helpers stay co-located
+# with the routes that use them.
 
 
-import json as _json
+import json as _json  # noqa: E402
 
-from ..security import hash_password as _hash
-from ..services import two_factor as _tf
+from ..security import hash_password as _hash  # noqa: E402
+from ..services import two_factor as _tf  # noqa: E402
 
 
 class TotpSetupResponse(BaseModel):

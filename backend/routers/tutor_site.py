@@ -19,12 +19,12 @@ from typing import Annotated
 import httpx
 import stripe
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 from sqlmodel import Session, select
 
 from ..config import settings
 from ..database import get_session
-from ..deps import CurrentUser
+from ..deps import CurrentUser, get_current_user_optional
 from ..models import (
     Booking,
     BookingStatus,
@@ -61,13 +61,22 @@ class TutorRead(BaseModel):
     stripe_connect_account_id: str | None
     list_in_marketplace: bool
     cancellation_cutoff_hours: int
+    min_booking_lead_minutes: int
     theme: str
+    show_kotobaseed_link: bool
     created_at: datetime
 
 
-def _serialize_tutor(tutor: Tutor) -> TutorRead:
-    """Fold User identity fields into the TutorRead response."""
+def _serialize_tutor(tutor: Tutor, viewer_user_id: int | None = None) -> TutorRead:
+    """Fold User identity fields into the TutorRead response.
+
+    ``viewer_user_id`` lets us scrub fields that should only be visible
+    to the tutor themselves. Connect account IDs are mostly harmless but
+    enumeration-friendly and noisy in the public response — so the
+    public surface gets ``None`` and the owner sees the real value.
+    """
     user = tutor.user  # eager-loaded via the Tutor.user relationship
+    is_owner = viewer_user_id is not None and viewer_user_id == tutor.user_id
     return TutorRead(
         id=tutor.id,
         user_id=tutor.user_id,
@@ -80,10 +89,18 @@ def _serialize_tutor(tutor: Tutor) -> TutorRead:
         plan=tutor.plan,
         account_status=tutor.account_status,
         custom_domain=tutor.custom_domain,
-        stripe_connect_account_id=tutor.stripe_connect_account_id,
+        stripe_connect_account_id=(
+            tutor.stripe_connect_account_id if is_owner else None
+        ),
         list_in_marketplace=tutor.list_in_marketplace,
         cancellation_cutoff_hours=tutor.cancellation_cutoff_hours,
+        min_booking_lead_minutes=tutor.min_booking_lead_minutes,
         theme=tutor.theme or "sage",
+        show_kotobaseed_link=(
+            tutor.show_kotobaseed_link
+            if tutor.show_kotobaseed_link is not None
+            else True
+        ),
         created_at=tutor.created_at,
     )
 
@@ -100,8 +117,10 @@ class TutorUpdate(BaseModel):
     display_name: str | None = Field(default=None, min_length=1, max_length=120)
     public_reply_email: EmailStr | None = None
     list_in_marketplace: bool | None = None
-    cancellation_cutoff_hours: int | None = Field(default=None, ge=48, le=720)
+    cancellation_cutoff_hours: int | None = Field(default=None, ge=24, le=720)
+    min_booking_lead_minutes: int | None = Field(default=None, ge=0, le=43_200)
     theme: str | None = Field(default=None, max_length=32)
+    show_kotobaseed_link: bool | None = None
     # User-side (single identity source)
     bio: str | None = Field(default=None, max_length=4000)
     photo_url: str | None = Field(default=None, max_length=2048)
@@ -161,14 +180,71 @@ def list_themes() -> list[ThemeOption]:
 def read_current_tutor(
     tutor: CurrentTutor,
     session: Annotated[Session, Depends(get_session)],
+    viewer: Annotated[User | None, Depends(get_current_user_optional)] = None,
 ) -> TutorRead:
     """Public — anything a student or visitor sees on the tutor's site.
 
     Self-heals KYC status from Stripe on every read when the tutor is still
-    PAUSED_KYC. Once active, no Stripe call is made (free).
+    PAUSED_KYC. Once active, no Stripe call is made (free). Sensitive
+    fields (Connect account ID) are scrubbed unless the viewer owns the
+    tutor — anonymous browsers and other users don't need to see them.
     """
     tutor = _maybe_sync_kyc_status(tutor, session)
-    return _serialize_tutor(tutor)
+    return _serialize_tutor(tutor, viewer_user_id=viewer.id if viewer else None)
+
+
+class MinuteQuotaSummary(BaseModel):
+    """Snapshot for the dashboard widget. `quota_minutes=0` means unlimited.
+
+    `used_minutes` is the ACTUAL minutes taught this cycle (completed +
+    no-show — the tutor's room was held either way). `reserved_minutes`
+    is upcoming confirmed bookings that haven't happened yet. The bar
+    in the UI renders reserved behind used in a lighter tone so a tutor
+    can see at a glance what they've delivered vs. what's still ahead.
+
+    `pack_minutes_available` is extra minutes the tutor has purchased on
+    top of their tier quota that haven't yet been consumed — the safety
+    valve when usage spikes.
+    """
+
+    used_minutes: int
+    reserved_minutes: int
+    quota_minutes: int
+    pack_minutes_available: int
+    percent_used: int
+    percent_reserved: int
+    next_reset_at: datetime
+    plan: str
+    over_quota: bool
+
+
+@router.get("/me/minute-usage", response_model=MinuteQuotaSummary)
+def read_minute_usage(
+    current: CurrentUser,
+    tutor: CurrentTutor,
+    session: Annotated[Session, Depends(get_session)],
+) -> MinuteQuotaSummary:
+    """Owner — current month's classroom-minute usage vs. the tutor's plan
+    cap. Powers the dashboard widget so tutors see when they're getting close.
+    """
+    if tutor.user_id != current.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't own this tutor profile.",
+        )
+    from ..services import minute_quota
+    summary = minute_quota.quota_summary(tutor, current, session)
+    return MinuteQuotaSummary(
+        used_minutes=summary.used_minutes,
+        reserved_minutes=summary.reserved_minutes,
+        quota_minutes=summary.quota_minutes,
+        pack_minutes_available=summary.pack_minutes_available,
+        percent_used=summary.percent_used,
+        percent_reserved=summary.percent_reserved,
+        next_reset_at=summary.next_reset_at,
+        plan=summary.plan.value,
+        over_quota=summary.over_quota,
+    )
 
 
 @router.patch("/me", response_model=TutorRead)
@@ -193,7 +269,7 @@ def update_current_tutor(
 
     changes = payload.model_dump(exclude_unset=True)
     if not changes:
-        return _serialize_tutor(tutor)
+        return _serialize_tutor(tutor, viewer_user_id=current.id)
 
     now = datetime.now(UTC)
     tutor_dirty = False
@@ -212,8 +288,14 @@ def update_current_tutor(
     if "cancellation_cutoff_hours" in changes:
         tutor.cancellation_cutoff_hours = int(changes["cancellation_cutoff_hours"])
         tutor_dirty = True
+    if "min_booking_lead_minutes" in changes:
+        tutor.min_booking_lead_minutes = int(changes["min_booking_lead_minutes"])
+        tutor_dirty = True
     if "theme" in changes and changes["theme"] is not None:
         from ..services.themes import THEME_KEYS
+        from ..models import CustomTheme
+
+        next_theme = changes["theme"]
 
         # Themes are a Pro feature — match the page builder + custom domain
         # plan gates. Free/Plus stay on the default `sage` theme.
@@ -222,12 +304,47 @@ def update_current_tutor(
                 status_code=status.HTTP_402_PAYMENT_REQUIRED,
                 detail="Themes are a Pro feature. Upgrade your plan to switch.",
             )
-        if changes["theme"] not in THEME_KEYS:
+
+        # Two paths: curated stock theme (the 6 keys in THEME_KEYS) OR a
+        # v2 custom theme whose key starts with `custom-` and matches a
+        # CustomTheme row the tutor can apply (own, team-owned, or
+        # public catalogue).
+        if next_theme in THEME_KEYS:
+            tutor.theme = next_theme
+            tutor_dirty = True
+        elif next_theme.startswith("custom-"):
+            v2_theme = session.exec(
+                select(CustomTheme).where(CustomTheme.theme_key == next_theme)
+            ).first()
+            if v2_theme is None or v2_theme.theme_key is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="That custom theme doesn't exist.",
+                )
+            # Ownership check — public catalogue, own, or team match.
+            team_id = tutor.team_id if tutor and tutor.team_id else None
+            allowed = (
+                v2_theme.is_public_catalogue
+                or v2_theme.owner_user_id == current.id
+                or (team_id is not None and v2_theme.owner_team_id == team_id)
+            )
+            if not allowed:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You don't have access to that custom theme.",
+                )
+            tutor.theme = next_theme
+            tutor_dirty = True
+        else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Unknown theme. Pick one of: {', '.join(sorted(THEME_KEYS))}.",
+                detail=(
+                    f"Unknown theme. Pick one of: {', '.join(sorted(THEME_KEYS))} "
+                    "or a custom-* key you have access to."
+                ),
             )
-        tutor.theme = changes["theme"]
+    if "show_kotobaseed_link" in changes and changes["show_kotobaseed_link"] is not None:
+        tutor.show_kotobaseed_link = bool(changes["show_kotobaseed_link"])
         tutor_dirty = True
 
     # User-side identity fields (single source — shared with marketplace profile)
@@ -251,7 +368,7 @@ def update_current_tutor(
         session.commit()
         session.refresh(tutor)
         session.refresh(current)
-    return _serialize_tutor(tutor)
+    return _serialize_tutor(tutor, viewer_user_id=current.id)
 
 
 # --- Lesson packs --------------------------------------------------------
@@ -1027,11 +1144,19 @@ def update_trial_settings(
 
 class TrialBookRequest(BaseModel):
     scheduled_at: datetime
+    # Optional intro from the student to the tutor — language goals,
+    # what they're hoping to get out of the lesson, etc. Posted as the
+    # first message in a fresh direct conversation so the tutor can
+    # prep before the lesson.
+    initial_message: str | None = Field(default=None, max_length=2000)
 
 
 class TrialBookResponse(BaseModel):
     booking_id: int
     scheduled_at: datetime
+    # Conversation that was opened (and seeded with `initial_message`)
+    # so the SPA can jump the student into the thread on success.
+    conversation_id: int | None = None
     duration_minutes: int
 
 
@@ -1074,6 +1199,20 @@ def book_trial(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="You can't book a trial with yourself.",
         )
+    # Mirror the paid-booking lead-time check. Without this a scripted
+    # trial-book could land seconds before the lesson, defeating the
+    # whole point of `min_booking_lead_minutes`.
+    lead_minutes = int(tutor.min_booking_lead_minutes or 0)
+    if lead_minutes > 0:
+        earliest_acceptable = datetime.now(UTC) + timedelta(minutes=lead_minutes)
+        if payload.scheduled_at < earliest_acceptable:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"This tutor needs at least {lead_minutes} minutes "
+                    "of notice. Pick a later slot."
+                ),
+            )
 
     trial_pack = session.exec(
         select(LessonPack).where(
@@ -1124,10 +1263,39 @@ def book_trial(
             ),
         )
 
+    # Non-compete: same protection that applies to paid bookings.
+    from ..services import team_protection as _protection
+    blocked_trial = _protection.is_student_protected_from_tutor(
+        tutor_id=tutor.id, student_user_id=current.id, session=session
+    )
+    if blocked_trial is not None:
+        ends = blocked_trial.protection_ends_at.strftime("%d %b %Y")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                f"This tutor recently moved from a school where you studied. "
+                f"Direct bookings between you re-open on {ends}."
+            ),
+        )
+
+    # Quota gate (trials count too — Daily.co charges for every meeting).
+    from ..services import minute_quota
+    if minute_quota.would_exceed_quota(
+        tutor, tutor.user, trial_pack.duration_minutes, session
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail=(
+                "This tutor's classroom is fully booked for the month. "
+                "Please try again after the 1st."
+            ),
+        )
+
     booking = Booking(
         tutor_id=tutor.id,
         student_user_id=current.id,
         lesson_pack_id=trial_pack.id,
+        tutor_team_id=tutor.team_id,
         scheduled_at=payload.scheduled_at,
         duration_minutes=trial_pack.duration_minutes,
         price_cents=0,
@@ -1139,6 +1307,11 @@ def book_trial(
     session.add(booking)
     session.commit()
     session.refresh(booking)
+    minute_quota.record_booking_minutes(booking, session, commit=True)
+    from ..services import enrollment as _enroll
+    _enroll.ensure_enrollment(
+        student_user_id=current.id, tutor_id=tutor.id, session=session, commit=True
+    )
 
     # Mirror the paid-booking notification.
     session.add(
@@ -1158,10 +1331,56 @@ def book_trial(
 
     booking_emails.send_confirmation_emails(session, booking)
 
+    # Optional intro message → seed a student-initiated conversation.
+    # Best-effort: a messaging hiccup must not block a successful booking.
+    conversation_id: int | None = None
+    if payload.initial_message and payload.initial_message.strip():
+        try:
+            from ..models import (
+                Conversation as _Conv,
+                ConversationStatus as _CS,
+                Message as _Msg,
+            )
+            existing = session.exec(
+                select(_Conv).where(
+                    _Conv.request_id == None,  # noqa: E711
+                    _Conv.teacher_id == tutor.user_id,
+                    _Conv.student_id == current.id,
+                )
+            ).first()
+            if existing is None:
+                existing = _Conv(
+                    request_id=None,
+                    teacher_id=tutor.user_id,
+                    student_id=current.id,
+                    status=_CS.OPEN,
+                    student_initiated=True,
+                    updated_at=datetime.now(UTC),
+                )
+                session.add(existing)
+                session.flush()
+            session.add(
+                _Msg(
+                    conversation_id=existing.id,
+                    sender_id=current.id,
+                    content=payload.initial_message.strip(),
+                    is_read=False,
+                )
+            )
+            existing.updated_at = datetime.now(UTC)
+            session.add(existing)
+            session.commit()
+            conversation_id = existing.id
+        except Exception:
+            log.exception(
+                "Could not seed initial message for trial booking %s", booking.id
+            )
+
     return TrialBookResponse(
         booking_id=booking.id,
         scheduled_at=booking.scheduled_at,
         duration_minutes=booking.duration_minutes,
+        conversation_id=conversation_id,
     )
 
 
@@ -1299,18 +1518,137 @@ def start_booking_checkout(
             detail="You can't book a lesson with yourself.",
         )
 
+    # Non-compete: refuse if the student is in this tutor's active
+    # protection window from a recently-left school.
+    from ..services import team_protection as _protection
+    blocked = _protection.is_student_protected_from_tutor(
+        tutor_id=tutor.id, student_user_id=current.id, session=session
+    )
+    if blocked is not None:
+        ends = blocked.protection_ends_at.strftime("%d %b %Y")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                f"This tutor recently moved from a school where you studied. "
+                f"Direct bookings between you re-open on {ends}."
+            ),
+        )
+
+    # Admin LESSON_CREDIT comp — if the student has an active free-lesson
+    # grant that fits this booking's duration, consume one credit and
+    # create a CONFIRMED zero-price booking directly. Skips Stripe checkout
+    # entirely. The minute quota / non-compete checks above still apply.
+    from ..services import admin_grants as _grants
+    credit_grant = _grants.consume_lesson_credit(
+        session,
+        user_id=current.id,
+        lesson_minutes=pack.duration_minutes,
+    )
+    if credit_grant is not None:
+        free_booking = Booking(
+            tutor_id=tutor.id,
+            student_user_id=current.id,
+            lesson_pack_id=pack.id,
+            tutor_team_id=tutor.team_id,
+            scheduled_at=payload.scheduled_at,
+            duration_minutes=pack.duration_minutes,
+            price_cents=0,
+            currency=pack.currency,
+            platform_fee_cents=0,
+            status=BookingStatus.CONFIRMED,
+            paid_at=datetime.now(UTC),
+        )
+        session.add(free_booking)
+        session.commit()
+        session.refresh(free_booking)
+        from ..services import minute_quota
+        minute_quota.record_booking_minutes(free_booking, session, commit=True)
+        from ..services import enrollment as _enroll
+        _enroll.ensure_enrollment(
+            student_user_id=current.id, tutor_id=tutor.id, session=session, commit=True
+        )
+        return BookingCheckoutResponse(
+            booking_id=free_booking.id,
+            checkout_url=f"{settings.frontend_url.rstrip('/')}/booking/success?free=1",
+        )
+
+    # Slot validation last — these are "wrong time" errors that are
+    # easier to fix than the "not bookable at all" errors above
+    # (non-compete, quota, KYC). Showing the user "pick a different
+    # time" when actually the relationship is permanently blocked
+    # would be misleading. Mirrors book_trial's validation so paid +
+    # trial bookings have the same server-side calendar guarantees.
+    from ..services import minute_quota
+    lead_minutes = int(tutor.min_booking_lead_minutes or 0)
+    if lead_minutes > 0:
+        earliest_acceptable = datetime.now(UTC) + timedelta(minutes=lead_minutes)
+        if payload.scheduled_at < earliest_acceptable:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"This tutor needs at least {lead_minutes} minutes "
+                    "of notice. Pick a later slot."
+                ),
+            )
+    if not _slot_fits_window(
+        tutor=tutor,
+        scheduled_at=payload.scheduled_at,
+        duration_minutes=pack.duration_minutes,
+        session=session,
+        trial_only=False,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "This time isn't open for bookings. Pick a slot from "
+                "the suggested list."
+            ),
+        )
+    existing_bookings = session.exec(
+        select(Booking).where(
+            Booking.tutor_id == tutor.id,
+            Booking.status.notin_([
+                BookingStatus.CANCELLED,
+                BookingStatus.REFUNDED,
+            ]),
+        )
+    ).all()
+    if _slot_conflicts(payload.scheduled_at, pack.duration_minutes, existing_bookings):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="That slot was just taken. Pick another.",
+        )
+
+    # Cost cap: refuse the checkout if confirming this booking would push
+    # the tutor past their monthly classroom-minute quota.
+    if minute_quota.would_exceed_quota(
+        tutor, tutor.user, pack.duration_minutes, session
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail=(
+                "This tutor's classroom is fully booked for the month. "
+                "Please try again after the 1st."
+            ),
+        )
+
     fee = _platform_fee_for(tutor.user, pack.price_cents)
 
     booking = Booking(
         tutor_id=tutor.id,
         student_user_id=current.id,
         lesson_pack_id=pack.id,
+        tutor_team_id=tutor.team_id,
         scheduled_at=payload.scheduled_at,
         duration_minutes=pack.duration_minutes,
         price_cents=pack.price_cents,
         currency=pack.currency,
         platform_fee_cents=fee,
         status=BookingStatus.PENDING_PAYMENT,
+    )
+    from ..services import enrollment as _enroll
+    _enroll.ensure_enrollment(
+        student_user_id=current.id, tutor_id=tutor.id, session=session
     )
     session.add(booking)
     session.commit()
@@ -1572,6 +1910,10 @@ def list_available_slots(
         return []
 
     now_utc = datetime.now(UTC)
+    # Earliest slot the student is allowed to book — tutor-configurable
+    # via Tutor.min_booking_lead_minutes (0 = "even 1 minute from now",
+    # up to 30 days).
+    lead_cutoff = now_utc + timedelta(minutes=tutor.min_booking_lead_minutes or 0)
     horizon_utc = now_utc + timedelta(days=days)
     bookings = list(
         session.exec(
@@ -1606,9 +1948,11 @@ def list_available_slots(
                     tzinfo=tz,
                 )
                 slot_utc = local_start.astimezone(UTC)
-                # Skip past slots; also avoid the very-imminent ones —
-                # students need a minute to actually book.
-                if slot_utc < now_utc + timedelta(minutes=15):
+                # Skip slots that fall inside the tutor's configured
+                # booking-lead window (effective floor: 15 min so the
+                # student has time to actually click "book").
+                effective_lead = max(lead_cutoff, now_utc + timedelta(minutes=15))
+                if slot_utc < effective_lead:
                     candidate_minute += slot_step_minutes
                     continue
                 if slot_utc > horizon_utc:
@@ -1658,6 +2002,10 @@ def _compute_slots(
         return []
 
     now_utc = datetime.now(UTC)
+    # Earliest slot the student is allowed to book — tutor-configurable
+    # via Tutor.min_booking_lead_minutes (0 = "even 1 minute from now",
+    # up to 30 days).
+    lead_cutoff = now_utc + timedelta(minutes=tutor.min_booking_lead_minutes or 0)
     horizon_utc = now_utc + timedelta(days=days)
     bookings = list(
         session.exec(
@@ -1690,7 +2038,12 @@ def _compute_slots(
                     tzinfo=tz,
                 )
                 slot_utc = local_start.astimezone(UTC)
-                if slot_utc < now_utc + timedelta(minutes=15):
+                # Respect the tutor's lead-time setting literally —
+                # if they configured 0 ("any time, even 1 minute from
+                # now") they get every future slot. The booking POST
+                # itself re-validates against `now` at commit time so a
+                # student can never book a slot that's actually past.
+                if slot_utc < lead_cutoff:
                     candidate_minute += slot_step_minutes
                     continue
                 if slot_utc > horizon_utc:
@@ -1749,6 +2102,7 @@ def _slot_fits_window(
 def list_trial_slots(
     tutor: CurrentTutor,
     session: Annotated[Session, Depends(get_session)],
+    current: Annotated[User | None, Depends(get_current_user_optional)] = None,
     days: int = 14,
     slot_step_minutes: int = 30,
 ) -> list[AvailableSlot]:
@@ -1757,12 +2111,43 @@ def list_trial_slots(
     Filters to availability windows where `allow_trial=True`, then walks
     them at `slot_step_minutes` granularity for the tutor's configured
     trial duration. Returns 404 if the tutor isn't offering trials.
+
+    If the caller is signed in *and* has already booked their free trial
+    with this tutor, we 409 with the same message the booking endpoint
+    uses. Without this short-circuit, the slot walker returns an empty
+    list and the UI says "no times available" — confusing for a student
+    who's actually been blocked by the one-trial-per-pair rule.
     """
     if not tutor.offers_free_trial:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="This tutor isn't offering free trials.",
         )
+    if current is not None:
+        trial_pack = session.exec(
+            select(LessonPack).where(
+                LessonPack.tutor_id == tutor.id,
+                LessonPack.is_trial == True,  # noqa: E712
+                LessonPack.is_active == True,  # noqa: E712
+            )
+        ).first()
+        if trial_pack is not None:
+            prior = session.exec(
+                select(Booking).where(
+                    Booking.tutor_id == tutor.id,
+                    Booking.student_user_id == current.id,
+                    Booking.lesson_pack_id == trial_pack.id,
+                    Booking.status != BookingStatus.CANCELLED,
+                )
+            ).first()
+            if prior is not None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        "You've already booked your free trial with this tutor — "
+                        "next steps are a paid lesson."
+                    ),
+                )
     if days < 1 or days > 60:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -1791,6 +2176,10 @@ class BookingRead(BaseModel):
     tutor_id: int
     student_user_id: int
     student_name: str | None
+    # `counterparty_name` mirrors the student-side schema so a shared
+    # <BookingCard> component can render either view from the same field.
+    # See StudentBookingRead.counterparty_name for the rationale.
+    counterparty_name: str | None = None
     lesson_pack_id: int
     pack_name: str | None
     scheduled_at: datetime
@@ -1805,6 +2194,30 @@ class BookingRead(BaseModel):
     refunded_at: datetime | None
     created_at: datetime
 
+    @field_validator(
+        "scheduled_at",
+        "paid_at",
+        "completed_at",
+        "cancelled_at",
+        "refunded_at",
+        "created_at",
+        mode="before",
+    )
+    @classmethod
+    def _ensure_utc(cls, v):
+        # See StudentBookingRead._ensure_utc — same rationale.
+        if v is None or not isinstance(v, datetime):
+            return v
+        if v.tzinfo is None:
+            return v.replace(tzinfo=UTC)
+        return v
+
+    @model_validator(mode="after")
+    def _fill_counterparty(self):
+        if self.counterparty_name is None and self.student_name:
+            self.counterparty_name = self.student_name
+        return self
+
 
 def _serialize_booking(booking: Booking, *, student: User | None, pack: LessonPack | None) -> BookingRead:
     return BookingRead(
@@ -1812,6 +2225,7 @@ def _serialize_booking(booking: Booking, *, student: User | None, pack: LessonPa
         tutor_id=booking.tutor_id,
         student_user_id=booking.student_user_id,
         student_name=student.full_name if student else None,
+        counterparty_name=student.full_name if student else None,
         lesson_pack_id=booking.lesson_pack_id,
         pack_name=pack.name if pack else None,
         scheduled_at=booking.scheduled_at,
@@ -1943,13 +2357,62 @@ def _mint_classroom_token(
     if not ok:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=reason)
 
+    # Demo classroom trial enforcement. The trial user gets a hard
+    # minute cap that the token's `exp` honours, and we decrement the
+    # remaining-minute counter at mint time (best-effort accounting —
+    # over-budget would cost us Daily.co minutes, under-budget just
+    # means the prospect gets slightly less than the cap shows).
+    trial_minutes_cap = None
+    if user.is_demo_trial:
+        now_ = datetime.now(UTC)
+        # Monthly trials refill `minutes_allocated` every 30 days from
+        # the period anchor, up until expires_at. The check is lazy —
+        # we only refill at mint time, no scheduler needed.
+        if user.demo_trial_period == "monthly":
+            anchor = user.demo_trial_period_anchor
+            if anchor is not None and anchor.tzinfo is None:
+                anchor = anchor.replace(tzinfo=UTC)
+            allocated = user.demo_trial_minutes_allocated or 0
+            if anchor is not None and allocated > 0:
+                elapsed = now_ - anchor
+                periods = int(elapsed.total_seconds() // (30 * 86400))
+                if periods >= 1:
+                    user.demo_trial_minutes_remaining = allocated
+                    user.demo_trial_period_anchor = anchor + timedelta(
+                        days=30 * periods
+                    )
+                    session.add(user)
+                    session.commit()
+        remaining = user.demo_trial_minutes_remaining or 0
+        if remaining <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "Your demo classroom minutes are spent. Reach out to "
+                    "sales@kotobaseed.net to keep exploring."
+                ),
+            )
+        trial_minutes_cap = min(remaining, booking.duration_minutes)
+        # Decrement immediately so a refresh-loop on the join page
+        # doesn't let the user re-mint past the cap.
+        user.demo_trial_minutes_remaining = max(0, remaining - trial_minutes_cap)
+        session.add(user)
+        session.commit()
+
     try:
         room_name, room_url = _ensure_room(booking, session)
+        if trial_minutes_cap is not None:
+            # Cap expiry at trial cap rather than full booking duration.
+            expires_at = datetime.now(UTC) + timedelta(minutes=trial_minutes_cap)
+        else:
+            expires_at = default_token_expiry(
+                booking.scheduled_at, booking.duration_minutes
+            )
         token = create_meeting_token(
             room_name=room_name,
             user_name=user.full_name or user.email,
             is_owner=is_owner,
-            expires_at=default_token_expiry(booking.scheduled_at, booking.duration_minutes),
+            expires_at=expires_at,
         )
     except DailyNotConfiguredError as exc:
         raise HTTPException(
@@ -2053,34 +2516,63 @@ def mark_booking_complete(
 ) -> BookingRead:
     """Tutor marks a confirmed booking as completed.
 
-    Side effects: bumps `Tutor.classroom_minutes_used_this_cycle`, sets
-    `Tutor.last_completed_lesson_at` (which feeds the dormant-pause cron),
-    and stamps `Booking.completed_at`. Pending or already-completed
-    bookings can't be re-completed; cancelled ones can't either.
+    Side effects: sets `Tutor.last_completed_lesson_at` (which feeds the
+    dormant-pause cron) and stamps `Booking.completed_at`. Pending or
+    already-completed bookings can't be re-completed; cancelled ones
+    can't either. Minute accounting flows through the
+    TutorMinuteUsageLog ledger — written at confirm time, never bumped
+    on completion. The legacy `classroom_minutes_used_this_cycle`
+    column is unused.
     """
     _require_owner(tutor, current)
     booking = session.get(Booking, booking_id)
     if not booking or booking.tutor_id != tutor.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found.")
+    # Idempotent: marking an already-completed booking complete returns
+    # the booking as-is rather than 409-ing on a double-click.
+    if booking.status == BookingStatus.COMPLETED:
+        student = session.get(User, booking.student_user_id)
+        pack = session.get(LessonPack, booking.lesson_pack_id)
+        return _serialize_booking(booking, student=student, pack=pack)
     if booking.status != BookingStatus.CONFIRMED:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Booking is {booking.status.value}; can only complete a confirmed booking.",
         )
 
+    # Timing gate: a lesson can't be marked complete before it ends.
+    # Five-minute grace so the tutor can hit the button the moment they
+    # hang up rather than waiting for the exact end timestamp.
     now = datetime.now(UTC)
+    scheduled = booking.scheduled_at
+    if scheduled.tzinfo is None:
+        scheduled = scheduled.replace(tzinfo=UTC)
+    end_at = scheduled + timedelta(minutes=booking.duration_minutes)
+    if now < end_at - timedelta(minutes=5):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "You can only mark a lesson complete once it's ended. "
+                f"This lesson ends at {end_at.isoformat()}."
+            ),
+        )
+
     booking.status = BookingStatus.COMPLETED
     booking.completed_at = now
     booking.updated_at = now
 
-    tutor.classroom_minutes_used_this_cycle = (
-        tutor.classroom_minutes_used_this_cycle or 0
-    ) + booking.duration_minutes
     tutor.last_completed_lesson_at = now
     tutor.updated_at = now
 
     session.add(booking)
     session.add(tutor)
+    # Bump enrollment recency so "My students" sorts by most-recent activity.
+    from ..services import enrollment as _enroll
+    _enroll.touch_enrollment(
+        student_user_id=booking.student_user_id,
+        tutor_id=tutor.id,
+        session=session,
+    )
     session.commit()
     session.refresh(booking)
 
@@ -2152,3 +2644,284 @@ def mark_booking_complete(
             )
 
     return _serialize_booking(booking, student=student, pack=pack)
+
+
+class NoShowRequest(BaseModel):
+    reason: str | None = Field(default=None, max_length=500)
+
+
+# Grace period after the lesson start before a tutor is allowed to flag
+# a no-show. Gives the student a chance to actually show up late.
+NO_SHOW_GRACE_MINUTES = 15
+
+
+@router.post("/bookings/{booking_id}/no-show", response_model=BookingRead)
+def mark_booking_no_show(
+    booking_id: int,
+    payload: NoShowRequest,
+    current: CurrentUser,
+    tutor: CurrentTutor,
+    session: Annotated[Session, Depends(get_session)],
+) -> BookingRead:
+    """Tutor flags a confirmed booking as a no-show.
+
+    Required >=15 minutes past the lesson start time so a late student
+    isn't accidentally labelled. The booking stays on the books (no
+    refund) and counts against the trial-one-per-pair rule. The student
+    gets an in-app notification + the booking surface shows the no-show
+    badge on both sides.
+
+    Idempotent: re-firing on an already-NO_SHOW booking is a no-op.
+    """
+    _require_owner(tutor, current)
+    booking = session.get(Booking, booking_id)
+    if not booking or booking.tutor_id != tutor.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found."
+        )
+    if booking.status == BookingStatus.NO_SHOW:
+        student = session.get(User, booking.student_user_id)
+        pack = session.get(LessonPack, booking.lesson_pack_id)
+        return _serialize_booking(booking, student=student, pack=pack)
+    if booking.status != BookingStatus.CONFIRMED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Booking is {booking.status.value}; can only mark a confirmed "
+                "booking as a no-show."
+            ),
+        )
+
+    now = datetime.now(UTC)
+    scheduled = booking.scheduled_at
+    if scheduled.tzinfo is None:
+        scheduled = scheduled.replace(tzinfo=UTC)
+    earliest = scheduled + timedelta(minutes=NO_SHOW_GRACE_MINUTES)
+    if now < earliest:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Give the student until {earliest.isoformat()} "
+                f"(15 minutes after start) before flagging a no-show."
+            ),
+        )
+
+    booking.status = BookingStatus.NO_SHOW
+    booking.updated_at = now
+    # Reason is accepted in the payload for the audit/notification text
+    # below but we don't currently persist it on the booking row; the
+    # student-facing notification carries any context the tutor wanted
+    # to add. We can promote it to a real column later without changing
+    # the API.
+
+    session.add(booking)
+    session.commit()
+    session.refresh(booking)
+
+    student = session.get(User, booking.student_user_id)
+    pack = session.get(LessonPack, booking.lesson_pack_id)
+
+    # In-app notification to the student so they see it without an email.
+    if student is not None:
+        try:
+            session.add(
+                Notification(
+                    user_id=student.id,
+                    message=(
+                        f"{tutor.display_name} marked you as a no-show for the "
+                        f"lesson on {scheduled.strftime('%d %b at %H:%M UTC')}. "
+                        "Message them in your inbox if there was a problem."
+                    ),
+                    link="/student/dashboard",
+                )
+            )
+            session.commit()
+        except Exception:
+            log.exception(
+                "Could not enqueue no-show notification for booking %s", booking.id
+            )
+
+    return _serialize_booking(booking, student=student, pack=pack)
+
+
+# --- Demo classroom -------------------------------------------------------
+#
+# A private practice room a tutor can spin up to get comfortable with the
+# Daily.co controls before a real lesson — audio, video, screen-share. No
+# student joins. Daily.co charges us per minute either way, so the time
+# spent here counts against the tutor's monthly minute quota the same way
+# a real lesson would. The frontend warns the tutor up-front with a modal,
+# and we double-check on the backend:
+#
+#   1. POST /tutor/demo-classroom — gated on (a) the caller being a creator
+#      who owns the resolved Tutor, and (b) their current_month_minutes
+#      not already being at or over quota. Returns a room url + a host
+#      token with a 60-minute expiry.
+#   2. POST /tutor/demo-classroom/heartbeat — pinged once a minute from
+#      the open room page. Each ping stamps a 1-minute row into
+#      TutorMinuteUsageLog with source `demo:{tutor_id}:{unix-minute}`
+#      so a same-minute double-call is a natural no-op (the source row
+#      already exists). When the tutor goes over quota, heartbeats stop
+#      writing — same gate as the create endpoint.
+
+
+class DemoClassroomResponse(BaseModel):
+    room_url: str
+    token: str
+    expires_at: datetime
+
+
+class DemoHeartbeatResponse(BaseModel):
+    minutes_logged_today: int
+    over_quota: bool
+
+
+def _demo_quota_blocked(tutor: Tutor, user: User, session: Session) -> bool:
+    """True if the tutor is already at or over their monthly minute cap.
+
+    We piggyback on `would_exceed_quota` with `additional_minutes=1` so
+    the same semantics that gate paid bookings also gate the demo room.
+    Business (unlimited) is never blocked; pack credits count as headroom
+    so a tutor with top-up minutes can still spin up a demo room.
+    """
+    from ..services import minute_quota
+
+    return minute_quota.would_exceed_quota(tutor, user, 1, session)
+
+
+@router.post("/demo-classroom", response_model=DemoClassroomResponse)
+def open_demo_classroom(
+    current: CurrentUser,
+    tutor: CurrentTutor,
+    session: Annotated[Session, Depends(get_session)],
+) -> DemoClassroomResponse:
+    """Spin up a short-lived Daily.co practice room for the tutor."""
+    from ..models import UserRole
+
+    if current.role != UserRole.CREATOR:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only tutors can open a practice classroom.",
+        )
+    _require_owner(tutor, current)
+
+    if _demo_quota_blocked(tutor, current, session):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "You're over your monthly minute quota. Demo sessions are "
+                "paused until next month or until you top up."
+            ),
+        )
+
+    from uuid import uuid4
+
+    from ..services.daily import (
+        DailyNotConfiguredError,
+        create_meeting_token,
+        create_room,
+    )
+
+    expires_at = datetime.now(UTC) + timedelta(hours=1)
+    room_name = f"demo-{tutor.id}-{uuid4().hex[:8]}"
+    try:
+        room = create_room(
+            name=room_name,
+            expires_at=expires_at,
+            enable_chat=True,
+            enable_recording=False,
+        )
+        token = create_meeting_token(
+            room_name=room["name"],
+            user_name=current.full_name or current.email,
+            is_owner=True,
+            expires_at=expires_at,
+        )
+    except DailyNotConfiguredError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+        ) from None
+    except httpx.HTTPError:
+        log.exception("Daily.co API error creating demo room for tutor %s", tutor.id)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Classroom video service is having a moment. Try again.",
+        ) from None
+
+    return DemoClassroomResponse(
+        room_url=room["url"], token=token, expires_at=expires_at
+    )
+
+
+@router.post("/demo-classroom/heartbeat", response_model=DemoHeartbeatResponse)
+def demo_classroom_heartbeat(
+    current: CurrentUser,
+    tutor: CurrentTutor,
+    session: Annotated[Session, Depends(get_session)],
+) -> DemoHeartbeatResponse:
+    """Stamp one minute of demo usage against the tutor's quota.
+
+    Source format is `demo:{tutor_id}:{unix-minute}` — the unix timestamp
+    rounded to the nearest minute. Two heartbeats inside the same minute
+    therefore collide on the same source string and the second one is a
+    no-op, which is the dedupe property the brief calls for. Stops
+    writing once the tutor is over quota, so a runaway browser tab can't
+    burn through the cap silently.
+    """
+    from ..models import TutorMinuteUsageLog, UserRole
+
+    if current.role != UserRole.CREATOR:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only tutors can use the practice classroom.",
+        )
+    _require_owner(tutor, current)
+
+    if _demo_quota_blocked(tutor, current, session):
+        # Refuse to log more minutes — the frontend uses the 403 to bail
+        # out of the heartbeat loop and surface a toast.
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "You're over your monthly minute quota. Demo sessions are "
+                "paused until next month or until you top up."
+            ),
+        )
+
+    now_ = datetime.now(UTC)
+    minute_bucket = int(now_.timestamp() // 60) * 60
+    src = f"demo:{tutor.id}:{minute_bucket}"
+
+    existing = session.exec(
+        select(TutorMinuteUsageLog).where(TutorMinuteUsageLog.source == src)
+    ).first()
+    if existing is None:
+        session.add(
+            TutorMinuteUsageLog(
+                tutor_id=tutor.id,
+                usage_date=now_,
+                minutes_used=1,
+                source=src,
+            )
+        )
+        session.commit()
+
+    # Sum demo minutes logged today for the chrome bar. Cheap query — at
+    # most ~60 rows for a single tutor in a day.
+    start_of_day = datetime(now_.year, now_.month, now_.day, tzinfo=UTC)
+    todays_rows = session.exec(
+        select(TutorMinuteUsageLog).where(
+            TutorMinuteUsageLog.tutor_id == tutor.id,
+            TutorMinuteUsageLog.usage_date >= start_of_day,
+        )
+    ).all()
+    minutes_today = sum(
+        int(r.minutes_used or 0)
+        for r in todays_rows
+        if (r.source or "").startswith(f"demo:{tutor.id}:")
+    )
+
+    return DemoHeartbeatResponse(
+        minutes_logged_today=minutes_today,
+        over_quota=_demo_quota_blocked(tutor, current, session),
+    )

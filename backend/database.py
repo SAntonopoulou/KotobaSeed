@@ -26,9 +26,14 @@ engine = create_engine(
 def create_db_and_tables() -> None:
     """Idempotent schema bootstrap.
 
-    Safe to call at startup. Once Alembic owns the schema, this becomes
-    redundant for production but stays useful for tests.
+    Safe to call at startup. SQLModel.metadata only knows about models
+    that have been imported — the local import of `backend.models` here
+    guarantees every model class registers with the metadata before we
+    call create_all, even when this function is invoked from a fresh
+    `python -c` (as the docker entrypoint does on cold start).
     """
+    from . import models  # noqa: F401 — populate SQLModel.metadata
+
     SQLModel.metadata.create_all(engine)
 
 

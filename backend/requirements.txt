@@ -13,9 +13,12 @@ resend
 apscheduler
 alembic
 psycopg2-binary
+redis
 slowapi
 sentry-sdk[fastapi]
 pyotp
+Pillow
+boto3
 # dev / test
 pytest
 pytest-asyncio

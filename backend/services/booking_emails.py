@@ -18,6 +18,7 @@ from ..models import (
     Booking,
     BookingStatus,
     LessonPack,
+    Notification,
     Tutor,
     User,
 )
@@ -174,9 +175,10 @@ def send_confirmation_emails(session: Session, booking: Booking) -> None:
 
 
 def send_reminder_emails(session: Session, booking: Booking) -> None:
-    """Send 24h reminder to student + tutor. Failures are swallowed; the
-    caller is responsible for stamping `reminder_sent_at` regardless so a
-    misconfigured Resend doesn't loop the booking forever."""
+    """Send 24h reminder to student + tutor across email *and* in-app
+    Notifications. Failures are swallowed; the caller is responsible for
+    stamping `reminder_sent_at` regardless so a misconfigured Resend
+    doesn't loop the booking forever."""
     tutor, tutor_user, student, pack = _load_recipients(session, booking)
     if tutor is None or pack is None:
         return
@@ -184,6 +186,35 @@ def send_reminder_emails(session: Session, booking: Booking) -> None:
     tutor_tz = tutor_user.timezone if tutor_user else None
     classroom = _classroom_url(tutor_slug, booking.id)
     dashboard = _dashboard_url(tutor_slug)
+
+    # In-app notification — drives the inbox bell badge + the dropdown.
+    # Best-effort; swallow exceptions so an audit-log/notification table
+    # hiccup never blocks the email send.
+    with contextlib.suppress(Exception):
+        when_short = email_service._format_when(booking.scheduled_at, tutor_tz)
+        if student is not None:
+            session.add(
+                Notification(
+                    user_id=student.id,
+                    message=(
+                        f"Your lesson with {tutor.display_name} is in about a day "
+                        f"({when_short})."
+                    ),
+                    link=f"/student/dashboard",
+                )
+            )
+        if tutor_user is not None:
+            session.add(
+                Notification(
+                    user_id=tutor_user.id,
+                    message=(
+                        f"Lesson with {(student.full_name or 'a student') if student else 'a student'} "
+                        f"in about a day ({when_short})."
+                    ),
+                    link="/dashboard",
+                )
+            )
+        session.commit()
 
     if student is not None:
         with contextlib.suppress(Exception):

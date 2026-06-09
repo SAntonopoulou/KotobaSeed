@@ -1,0 +1,26 @@
+# Local-stack overlay — used for verifying the full container stack on
+# the developer machine without trying to issue real TLS certs or hold
+# host ports 80/443.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.local.yml up --build
+#
+# Differences vs. the production compose file:
+# - Caddy is removed (no Cloudflare token needed, no Let's Encrypt issuance)
+# - backend is exposed on host port 18000 so we can curl it directly
+# - frontend is exposed on host port 18080 so we can hit the SPA shell
+# - postgres + redis stay on the internal network (no host port mapping)
+
+services:
+  backend:
+    ports:
+      - "18000:8000"
+
+  frontend:
+    ports:
+      - "18080:80"
+
+  # Drop Caddy from the local stack — there's no real DNS to point at
+  # this machine and we don't want to burn Let's Encrypt rate limits.
+  caddy:
+    profiles: ["disabled"]

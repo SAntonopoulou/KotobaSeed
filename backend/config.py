@@ -26,9 +26,15 @@ class Settings(BaseSettings):
     environment: Literal["dev", "test", "staging", "production"] = "dev"
 
     # ----- Database -------------------------------------------------------
-    # Postgres recommended; sqlite is fine for local + tests
+    # Postgres recommended; sqlite is fine for local + tests.
     database_url: str = "sqlite:///./database.db"
     db_echo: bool = False
+
+    # ----- Redis ---------------------------------------------------------
+    # Powers slowapi rate-limit storage (so limits survive a restart) and
+    # the APScheduler signal bus when multiple workers run. Blank in dev
+    # falls back to in-memory; both subsystems work either way.
+    redis_url: str | None = None
 
     # ----- Auth -----------------------------------------------------------
     # No default — must be set in env. Crashes on startup if missing.
@@ -44,8 +50,19 @@ class Settings(BaseSettings):
     # immutable in Stripe; to change a price create a new one and rotate the
     # env var.
     stripe_plus_price_id: str | None = None
+    stripe_plus_annual_price_id: str | None = None
     stripe_pro_price_id: str | None = None
+    stripe_pro_annual_price_id: str | None = None
     stripe_business_price_id: str | None = None
+    stripe_business_annual_price_id: str | None = None
+    # Minute pack top-ups — one-time charges that grant scheduled-minute
+    # credit on top of the tier quota. Never expire.
+    stripe_minute_pack_1k_price_id: str | None = None
+    stripe_minute_pack_5k_price_id: str | None = None
+    # Extra-seat add-on for Business — added as a SubscriptionItem on the
+    # team owner's existing Business subscription with quantity = N.
+    stripe_business_seat_price_id: str | None = None
+    stripe_business_seat_annual_price_id: str | None = None
     # Legacy: kept for the old CompInput Premium tier. Not used in the unified
     # pricing model; safe to remove after we're confident no stale env values
     # are referencing it.
@@ -82,11 +99,41 @@ class Settings(BaseSettings):
     # SENTRY_DSN absent → no Sentry SDK init; SDK calls are no-ops.
     sentry_dsn: str | None = None
     sentry_traces_sample_rate: float = 0.1
+    # Release identifier — typically the git SHA, set by CI at build
+    # time. Sentry uses this to attribute new errors to specific deploys
+    # and to surface "regression since release X" insights.
+    sentry_release: str | None = None
 
     # ----- Backups --------------------------------------------------------
     # Directory the SQLite snapshot cron writes to. Mounted volume in prod.
     backup_dir: str = "/data/backups"
     backup_retention_days: int = 30
+    # Hard ceiling on the R2 bucket size in bytes — beyond this, uploads
+    # are refused so a runaway DB can't blow the free tier. Default 7 GiB
+    # leaves comfortable headroom under R2's 10 GB free quota. Local
+    # backups continue regardless; only the offsite copy stops.
+    r2_backup_quota_bytes: int = 7_516_192_768
+    # Defense-in-depth cap on object count, in case the date-based prune
+    # ever stops running. Older objects beyond this count get pruned even
+    # if they're inside the retention window.
+    r2_backup_max_objects: int = 60
+
+    # ----- Classroom minute quotas (per User.subscription_tier) ----------
+    # Monthly cap on confirmed-booking minutes per tutor. Daily.co charges
+    # us per PARTICIPANT-minute, so a group class costs us 3-5× more per
+    # scheduled minute than a 1:1. Quotas below are sized so the worst-
+    # case "all group classes" usage still leaves a positive margin after
+    # subscription revenue. Tutors who need more can buy MinutePack
+    # top-ups (see backend/services/minute_quota.py).
+    minute_quota_free: int = 240        # 4 hrs/mo — taster
+    minute_quota_plus: int = 600        # 10 hrs/mo — light/student-side
+    minute_quota_pro: int = 3000        # 50 hrs/mo — full-time tutor
+    # Business is a TEAM tier — every seat on the team draws from one
+    # shared monthly pool. Pool size = base (for the owner) plus per-seat
+    # bonus for each additional active member. A 5-seat team:
+    # 15000 + 4*3000 = 27000 min/mo (~450 hrs across 5 tutors).
+    minute_quota_business: int = 15000       # base pool for the team owner
+    minute_quota_business_per_seat: int = 3000  # per extra active seat
 
     # ----- Scheduled jobs -------------------------------------------------
     # Disable in test/dev if needed by setting `scheduler_enabled=false`.
@@ -101,9 +148,26 @@ class Settings(BaseSettings):
     # like wildcard subdomains.
     cors_origins: str = "http://localhost:5173,http://localhost:3000"
     # Regex applied in addition to cors_origins. Default matches any
-    # *.localhost port for dev — `vasso.localhost:5173`, `test.localhost:5173`,
-    # etc. — so tenant subdomains in dev mirror prod without per-tutor config.
-    cors_origin_regex: str = r"^https?://([a-z0-9-]+\.)?localhost(:\d+)?$"
+    # *.localhost port for dev AND any *.kotobaseed.net subdomain in prod —
+    # the tutor SPA on a subdomain needs to reach api.kotobaseed.net with
+    # credentials (the shared auth cookie), which requires a specific
+    # Origin match (not a wildcard) in the CORS reply.
+    cors_origin_regex: str = (
+        r"^https?://([a-z0-9-]+\.)?localhost(:\d+)?$"
+        r"|^https://([a-z0-9-]+\.)?kotobaseed\.net$"
+    )
+
+    # ----- Auth cookie ----------------------------------------------------
+    # Shared session cookie scoped to .kotobaseed.net so signing in once
+    # on the apex (or on any tutor subdomain) authenticates you across
+    # every other subdomain. Cookie is HttpOnly + Secure + SameSite=Lax
+    # in production. In dev the domain is None so the cookie is host-only
+    # on localhost and shared across the Vite (5173) and uvicorn (8000)
+    # ports (cookies ignore port).
+    auth_cookie_name: str = "koto_token"
+    auth_cookie_domain: str | None = None
+    auth_cookie_secure: bool = False
+    auth_cookie_samesite: str = "lax"
 
     @property
     def cors_origin_list(self) -> list[str]:
@@ -136,6 +200,28 @@ class Settings(BaseSettings):
     resend_api_key: str | None = None
     resend_from_email: str = "noreply@kotobaseed.net"
     resend_from_name: str = "Kotobaseed"
+
+    # ----- Object storage (Cloudflare R2, S3-compatible) ------------------
+    # Production default once Cloudflare R2 is enabled on the account.
+    # When all of these are unset the storage facade falls back to the
+    # local volume backend below, so uploads still work without R2.
+    # R2 endpoint URL is derived from the account id:
+    # https://<acct>.r2.cloudflarestorage.com
+    r2_account_id: str | None = None
+    r2_bucket: str | None = None
+    r2_access_key_id: str | None = None
+    r2_secret_access_key: str | None = None
+    # Public base URL (with no trailing slash) where the bucket contents
+    # are reachable on the web — either the default `pub-<hash>.r2.dev`
+    # domain or a custom domain you've wired up in Cloudflare. The
+    # backend stamps `<base>/<key>` into `User.avatar_url`.
+    r2_public_url_base: str | None = None
+
+    # ----- Local-volume storage (fallback while R2 isn't enabled) ----------
+    # Backend writes uploads here and serves them through /uploads/*.
+    # Mount this path as a Docker volume in production so files survive
+    # container recreates. Defaults to /data/uploads inside the container.
+    local_uploads_dir: str = "/data/uploads"
 
     # ----- Custom domains -------------------------------------------------
     # IP that Pro/Business tutors should point their A record at. When set,

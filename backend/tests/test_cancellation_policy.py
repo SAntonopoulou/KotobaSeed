@@ -99,13 +99,24 @@ def test_policy_reflects_tutor_setting(client, active_tutor, teacher_user, db_se
     assert r.json()["cancellation_cutoff_hours"] == 168
 
 
-def test_patch_below_48_rejected(client, active_tutor, teacher_user):
+def test_patch_at_24_accepted(client, active_tutor, teacher_user):
+    """Platform floor is 24 hours — strictness above it is the tutor's call."""
     r = client.patch(
         "/tutor/me",
         json={"cancellation_cutoff_hours": 24},
         headers={"Host": "vasso.kotobaseed.net", **auth_headers_for(teacher_user)},
     )
-    assert r.status_code == 422  # Pydantic validation, ge=48
+    assert r.status_code == 200
+    assert r.json()["cancellation_cutoff_hours"] == 24
+
+
+def test_patch_below_floor_rejected(client, active_tutor, teacher_user):
+    r = client.patch(
+        "/tutor/me",
+        json={"cancellation_cutoff_hours": 12},
+        headers={"Host": "vasso.kotobaseed.net", **auth_headers_for(teacher_user)},
+    )
+    assert r.status_code == 422  # Pydantic validation, ge=24
 
 
 def test_patch_above_floor_accepted(client, active_tutor, teacher_user):

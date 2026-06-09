@@ -7,7 +7,7 @@ import stripe
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import selectinload
-from sqlmodel import Session, select
+from sqlmodel import Session, func, select
 
 from ..database import get_session
 from ..deps import get_current_user
@@ -214,6 +214,10 @@ def _handle_booking_checkout(session: Session, data_object: dict) -> bool:
     booking.updated_at = now
     session.add(booking)
 
+    # Record the lesson minutes against the tutor's monthly quota.
+    from ..services import minute_quota
+    minute_quota.record_booking_minutes(booking, session)
+
     # Notify the tutor that they have a paid booking.
     tutor = session.get(Tutor, booking.tutor_id)
     if tutor:
@@ -305,6 +309,146 @@ def _handle_module_checkout(session: Session, data_object: dict) -> bool:
         stripe_checkout_session_id=data_object.get("id"),
         stripe_payment_intent_id=data_object.get("payment_intent"),
     )
+    waiver_at = metadata.get("withdrawal_waiver_at")
+    if waiver_at:
+        try:
+            from datetime import datetime as _dt
+            row.withdrawal_waiver_at = _dt.fromisoformat(waiver_at)
+        except ValueError:
+            pass
+    row.withdrawal_waiver_ip = (metadata.get("withdrawal_waiver_ip") or None)
+    session.add(row)
+    session.commit()
+    # Phase 4 — buyer earns leaderboard points + badge ladder.
+    from ..models import User as _User
+    from ..services.engagement import record_activity
+    buyer = session.get(_User, student_user_id)
+    if buyer is not None:
+        record_activity(
+            session,
+            user=buyer,
+            kind="module_purchased",
+            tutor_id=tutor_id,
+            dedupe_key=f"module:{module_id}",
+        )
+    return True
+
+
+def _handle_cohort_seat_checkout(session: Session, data_object: dict) -> bool:
+    """Grant a CohortSeat on successful checkout. Idempotent; also
+    auto-confirms the cohort when seats hit max_seats."""
+    metadata = data_object.get("metadata", {})
+    if metadata.get("type") != "cohort_seat":
+        return False
+    try:
+        cohort_id = int(metadata.get("cohort_id"))
+        tutor_id = int(metadata.get("tutor_id"))
+        student_user_id = int(metadata.get("student_user_id"))
+        fee = int(metadata.get("platform_fee_cents") or 0)
+    except (TypeError, ValueError):
+        logger.warning("Cohort seat checkout missing metadata: %s", metadata)
+        return True
+    from ..models import Cohort, CohortSeat, CohortStatus
+
+    cohort = session.get(Cohort, cohort_id)
+    if cohort is None:
+        logger.warning("Cohort %s referenced by seat checkout not found", cohort_id)
+        return True
+    existing = session.exec(
+        select(CohortSeat).where(
+            CohortSeat.cohort_id == cohort_id,
+            CohortSeat.student_user_id == student_user_id,
+        )
+    ).first()
+    if existing is not None and existing.refunded_at is None:
+        return True
+    if existing is None:
+        seat = CohortSeat(
+            cohort_id=cohort_id,
+            tutor_id=tutor_id,
+            student_user_id=student_user_id,
+            amount_cents=int(
+                data_object.get("amount_total") or cohort.price_per_seat_cents
+            ),
+            platform_fee_cents=fee,
+            currency=cohort.currency,
+            stripe_checkout_session_id=data_object.get("id"),
+            stripe_payment_intent_id=data_object.get("payment_intent"),
+        )
+        session.add(seat)
+    else:
+        # Re-buy after a refund: stamp paid_at and clear refunded.
+        existing.refunded_at = None
+        existing.stripe_checkout_session_id = data_object.get("id")
+        existing.stripe_payment_intent_id = data_object.get("payment_intent")
+        from datetime import UTC, datetime as _dt
+        existing.paid_at = _dt.now(UTC)
+        session.add(existing)
+    session.commit()
+
+    # Auto-confirm when seats hit max.
+    seats_filled = session.exec(
+        select(func.count(CohortSeat.id)).where(
+            CohortSeat.cohort_id == cohort_id,
+            CohortSeat.refunded_at.is_(None),
+        )
+    ).one() or 0
+    if cohort.status == CohortStatus.OPEN and int(seats_filled) >= cohort.max_seats:
+        from datetime import UTC, datetime as _dt
+        cohort.status = CohortStatus.CONFIRMED
+        cohort.confirmed_at = _dt.now(UTC)
+        session.add(cohort)
+        session.commit()
+    return True
+
+
+def _handle_article_checkout(session: Session, data_object: dict) -> bool:
+    """Grant an ArticlePurchase on successful piecemeal article checkout.
+    Idempotent: a duplicate webhook for the same (article_id,
+    student_user_id) returns True without inserting a second row."""
+    metadata = data_object.get("metadata", {})
+    if metadata.get("type") != "article":
+        return False
+    try:
+        article_id = int(metadata.get("article_id"))
+        tutor_id = int(metadata.get("tutor_id"))
+        student_user_id = int(metadata.get("student_user_id"))
+        fee = int(metadata.get("platform_fee_cents") or 0)
+    except (TypeError, ValueError):
+        logger.warning("Article checkout missing/invalid metadata: %s", metadata)
+        return True
+    from ..models import Article, ArticlePurchase
+
+    article = session.get(Article, article_id)
+    if article is None:
+        logger.warning("Article %s referenced by checkout not found", article_id)
+        return True
+    existing = session.exec(
+        select(ArticlePurchase).where(
+            ArticlePurchase.article_id == article_id,
+            ArticlePurchase.student_user_id == student_user_id,
+        )
+    ).first()
+    if existing is not None:
+        return True
+    row = ArticlePurchase(
+        article_id=article_id,
+        tutor_id=tutor_id,
+        student_user_id=student_user_id,
+        amount_cents=int(data_object.get("amount_total") or article.price_cents),
+        platform_fee_cents=fee,
+        currency=article.currency,
+        stripe_checkout_session_id=data_object.get("id"),
+        stripe_payment_intent_id=data_object.get("payment_intent"),
+    )
+    waiver_at = metadata.get("withdrawal_waiver_at")
+    if waiver_at:
+        try:
+            from datetime import datetime as _dt
+            row.withdrawal_waiver_at = _dt.fromisoformat(waiver_at)
+        except ValueError:
+            pass
+    row.withdrawal_waiver_ip = (metadata.get("withdrawal_waiver_ip") or None)
     session.add(row)
     session.commit()
     return True
@@ -564,11 +708,29 @@ def handle_subscription_event(session: Session, data_object: dict) -> bool:
 
 def handle_checkout_session_completed(session: Session, data_object: dict):
     metadata = data_object.get("metadata", {})
+    # Minute pack purchases route through their own dedicated handler so
+    # the granting logic stays close to the model in routers/minute_packs.py.
+    if metadata.get("type") == "minute_pack":
+        from . import minute_packs as _mp
+        _mp.grant_pack_from_session(session, data_object)
+        return
+    if metadata.get("type") == "custom_theme_deposit":
+        from . import custom_themes as _ct
+        _ct.handle_deposit_paid(session, data_object)
+        return
+    if metadata.get("type") == "custom_theme_final":
+        from . import custom_themes as _ct
+        _ct.handle_final_paid(session, data_object)
+        return
     if _handle_booking_checkout(session, data_object):
         return
     if _handle_group_booking_checkout(session, data_object):
         return
     if _handle_module_checkout(session, data_object):
+        return
+    if _handle_article_checkout(session, data_object):
+        return
+    if _handle_cohort_seat_checkout(session, data_object):
         return
     if _handle_premium_homework_checkout(session, data_object):
         return
@@ -698,6 +860,7 @@ def handle_account_updated(session: Session, data_object: dict):
         stripe_account_id = data_object["id"]
         charges_enabled = bool(data_object.get("charges_enabled"))
         payouts_enabled = bool(data_object.get("payouts_enabled"))
+        details_submitted = bool(data_object.get("details_submitted"))
 
         # Legacy CompInput path: the teacher User owns the Connect account.
         teacher = session.exec(
@@ -723,20 +886,34 @@ def handle_account_updated(session: Session, data_object: dict):
             )
 
         # Kotobaseed path: the Connect account belongs to a Tutor. Flip
-        # PAUSED_KYC → ACTIVE the first time both flags come back true.
+        # PAUSED_KYC → ACTIVE as soon as Stripe says the tutor submitted
+        # their details AND charges are live — payouts_enabled lags by
+        # hours-to-days while Stripe finishes a side review, and gating
+        # ACTIVE on it leaves verified tutors permanently stuck on the
+        # "finish setup" screen with nothing left to do. Funds for any
+        # bookings taken in that window stay in Stripe until payouts
+        # release automatically. Mirror both flags onto the owning User
+        # so the apex marketplace + UI banners stay accurate.
         tutor = session.exec(
             select(Tutor).where(Tutor.stripe_connect_account_id == stripe_account_id)
         ).first()
         if tutor:
-            if charges_enabled and payouts_enabled:
+            if details_submitted and charges_enabled:
                 if tutor.account_status == TutorAccountStatus.PAUSED_KYC:
                     tutor.account_status = TutorAccountStatus.ACTIVE
                     tutor.updated_at = datetime.now(UTC)
             elif tutor.account_status == TutorAccountStatus.ACTIVE:
-                # Stripe revoked a capability — back to KYC-pending so the
-                # tutor sees the "finish setup" prompt on next login.
+                # Stripe revoked charges or wiped the submission — back to
+                # KYC-pending so the dashboard prompts a fix.
                 tutor.account_status = TutorAccountStatus.PAUSED_KYC
                 tutor.updated_at = datetime.now(UTC)
+            from ..services import connect_sync
+            connect_sync.sync_tutor_to_user(
+                tutor,
+                session,
+                charges_enabled=charges_enabled,
+                payouts_enabled=payouts_enabled,
+            )
 
         session.commit()
     except Exception as e:

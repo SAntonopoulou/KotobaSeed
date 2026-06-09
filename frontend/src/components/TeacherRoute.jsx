@@ -1,40 +1,18 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
-import client from '../api/client';
+import { useAuth } from '../context/AuthContext';
 
+// Creator/teacher route gate. Authoritative source is AuthContext so the
+// shared .kotobaseed.net auth cookie carries SSO across subdomains.
 const TeacherRoute = () => {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const token = localStorage.getItem('token');
+  const { currentUser, loading } = useAuth();
 
-  useEffect(() => {
-    const fetchUser = async () => {
-      if (!token) {
-        setLoading(false);
-        return;
-      }
-      try {
-        const response = await client.get('/users/me');
-        setUser(response.data);
-      } catch (error) {
-        console.error("Failed to fetch user", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchUser();
-  }, [token]);
-
-  if (!token) {
+  if (loading) {
+    return <div className="p-10 text-center text-kotoba-text/60 text-sm">Loading…</div>;
+  }
+  if (!currentUser || currentUser.role !== 'creator') {
     return <Navigate to="/" replace />;
   }
-
-  if (loading) return <div className="p-10 text-center">Loading...</div>;
-
-  if (!user || user.role !== 'creator') {
-    return <Navigate to="/" replace />;
-  }
-
   return <Outlet />;
 };
 

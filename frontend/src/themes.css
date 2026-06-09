@@ -66,6 +66,12 @@
   --kotoba-text-rgb: 28 36 49;
 }
 
+/* The vasso-greek theme renders via a dedicated tenant component
+ * (frontend/src/themes/vasso_greek/VassoGreekSite.jsx) that owns its
+ * own scoped styles. No `.theme-vasso-greek` block belongs here —
+ * the previous version was a tinted palette shortcut, not the real
+ * design. See feedback_no_corner_cutting memory for context. */
+
 /* Theme-aware body background — themed surfaces respect the picked theme's
  * background colour. Outside any theme- class (the apex), the :root variable
  * supplies the original Sage cream.
@@ -77,4 +83,157 @@
 .theme-aegean body,
 .theme-slate body {
   background-color: rgb(var(--kotoba-background-rgb));
+}
+
+/* ============================================================
+ * Landing v2 — modern SaaS animation primitives.
+ *
+ * Mesh gradient: animated blobs behind the hero. Pure CSS, no JS.
+ * Marquee: infinite horizontal scroll for the language pill strip.
+ * Reveal: fade-up triggered by IntersectionObserver via .is-revealed.
+ * Spotlight: card hover that follows the cursor via CSS variables.
+ *
+ * All scoped to .v2-* classes so they don't leak into other pages.
+ * ============================================================ */
+
+@keyframes v2-mesh-drift {
+  0%   { transform: translate3d(0, 0, 0) scale(1); }
+  33%  { transform: translate3d(8%, -6%, 0) scale(1.06); }
+  66%  { transform: translate3d(-6%, 8%, 0) scale(0.96); }
+  100% { transform: translate3d(0, 0, 0) scale(1); }
+}
+
+.v2-mesh-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(60px);
+  opacity: 0.55;
+  animation: v2-mesh-drift 22s ease-in-out infinite;
+  will-change: transform;
+}
+
+.v2-mesh-blob-2 {
+  animation-duration: 28s;
+  animation-direction: reverse;
+  animation-delay: -7s;
+}
+
+.v2-mesh-blob-3 {
+  animation-duration: 34s;
+  animation-delay: -14s;
+}
+
+/* Subtle starfield-style noise texture for premium feel. Tiny inline
+ * SVG so no extra HTTP request. */
+.v2-noise {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.04;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Reveal animation toggled by IntersectionObserver: nodes start
+ * translated-down + invisible, fade in once .is-revealed lands.
+ * prefers-reduced-motion users skip the transform entirely. */
+.v2-reveal {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+              transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.v2-reveal.is-revealed {
+  opacity: 1;
+  transform: translateY(0);
+}
+@media (prefers-reduced-motion: reduce) {
+  .v2-reveal { opacity: 1; transform: none; transition: none; }
+  .v2-mesh-blob { animation: none; }
+}
+
+/* Marquee — infinite horizontal scroll. Duplicate the track inside so
+ * the loop reads seamlessly. Pause on hover so visitors can read pills.
+ */
+@keyframes v2-marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+.v2-marquee {
+  display: flex;
+  width: max-content;
+  animation: v2-marquee 40s linear infinite;
+}
+.v2-marquee-wrap:hover .v2-marquee {
+  animation-play-state: paused;
+}
+
+/* Spotlight card — radial gradient follows the pointer.
+ * Defaults (set in the hook) park the spotlight off-screen so the
+ * effect only shows mid-hover. */
+.v2-spot {
+  --spot-x: 50%;
+  --spot-y: -30%;
+  position: relative;
+  overflow: hidden;
+}
+.v2-spot::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    600px circle at var(--spot-x) var(--spot-y),
+    rgba(214, 164, 47, 0.16),
+    transparent 40%
+  );
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+.v2-spot:hover::before { opacity: 1; }
+
+/* Gradient text used on accent phrases — sage→honey, theme-aware
+ * because both stops come from CSS variables. */
+.v2-gradient-text {
+  background: linear-gradient(
+    90deg,
+    rgb(var(--kotoba-primary-rgb)) 0%,
+    rgb(var(--kotoba-secondary-dark-rgb)) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Pulsing dot for the eyebrow chip. */
+@keyframes v2-pulse-dot {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(214, 164, 47, 0.6); }
+  50%      { box-shadow: 0 0 0 6px rgba(214, 164, 47, 0); }
+}
+.v2-pulse-dot {
+  animation: v2-pulse-dot 2.4s ease-in-out infinite;
+}
+
+/* ============================================================
+ * Soba — onboarding mascot animations.
+ * `bob`: gentle vertical idle (default). `flap`: small tilt back
+ * and forth used between tour transitions. Both honour
+ * prefers-reduced-motion via the Soba component itself.
+ * ============================================================ */
+
+@keyframes soba-bob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-6px); }
+}
+
+@keyframes soba-flap {
+  0%, 100% { transform: rotate(-3deg); }
+  50%      { transform: rotate(3deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-\[soba-bob_3s_ease-in-out_infinite\],
+  .animate-\[soba-flap_900ms_ease-in-out_infinite\] {
+    animation: none !important;
+  }
 }

@@ -2,9 +2,12 @@ import os
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 
+import io
+import secrets
+
 import stripe
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, ConfigDict, Field
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import selectinload
 from sqlmodel import Session, func, select
@@ -100,6 +103,11 @@ class UserProfile(BaseModel):
     language_groups: list[str] = []
     follower_count: int = 0
     is_following: bool = False
+    # When a creator is also running a tutoring site (i.e. a Tutor row
+    # exists for them), expose the slug so the frontend can offer
+    # "Book a lesson with this tutor" alongside their creator work.
+    tutor_slug: str | None = None
+    tutor_display_name: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -112,6 +120,28 @@ class UserUpdate(BaseModel):
     sample_video_url: str | None = None
     avatar_url: str | None = None
     profile_public: bool | None = None
+    # GDPR Article 7(3) — consent must be as easy to withdraw as to give.
+    # The setting flips back from the Settings page.
+    newsletter_opt_in: bool | None = None
+    # IANA timezone name (e.g. "Europe/Athens", "America/New_York"). Tutors
+    # set this to control how their availability windows project into
+    # absolute lesson times. Students see those times converted to their
+    # browser-local timezone. Validated against the runtime tz database.
+    timezone: str | None = None
+
+    @field_validator("timezone")
+    @classmethod
+    def _validate_timezone(cls, v: str | None) -> str | None:
+        if v is None or v == "":
+            return v
+        from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+        try:
+            ZoneInfo(v)
+        except ZoneInfoNotFoundError as exc:
+            raise ValueError(
+                f"{v!r} is not a recognised IANA timezone name"
+            ) from exc
+        return v
 
 
 class ProjectInfoForRating(BaseModel):
@@ -177,6 +207,131 @@ def update_me(
     return current_user
 
 
+# --- Avatar upload --------------------------------------------------------
+
+AVATAR_MAX_BYTES = 6 * 1024 * 1024  # 6 MB hard cap on the multipart body
+AVATAR_OUTPUT_SIZE = 400  # square: 400x400, plenty for any UI surface
+AVATAR_ACCEPTED_MIME = {
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/heic",
+    "image/heif",
+}
+
+
+class AvatarResponse(BaseModel):
+    avatar_url: str
+
+
+@router.post("/me/avatar", response_model=AvatarResponse)
+async def upload_avatar(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> AvatarResponse:
+    """Replace the current user's profile photo.
+
+    Pipeline:
+    1. Validate MIME + size up front (cheap, before reading the body).
+    2. Read the body into memory (capped at AVATAR_MAX_BYTES).
+    3. Decode with Pillow — this also rejects forged MIME headers
+       because corrupt/non-image bytes raise ``UnidentifiedImageError``.
+    4. Square-crop centred, resize to AVATAR_OUTPUT_SIZE, strip EXIF.
+    5. Re-encode as WebP (small + universal browser support) and upload
+       to R2 under ``avatars/<user_id>/<rand>.webp``. A random suffix in
+       the key forces cache-busting after re-upload without touching the
+       CDN edge.
+    6. Best-effort delete the previous file if we recognise it as ours.
+    """
+    from ..services import storage
+
+    if not storage.is_configured():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="File uploads aren't available on this deployment yet.",
+        )
+
+    if file.content_type not in AVATAR_ACCEPTED_MIME:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Please upload a JPEG, PNG, WebP, or HEIC image.",
+        )
+
+    raw = await file.read(AVATAR_MAX_BYTES + 1)
+    if len(raw) > AVATAR_MAX_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"Image is too large — keep it under {AVATAR_MAX_BYTES // (1024 * 1024)} MB.",
+        )
+
+    try:
+        # Local import keeps Pillow off the critical import path.
+        from PIL import Image, ImageOps, UnidentifiedImageError
+
+        img = Image.open(io.BytesIO(raw))
+        # `exif_transpose` honours the camera's orientation tag so
+        # portrait-mode iOS photos don't end up sideways.
+        img = ImageOps.exif_transpose(img)
+        img = img.convert("RGB")
+        # Square crop centred, then resize once at the final size — this
+        # is sharper than scale-then-crop for portrait/landscape inputs.
+        img = ImageOps.fit(
+            img,
+            (AVATAR_OUTPUT_SIZE, AVATAR_OUTPUT_SIZE),
+            method=Image.Resampling.LANCZOS,
+        )
+        buf = io.BytesIO()
+        img.save(buf, format="WEBP", quality=85, method=6)
+        body = buf.getvalue()
+    except (UnidentifiedImageError, OSError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Could not read that image. Try a different file.",
+        ) from None
+
+    suffix = secrets.token_hex(4)
+    key = f"avatars/{current_user.id}/{suffix}.webp"
+
+    public_url = storage.put_object(
+        key=key, body=body, content_type="image/webp"
+    )
+
+    # Best-effort cleanup of the previous file. New avatar is already
+    # live, so this never blocks the user-facing response.
+    old_key = storage.key_from_public_url(current_user.avatar_url or "")
+    if old_key and old_key != key:
+        storage.delete_object(key=old_key)
+
+    current_user.avatar_url = public_url
+    current_user.updated_at = datetime.now(UTC)
+    session.add(current_user)
+    session.commit()
+    session.refresh(current_user)
+
+    return AvatarResponse(avatar_url=public_url)
+
+
+@router.delete("/me/avatar", status_code=status.HTTP_204_NO_CONTENT)
+def delete_avatar(
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> None:
+    """Remove the current user's profile photo."""
+    from ..services import storage
+
+    if not current_user.avatar_url:
+        return None
+    old_key = storage.key_from_public_url(current_user.avatar_url)
+    if old_key and storage.is_configured():
+        storage.delete_object(key=old_key)
+    current_user.avatar_url = None
+    current_user.updated_at = datetime.now(UTC)
+    session.add(current_user)
+    session.commit()
+    return None
+
+
 class StudentClassroomTokenResponse(BaseModel):
     room_url: str
     token: str
@@ -211,6 +366,16 @@ class StudentBookingRead(BaseModel):
     id: int
     tutor_slug: str | None
     tutor_display_name: str | None
+    # `counterparty_name` is the unified field a shared <BookingCard>
+    # component reads regardless of whose side it's rendering. From the
+    # student's perspective that's the tutor; the tutor-side endpoint
+    # populates it with the student's name. Lets the SPA render bookings
+    # consistently across My Bookings, the dashboard cards, and the
+    # upcoming-lesson banner without each view re-implementing the same
+    # shape conversion. Defaults to None so call sites that haven't
+    # adopted the field yet keep returning a valid response — a
+    # model_validator below fills it from tutor_display_name when None.
+    counterparty_name: str | None = None
     pack_name: str | None
     scheduled_at: datetime
     duration_minutes: int
@@ -224,6 +389,151 @@ class StudentBookingRead(BaseModel):
     # Tutor's cancellation cutoff at read time — frontend uses this to
     # disable the Cancel button when the lesson is too close.
     cancellation_cutoff_hours: int | None = None
+
+    @field_validator(
+        "scheduled_at",
+        "paid_at",
+        "completed_at",
+        "cancelled_at",
+        "refunded_at",
+        mode="before",
+    )
+    @classmethod
+    def _ensure_utc(cls, v):
+        # Times are stored in the DB as naive UTC; without this they
+        # serialise to ISO strings with no `Z` / `+00:00` suffix and
+        # JavaScript's `new Date()` treats them as local time, throwing
+        # the rendered hour off by the user's UTC offset. Always emit
+        # timezone-aware UTC so the browser converts cleanly.
+        if v is None or not isinstance(v, datetime):
+            return v
+        if v.tzinfo is None:
+            return v.replace(tzinfo=UTC)
+        return v
+
+    @model_validator(mode="after")
+    def _fill_counterparty(self):
+        if self.counterparty_name is None and self.tutor_display_name:
+            self.counterparty_name = self.tutor_display_name
+        return self
+
+
+class MyTutorRead(BaseModel):
+    tutor_id: int
+    user_id: int
+    tutor_slug: str
+    display_name: str
+    photo_url: str | None
+    bio: str | None
+    languages_taught: str | None
+    total_bookings: int
+    completed_bookings: int
+    upcoming_bookings: int
+    last_lesson_at: datetime | None
+    next_lesson_at: datetime | None
+
+    @field_validator("last_lesson_at", "next_lesson_at", mode="before")
+    @classmethod
+    def _ensure_utc(cls, v):
+        if v is None or not isinstance(v, datetime):
+            return v
+        if v.tzinfo is None:
+            return v.replace(tzinfo=UTC)
+        return v
+
+
+@router.get("/me/tutors", response_model=list[MyTutorRead])
+def list_my_tutors(
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> list[MyTutorRead]:
+    """Every tutor the current student has booked with — drives the
+    'My Tutors' page so a student can quickly find their teacher's site
+    and start a conversation.
+
+    Ordered by most-recent booking activity (active > upcoming > stale).
+    Includes booking-count stats per tutor.
+    """
+    bookings = list(
+        session.exec(
+            select(Booking)
+            .where(Booking.student_user_id == current_user.id)
+        ).all()
+    )
+    if not bookings:
+        return []
+    tutor_ids = list({b.tutor_id for b in bookings})
+    tutors = {
+        t.id: t for t in session.exec(
+            select(Tutor).where(Tutor.id.in_(tutor_ids))
+        ).all()
+    }
+    users = {
+        u.id: u for u in session.exec(
+            select(User).where(
+                User.id.in_([t.user_id for t in tutors.values()])
+            )
+        ).all()
+    }
+
+    now = datetime.now(UTC)
+    by_tutor: dict[int, dict] = {}
+    for b in bookings:
+        sched = b.scheduled_at
+        if sched.tzinfo is None:
+            sched = sched.replace(tzinfo=UTC)
+        slot = by_tutor.setdefault(
+            b.tutor_id,
+            {
+                "total": 0,
+                "completed": 0,
+                "upcoming": 0,
+                "last_lesson_at": None,
+                "next_lesson_at": None,
+            },
+        )
+        slot["total"] += 1
+        if b.status == BookingStatus.COMPLETED:
+            slot["completed"] += 1
+            if slot["last_lesson_at"] is None or sched > slot["last_lesson_at"]:
+                slot["last_lesson_at"] = sched
+        elif b.status == BookingStatus.CONFIRMED and sched > now:
+            slot["upcoming"] += 1
+            if slot["next_lesson_at"] is None or sched < slot["next_lesson_at"]:
+                slot["next_lesson_at"] = sched
+
+    rows: list[MyTutorRead] = []
+    for tid, stats in by_tutor.items():
+        tutor = tutors.get(tid)
+        if tutor is None:
+            continue
+        user = users.get(tutor.user_id)
+        rows.append(
+            MyTutorRead(
+                tutor_id=tutor.id,
+                user_id=tutor.user_id,
+                tutor_slug=tutor.tutor_slug,
+                display_name=tutor.display_name,
+                photo_url=user.avatar_url if user else None,
+                bio=user.bio if user else None,
+                languages_taught=user.languages if user else None,
+                total_bookings=stats["total"],
+                completed_bookings=stats["completed"],
+                upcoming_bookings=stats["upcoming"],
+                last_lesson_at=stats["last_lesson_at"],
+                next_lesson_at=stats["next_lesson_at"],
+            )
+        )
+    # Sort: tutors with an upcoming lesson first (soonest), then last
+    # completed lesson, then alphabetical.
+    rows.sort(
+        key=lambda r: (
+            r.next_lesson_at or datetime.max.replace(tzinfo=UTC),
+            -(r.last_lesson_at.timestamp() if r.last_lesson_at else 0),
+            r.display_name.lower(),
+        )
+    )
+    return rows
 
 
 @router.get("/me/bookings", response_model=list[StudentBookingRead])
@@ -250,6 +560,7 @@ def list_my_bookings(
             id=b.id,
             tutor_slug=tutors.get(b.tutor_id).tutor_slug if tutors.get(b.tutor_id) else None,
             tutor_display_name=tutors.get(b.tutor_id).display_name if tutors.get(b.tutor_id) else None,
+            counterparty_name=tutors.get(b.tutor_id).display_name if tutors.get(b.tutor_id) else None,
             pack_name=packs.get(b.lesson_pack_id).name if packs.get(b.lesson_pack_id) else None,
             scheduled_at=b.scheduled_at,
             duration_minutes=b.duration_minutes,
@@ -368,11 +679,40 @@ def cancel_my_booking(
     booking = session.get(Booking, booking_id)
     if not booking or booking.student_user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found.")
+    # Idempotent: a double-click on Cancel shouldn't error, it should
+    # just return the booking in its terminal state. Saves the student
+    # from a confusing 400 toast on a network blip retry.
+    if booking.status in (
+        BookingStatus.CANCELLED,
+        BookingStatus.REFUNDED,
+    ):
+        tutor = session.get(Tutor, booking.tutor_id)
+        pack = session.get(LessonPack, booking.lesson_pack_id)
+        return StudentBookingRead(
+            id=booking.id,
+            tutor_slug=tutor.tutor_slug if tutor else None,
+            tutor_display_name=tutor.display_name if tutor else None,
+            counterparty_name=tutor.display_name if tutor else None,
+            pack_name=pack.name if pack else None,
+            scheduled_at=booking.scheduled_at,
+            duration_minutes=booking.duration_minutes,
+            price_cents=booking.price_cents,
+            currency=booking.currency,
+            status=booking.status,
+            paid_at=booking.paid_at,
+            completed_at=booking.completed_at,
+            cancelled_at=booking.cancelled_at,
+            refunded_at=booking.refunded_at,
+            cancellation_cutoff_hours=tutor.cancellation_cutoff_hours if tutor else None,
+        )
     now = datetime.now(UTC)
     sched = booking.scheduled_at
     if sched.tzinfo is None:
         sched = sched.replace(tzinfo=UTC)
-    if sched <= now:
+    # Boundary semantics consistent with the cancel-cutoff strict-`<`
+    # below: sched in the past blocks cancel; sched exactly equal to
+    # now is rare enough not to worry about (microsecond precision).
+    if sched < now:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="That lesson has already started or is in the past.",
@@ -383,7 +723,7 @@ def cancel_my_booking(
     # refund and no reason to penalise them for closing the tab.
     if booking.status == BookingStatus.CONFIRMED:
         tutor = session.get(Tutor, booking.tutor_id)
-        cutoff_hours = tutor.cancellation_cutoff_hours if tutor else 48
+        cutoff_hours = (tutor.cancellation_cutoff_hours if tutor else 48) or 48
         if sched - now < timedelta(hours=cutoff_hours):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -422,6 +762,9 @@ def cancel_my_booking(
         booking.refunded_at = now
         booking.updated_at = now
         session.add(booking)
+        # Refund implies the lesson won't happen — release the minutes.
+        from ..services import minute_quota
+        minute_quota.release_booking_minutes(booking, session)
         session.commit()
         session.refresh(booking)
     else:
@@ -572,6 +915,17 @@ def reschedule_my_booking(
     booking.daily_room_name = None
     booking.daily_room_url = None
     session.add(booking)
+
+    # Migrate the minute-quota ledger row to the new month. The old row's
+    # `usage_date` was stamped at confirm time from the original
+    # scheduled_at; without this re-record, a late-June lesson moved to
+    # early July still counts against June's quota and never shows up in
+    # July's. Release-then-record uses the same source key so it stays
+    # idempotent for replay.
+    from ..services import minute_quota
+    minute_quota.release_booking_minutes(booking, session)
+    minute_quota.record_booking_minutes(booking, session)
+
     session.commit()
     session.refresh(booking)
 
@@ -579,6 +933,7 @@ def reschedule_my_booking(
         id=booking.id,
         tutor_slug=tutor.tutor_slug,
         tutor_display_name=tutor.display_name,
+        counterparty_name=tutor.display_name,
         pack_name=pack.name,
         scheduled_at=booking.scheduled_at,
         duration_minutes=booking.duration_minutes,
@@ -1003,6 +1358,12 @@ def get_user_profile(
     if current_user and current_user.id != user.id:
         is_following = session.get(TeacherFollower, (user.id, current_user.id)) is not None
 
+    # Surface their tutoring site slug if they have one — drives the
+    # "Book a lesson with this tutor" cross-sell on the profile page.
+    tutor_row = session.exec(
+        select(Tutor).where(Tutor.user_id == user.id)
+    ).first()
+
     return UserProfile(
         id=user.id,
         full_name=user.full_name,
@@ -1018,6 +1379,8 @@ def get_user_profile(
         language_groups=[group.language_name for group in user.language_groups],
         follower_count=follower_count,
         is_following=is_following,
+        tutor_slug=tutor_row.tutor_slug if tutor_row else None,
+        tutor_display_name=tutor_row.display_name if tutor_row else None,
     )
 
 
@@ -1320,5 +1683,54 @@ def create_stripe_onboarding_link(
         )
 
         return {"onboarding_url": account_link.url}
+    except stripe.error.StripeError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from None
+
+
+class LoginLinkResponse(BaseModel):
+    login_url: str
+
+
+@router.post("/stripe-login-link", response_model=LoginLinkResponse)
+def create_stripe_login_link(
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Create a one-time login link to the tutor's own Express dashboard.
+
+    For CREATORS only. Routes the caller into THEIR connected Stripe
+    Connect account — never to the platform Stripe account. Admins use a
+    separate `/admin/stripe-dashboard` flow (or the platform Stripe dashboard
+    directly). Students who want to manage their saved payment methods use
+    `/subscriptions/customer-portal`.
+
+    Prefers `Tutor.stripe_connect_account_id` (canonical for payouts) and
+    falls back to `User.stripe_account_id` (legacy field used at onboarding
+    time) so we work either side of the sync.
+    """
+    if current_user.role != UserRole.CREATOR:
+        raise HTTPException(
+            status_code=403,
+            detail="Only tutors have a Stripe Connect dashboard. Students manage saved cards from their billing settings.",
+        )
+
+    account_id = None
+    tutor_row = session.exec(
+        select(Tutor).where(Tutor.user_id == current_user.id)
+    ).first()
+    if tutor_row and tutor_row.stripe_connect_account_id:
+        account_id = tutor_row.stripe_connect_account_id
+    if not account_id:
+        account_id = current_user.stripe_account_id
+
+    if not account_id:
+        raise HTTPException(
+            status_code=409,
+            detail="No Stripe account connected yet. Onboard first via /users/stripe-onboarding-link.",
+        )
+
+    try:
+        link = stripe.Account.create_login_link(account_id)
+        return {"login_url": link.url}
     except stripe.error.StripeError as e:
         raise HTTPException(status_code=400, detail=str(e)) from None

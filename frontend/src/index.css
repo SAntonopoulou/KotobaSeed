@@ -7,3 +7,10 @@
 body {
   @apply bg-kotoba-background;
 }
+
+/* Hide the default disclosure triangle on <summary> in Safari/iOS so
+   our custom chevron is the only marker. Firefox + Chrome respect
+   `list-style: none` (via Tailwind's `list-none`); WebKit needs this. */
+summary::-webkit-details-marker {
+  display: none;
+}

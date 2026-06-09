@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import client from '../api/client';
 import { useConfirm } from '../context/ModalContext';
+import { getErrorMessage } from '../utils/errors';
 
 // Student take-quiz + view-results page. Loads the assignment from the
 // student endpoint. Pre-submit the response has questions WITHOUT correct
@@ -25,7 +26,7 @@ const TakeAssignment = () => {
       const res = await client.get(`/users/me/assignments/${id}`);
       setAssignment(res.data);
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not load this assignment.');
+      setError(getErrorMessage(err, 'Could not load this assignment.'));
     } finally {
       setLoading(false);
     }
@@ -59,7 +60,7 @@ const TakeAssignment = () => {
       );
       setAssignment(res.data);
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not submit.');
+      setError(getErrorMessage(err, 'Could not submit.'));
     } finally {
       setSubmitting(false);
     }
@@ -114,7 +115,7 @@ const TakeAssignment = () => {
       const res = await client.post(`/users/me/assignments/${id}/use-grading-credit`);
       setAssignment(res.data);
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not use credit.');
+      setError(getErrorMessage(err, 'Could not use credit.'));
     } finally {
       setSubmitting(false);
     }
@@ -131,7 +132,7 @@ const TakeAssignment = () => {
       }
       setError('Could not start payment.');
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not start payment.');
+      setError(getErrorMessage(err, 'Could not start payment.'));
     } finally {
       setSubmitting(false);
     }

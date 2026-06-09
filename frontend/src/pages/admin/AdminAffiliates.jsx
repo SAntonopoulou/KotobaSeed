@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import client from '../../api/client';
 import { useToast } from '../../context/ToastContext';
+import { getErrorMessage } from '../../utils/errors';
 
 const STATUS_TONE = {
   pending: 'bg-kotoba-secondary/30 text-kotoba-text',
@@ -12,7 +13,7 @@ const STATUS_TONE = {
 const formatWhen = (iso) => {
   if (!iso) return '';
   try {
-    return new Date(iso).toLocaleString();
+    return formatDateTime(iso);
   } catch {
     return iso;
   }
@@ -31,7 +32,7 @@ const AdminAffiliates = () => {
       const res = await client.get('/admin/affiliates/applications');
       setApps(res.data || []);
     } catch (err) {
-      addToast(err?.response?.data?.detail || 'Could not load applications.', 'error');
+      addToast(getErrorMessage(err, 'Could not load applications.'), 'error');
     } finally {
       setLoading(false);
     }
@@ -51,7 +52,7 @@ const AdminAffiliates = () => {
       addToast(decision === 'approve' ? 'Approved.' : 'Rejected.', 'success');
       await load();
     } catch (err) {
-      addToast(err?.response?.data?.detail || 'Action failed.', 'error');
+      addToast(getErrorMessage(err, 'Action failed.'), 'error');
     } finally {
       setActingId(null);
     }

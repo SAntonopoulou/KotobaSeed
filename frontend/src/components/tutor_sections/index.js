@@ -8,6 +8,7 @@ import FaqAccordion from './FaqAccordion';
 import VideoEmbed from './VideoEmbed';
 import CtaBand from './CtaBand';
 import LanguageIntro from './LanguageIntro';
+import NewsletterSignup from './NewsletterSignup';
 
 // section_type → React component. Keep keys aligned with TutorPageSectionType
 // in backend/models.py. New types must be added in both places.
@@ -22,6 +23,7 @@ export const SECTION_COMPONENTS = {
   video_embed: VideoEmbed,
   cta_band: CtaBand,
   language_intro: LanguageIntro,
+  newsletter_signup: NewsletterSignup,
 };
 
 // Tutor-facing labels for the page builder picker.
@@ -36,6 +38,7 @@ export const SECTION_LABELS = {
   video_embed: 'Video',
   cta_band: 'Call to action',
   language_intro: 'Language intro',
+  newsletter_signup: 'Newsletter signup',
 };
 
 // Short blurb shown in the section picker.
@@ -50,6 +53,7 @@ export const SECTION_DESCRIPTIONS = {
   video_embed: 'YouTube or Vimeo embed.',
   cta_band: 'Final "ready to start?" prompt with a button.',
   language_intro: 'Image + intro text about the language itself.',
+  newsletter_signup: 'Email signup card. Visitors join your newsletter list.',
 };
 
 // Which sections take editable content vs. derive everything from APIs.
@@ -65,6 +69,7 @@ export const SECTION_HAS_EDITOR = {
   video_embed: true,
   cta_band: true,
   language_intro: true,
+  newsletter_signup: false, // copy comes from the tutor's newsletter prefs
 };
 
 export const ALL_SECTION_TYPES = Object.keys(SECTION_COMPONENTS);

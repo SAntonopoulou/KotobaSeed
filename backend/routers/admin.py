@@ -9,15 +9,18 @@ from ..database import get_session
 from ..deps import get_current_admin
 from ..models import (
     AuditLog,
-    PlatformSetting,
+    ConversationReport,
+    ConversationReportReason,
+    ConversationReportStatus,
     Notification,
-    UserRole,
+    PlatformSetting,
     Pledge,
     PledgeStatus,
     Project,
     ProjectStatus,
     TeacherVerification,
     User,
+    UserRole,
     VerificationStatus,
 )
 from ..routers.projects import _cancel_project_logic, _create_project_read
@@ -544,3 +547,93 @@ def set_platform_setting(
         updated_at=datetime.now(UTC),
         updated_by_user_id=current_user.id,
     )
+
+
+
+class ConversationReportAdminRead(BaseModel):
+    id: int
+    conversation_id: int
+    message_id: int | None
+    reporter_user_id: int
+    reporter_name: str | None
+    reported_user_id: int
+    reported_name: str | None
+    reason: ConversationReportReason
+    note: str | None
+    status: ConversationReportStatus
+    resolution_note: str | None
+    resolved_at: datetime | None
+    created_at: datetime
+
+
+class ReportResolution(BaseModel):
+    status: ConversationReportStatus
+    resolution_note: str | None = None
+
+
+def _serialize_report(report: ConversationReport, session: Session) -> ConversationReportAdminRead:
+    reporter = session.get(User, report.reporter_user_id)
+    reported = session.get(User, report.reported_user_id)
+    return ConversationReportAdminRead(
+        id=report.id,
+        conversation_id=report.conversation_id,
+        message_id=report.message_id,
+        reporter_user_id=report.reporter_user_id,
+        reporter_name=reporter.full_name if reporter else None,
+        reported_user_id=report.reported_user_id,
+        reported_name=reported.full_name if reported else None,
+        reason=report.reason,
+        note=report.note,
+        status=report.status,
+        resolution_note=report.resolution_note,
+        resolved_at=report.resolved_at,
+        created_at=report.created_at,
+    )
+
+
+@router.get("/reports", response_model=list[ConversationReportAdminRead])
+def list_conversation_reports(
+    status_filter: ConversationReportStatus | None = Query(default=None, alias="status"),
+    current_user: User = Depends(get_current_admin),
+    session: Session = Depends(get_session),
+):
+    """Admin queue for chat moderation. Defaults to OPEN-only."""
+    stmt = select(ConversationReport).order_by(ConversationReport.created_at.desc())
+    if status_filter is not None:
+        stmt = stmt.where(ConversationReport.status == status_filter)
+    else:
+        stmt = stmt.where(ConversationReport.status == ConversationReportStatus.OPEN)
+    reports = session.exec(stmt).all()
+    return [_serialize_report(r, session) for r in reports]
+
+
+@router.post("/reports/{report_id}", response_model=ConversationReportAdminRead)
+def resolve_conversation_report(
+    report_id: int,
+    payload: ReportResolution,
+    current_user: User = Depends(get_current_admin),
+    session: Session = Depends(get_session),
+):
+    """Mark a report resolved or dismissed. Audit-logged."""
+    report = session.get(ConversationReport, report_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="Report not found.")
+    if payload.status == ConversationReportStatus.OPEN:
+        raise HTTPException(status_code=400, detail="Use the queue to reopen — this endpoint resolves.")
+    report.status = payload.status
+    report.resolution_note = payload.resolution_note
+    report.resolved_by_user_id = current_user.id
+    report.resolved_at = datetime.now(UTC)
+    session.add(report)
+    record_audit(
+        session,
+        actor=current_user,
+        action="report.resolved" if payload.status == ConversationReportStatus.RESOLVED else "report.dismissed",
+        target_type="conversation_report",
+        target_id=report.id,
+        summary=f"Conversation report #{report.id} → {payload.status.value}.",
+        details={"note": payload.resolution_note, "conversation_id": report.conversation_id},
+    )
+    session.commit()
+    session.refresh(report)
+    return _serialize_report(report, session)

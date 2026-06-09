@@ -57,6 +57,17 @@ class ProjectStatus(str, Enum):
     ON_HOLD = "on_hold"
 
 
+class CohortStatus(str, Enum):
+    """A cohort moves through these in order. Once CONFIRMED, seat
+    enrolment closes — students who want in have to find another
+    cohort. Once CANCELLED, the seats are refunded by the cron sweep."""
+
+    DRAFT = "draft"          # tutor still editing, not visible to students
+    OPEN = "open"            # visible on group page, accepting seat purchases
+    CONFIRMED = "confirmed"  # min/max seats hit; lessons go ahead
+    CANCELLED = "cancelled"  # min not met by deadline OR tutor pulled it
+
+
 class PledgeStatus(str, Enum):
     PENDING = "pending"
     CAPTURED = "captured"
@@ -159,6 +170,7 @@ class TutorPageSectionType(str, Enum):
     VIDEO_EMBED = "video_embed"
     CTA_BAND = "cta_band"
     LANGUAGE_INTRO = "language_intro"
+    NEWSLETTER_SIGNUP = "newsletter_signup"
 
 
 # Association table for User and LanguageGroup
@@ -176,12 +188,56 @@ class UserAchievement(SQLModel, table=True):
 
 # Database Models
 class LanguageGroup(SQLModel, table=True):
+    """A per-language community surface.
+
+    Originally a profile attribute (tutors got rows here for the languages
+    they teach). 2026-06-07 sweep promotes it to a proper community
+    feature: each group has a public landing at `/groups/{slug}` with
+    pinned tutors, a scoped article feed, members, and (Phase 2+)
+    cohorts + threads + badges. See project_language_groups_design memory.
+    """
+
     id: int | None = Field(default=None, primary_key=True)
     language_name: str = Field(unique=True, index=True)
+    # URL slug — lowercased ASCII, used for /groups/{slug} routing. Derived
+    # from language_name on creation but editable so Sophia can pretty up
+    # ambiguous names.
+    slug: str | None = Field(default=None, max_length=80, index=True)
+    # Short copy shown on the group page hero.
+    description: str | None = Field(default=None, max_length=2000)
+    # Hex hint used to colour the group card / hero accent. Optional.
+    cover_color: str | None = Field(default=None, max_length=16)
+    # Soft-disable so we don't lose history when a group goes quiet.
+    is_active: bool = Field(default=True, index=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     members: list["User"] = Relationship(
         back_populates="language_groups", link_model=UserLanguageGroup
     )
+
+
+class LanguageGroupMembership(SQLModel, table=True):
+    """Explicit student join on a LanguageGroup.
+
+    Distinct from `UserLanguageGroup` (which marks tutors who *teach* the
+    language). This row is created when a signed-in user clicks "Join"
+    on a group page. Memberships are free and reversible.
+    """
+
+    __tablename__ = "language_group_membership"
+    __table_args__ = (
+        UniqueConstraint(
+            "group_id", "user_id", name="uq_language_group_membership_pair"
+        ),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    group_id: int = Field(foreign_key="languagegroup.id", index=True)
+    user_id: int = Field(foreign_key="user.id", index=True)
+    joined_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    # Editorial roles. Default "member"; Sophia (admin) sets "pinned" on
+    # tutors she wants surfaced first on the group page.
+    role: str = Field(default="member", max_length=16)
 
 
 class TeacherFollower(SQLModel, table=True):
@@ -244,6 +300,43 @@ class User(SQLModel, table=True):
     # password change.
     token_invalidation_at: datetime | None = Field(default=None)
 
+    # Demo-is-the-signup onboarding (Phase 1 — 2026-06-08).
+    # When `is_demo_account` is True the user landed here from a /try
+    # entry page, has no password yet, and sees the DemoBar across the
+    # app. `demo_role` mirrors the entry route (tutor/creator/student)
+    # so the tour engine can pick the right script. `demo_seed_ids_json`
+    # records every row we seeded on entry so `wipe_workspace()` can
+    # clean them out atomically on conversion.
+    is_demo_account: bool = Field(default=False, index=True)
+    demo_role: str | None = Field(default=None, max_length=16)
+    demo_workspace_seeded_at: datetime | None = Field(default=None)
+    demo_seed_ids_json: str = Field(default="{}")
+
+    # Demo classroom trial — admins (Sophia) hand-issue these to people
+    # who want to feel the live classroom before signing up. The trial
+    # has a hard minute cap (5–10 typically) that the classroom token
+    # mint path enforces; once minutes hit zero the user can still log
+    # in but the Join Classroom button is disabled.
+    #
+    # demo_trial_expires_at auto-cleans them up after 7 days (TOTAL) or
+    # N months (MONTHLY), so even without manual deletion the account
+    # self-terminates. Sophia can still delete sooner from the admin panel.
+    #
+    # Period semantics:
+    #   - "total":   minutes_allocated is a one-shot budget. expires after 7 days.
+    #   - "monthly": minutes_allocated refills every 30 days from period_anchor
+    #                until the overall expires_at is reached.
+    is_demo_trial: bool = Field(default=False, index=True)
+    demo_trial_minutes_remaining: int | None = Field(default=None)
+    demo_trial_minutes_allocated: int | None = Field(default=None)
+    demo_trial_period: str | None = Field(default=None, max_length=16)
+    demo_trial_period_anchor: datetime | None = Field(default=None)
+    demo_trial_expires_at: datetime | None = Field(default=None, index=True)
+    demo_trial_label: str | None = Field(default=None, max_length=120)
+    demo_trial_created_by_admin_id: int | None = Field(
+        default=None, foreign_key="user.id"
+    )
+
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     deleted_at: datetime | None = Field(default=None)
@@ -296,6 +389,15 @@ class User(SQLModel, table=True):
 
     @property
     def is_pro_subscriber(self) -> bool:
+        # Defensive guard: a stale subscription_tier with an expired
+        # subscription_expires_at means a webhook went missing and we'd
+        # otherwise serve paid features to a lapsed user. Treat them as
+        # FREE in the hot path; the next webhook will sync the column.
+        if (
+            self.subscription_expires_at is not None
+            and self.subscription_expires_at < datetime.now(UTC)
+        ):
+            return False
         return self.role == UserRole.CREATOR and self.subscription_tier in (
             SubscriptionTier.PRO,
             SubscriptionTier.BUSINESS,
@@ -490,7 +592,18 @@ class RequestBlacklist(SQLModel, table=True):
 
 class Conversation(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
-    request_id: int = Field(foreign_key="request.id", index=True)
+    # Nullable so two users can open a direct conversation without going
+    # through a marketplace Request (e.g. a student messaging the tutor
+    # they have an upcoming lesson with).
+    request_id: int | None = Field(default=None, foreign_key="request.id", index=True)
+    # When a student opens a direct conversation by booking with a
+    # tutor or messaging them, the student can send the initial message
+    # but must wait for the tutor's first reply before sending more.
+    # `tutor_first_responded_at` is stamped on the tutor's first message
+    # in the conversation; while it's null and `student_initiated == True`,
+    # the student is rate-limited to a single message.
+    student_initiated: bool = Field(default=False)
+    tutor_first_responded_at: datetime | None = Field(default=None)
     teacher_id: int = Field(foreign_key="user.id", index=True)
     student_id: int = Field(foreign_key="user.id", index=True)
     status: ConversationStatus = Field(default=ConversationStatus.OPEN)
@@ -537,6 +650,17 @@ class Message(SQLModel, table=True):
     offer_num_videos: int | None = None
     offer_price_per_video: int | None = None
 
+    # Undo-send (60-second window). When the sender retracts a message
+    # we stamp deleted_at and stop returning the content; the row stays
+    # so reply chains + audit trails don't break.
+    deleted_at: datetime | None = Field(default=None)
+
+    # Image attachment (single-image first pass). Public URL minted by
+    # services.storage. content stays as a caption/free text so the UX
+    # is unchanged for text-only sends.
+    attachment_url: str | None = Field(default=None, max_length=500)
+    attachment_kind: str | None = Field(default=None, max_length=20)
+
     conversation: Optional["Conversation"] = Relationship(back_populates="messages")
     sender: Optional["User"] = Relationship(back_populates="sent_messages")
     replied_to_message: Optional["Message"] = Relationship(
@@ -556,6 +680,100 @@ class PriorityCredit(SQLModel, table=True):
     user: "User" = Relationship(back_populates="priority_credits")
 
 
+class BookingCreditKind(str, Enum):
+    """Why we issued this credit. Drives the messaging in the UI."""
+
+    MAINTENANCE = "maintenance"   # Lesson hit a scheduled outage we caused.
+    TUTOR_CANCELLED = "tutor_cancelled"  # Tutor cancelled within cutoff window.
+    GOODWILL = "goodwill"         # Admin-issued apology / make-good.
+
+
+class BookingCreditStatus(str, Enum):
+    AVAILABLE = "available"
+    USED = "used"
+    EXPIRED = "expired"
+
+
+class BookingCredit(SQLModel, table=True):
+    """A free-lesson credit honoured against a specific tutor.
+
+    Issued when something we caused interrupted a paid lesson —
+    scheduled maintenance overlapping a booking, a tutor cancellation
+    inside the cutoff window, etc. The credit lives for 30 days,
+    waives the platform fee, and at checkout time the slot picker
+    surfaces this tutor's openings before the rest of the marketplace
+    so the student can rebook quickly.
+
+    The credit references both the affected user AND the original
+    affected booking so the admin trail is clear and we can build the
+    "your free lesson is ready" inbox entry directly.
+    """
+
+    __tablename__ = "booking_credit"
+
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="user.id", index=True)
+    tutor_id: int = Field(foreign_key="tutor.id", index=True)
+    affected_booking_id: int | None = Field(
+        default=None, foreign_key="booking.id", index=True
+    )
+    # How many minutes the credit is good for. We honour it on any
+    # active lesson pack on the tutor's site that's <= this duration
+    # (so a 60-min credit can pay for a 30-min or 60-min, never a
+    # 90-min, without surprise).
+    duration_minutes: int = Field(ge=15, le=240)
+    kind: BookingCreditKind = Field(default=BookingCreditKind.MAINTENANCE)
+    status: BookingCreditStatus = Field(default=BookingCreditStatus.AVAILABLE, index=True)
+    # Reason note shown to the student in their dashboard ("we apologise
+    # for the maintenance window on 2026-06-15 — here's a free lesson").
+    note: str | None = Field(default=None, max_length=500)
+    expires_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC) + timedelta(days=30),
+        index=True,
+    )
+    used_on_booking_id: int | None = Field(
+        default=None, foreign_key="booking.id"
+    )
+    used_at: datetime | None = Field(default=None)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class MaintenanceStatus(str, Enum):
+    SCHEDULED = "scheduled"   # Future window, banner showing.
+    ACTIVE = "active"         # Currently in progress, page taken over.
+    COMPLETED = "completed"   # Window passed, site back up.
+    CANCELLED = "cancelled"   # Admin cancelled before it ran.
+
+
+class MaintenanceWindow(SQLModel, table=True):
+    """An admin-scheduled maintenance window.
+
+    The system surfaces this in three places:
+    1. SPA banner from 24h ahead until T-10min.
+    2. Hard modal from T-10min until window starts.
+    3. Caddy maintenance page during the window (backend down OK).
+
+    `affected_booking_count` is denormalised so the admin schedule
+    page shows the impact at a glance without a per-render join.
+    """
+
+    __tablename__ = "maintenance_window"
+
+    id: int | None = Field(default=None, primary_key=True)
+    scheduled_start_at: datetime = Field(index=True)
+    duration_minutes: int = Field(ge=5, le=480)
+    # Public message — appears in the banner, the modal, and the
+    # maintenance page. Admin-typed Markdown is rejected; plain text
+    # only so we don't sweep XSS into a non-React surface.
+    message: str = Field(max_length=1000)
+    status: MaintenanceStatus = Field(default=MaintenanceStatus.SCHEDULED, index=True)
+    created_by_user_id: int = Field(foreign_key="user.id")
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    cancelled_at: datetime | None = Field(default=None)
+    cancelled_by_user_id: int | None = Field(default=None, foreign_key="user.id")
+    affected_booking_count: int = Field(default=0)
+
+
 class Achievement(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     key: str = Field(unique=True, index=True)
@@ -564,6 +782,53 @@ class Achievement(SQLModel, table=True):
     icon_url: str | None = None
 
     users: list["User"] = Relationship(back_populates="achievements", link_model=UserAchievement)
+
+
+class ConversationReportReason(str, Enum):
+    SPAM = "spam"
+    HARASSMENT = "harassment"
+    ABUSE = "abuse"
+    INAPPROPRIATE = "inappropriate"
+    OTHER = "other"
+
+
+class ConversationReportStatus(str, Enum):
+    OPEN = "open"
+    RESOLVED = "resolved"
+    DISMISSED = "dismissed"
+
+
+class ConversationReport(SQLModel, table=True):
+    """Moderation queue: a user reporting a conversation or specific
+    message. Admins pick from /admin/reports."""
+
+    __tablename__ = "conversation_report"
+
+    id: int | None = Field(default=None, primary_key=True)
+    conversation_id: int = Field(foreign_key="conversation.id", index=True)
+    message_id: int | None = Field(default=None, foreign_key="message.id")
+    reporter_user_id: int = Field(foreign_key="user.id", index=True)
+    reported_user_id: int = Field(foreign_key="user.id", index=True)
+    reason: ConversationReportReason = Field(default=ConversationReportReason.OTHER)
+    note: str | None = Field(default=None, max_length=1000)
+    status: ConversationReportStatus = Field(default=ConversationReportStatus.OPEN)
+    resolved_by_user_id: int | None = Field(default=None, foreign_key="user.id")
+    resolved_at: datetime | None = Field(default=None)
+    resolution_note: str | None = Field(default=None, max_length=500)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class UserBlock(SQLModel, table=True):
+    """One side blocking the other. Symmetric in effect — the chat
+    send-path refuses if EITHER direction is blocked, so harassment
+    can't be one-sided."""
+
+    __tablename__ = "user_block"
+
+    id: int | None = Field(default=None, primary_key=True)
+    blocker_user_id: int = Field(foreign_key="user.id", index=True)
+    blocked_user_id: int = Field(foreign_key="user.id", index=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class AuditLog(SQLModel, table=True):
@@ -590,6 +855,133 @@ class AuditLog(SQLModel, table=True):
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC), index=True
     )
+
+
+class ReportStatus(str, Enum):
+    OPEN = "open"
+    ACKNOWLEDGED = "acknowledged"
+    ACTIONED = "actioned"
+    DISMISSED = "dismissed"
+
+
+class Report(SQLModel, table=True):
+    """A DSA Article 16 notice — anyone (user or non-user) can report
+    content believed to be illegal. We persist the full notice so we can:
+      - reply to the reporter (Article 16(5))
+      - issue a statement of reasons to the affected user (Article 17)
+      - handle appeals (Article 20)
+      - aggregate annual transparency stats (Article 24)
+
+    Decisions are stamped in-place; the audit trail of who-decided-what
+    sits on this row + a parallel AuditLog entry.
+    """
+
+    __tablename__ = "report"
+
+    id: int | None = Field(default=None, primary_key=True)
+    # Short human-readable handle ("DSA-20260608123456-be65") returned to
+    # the reporter so support can correlate without leaking the row id.
+    reference: str = Field(max_length=40, unique=True, index=True)
+    reporter_email: str | None = Field(default=None, max_length=320, index=True)
+    content_url: str = Field(max_length=2048)
+    # Free-text legal hook ("Copyright; DSM Article 17", "CSAM", "GDPR
+    # Art 6"). Nullable because non-lawyer reporters often don't know.
+    legal_basis: str | None = Field(default=None, max_length=512)
+    description: str = Field(max_length=8000)
+    # Reporter claims to be a designated trusted flagger under DSA
+    # Article 22. Until we verify against the DSC list this is just a
+    # self-declared hint that bumps moderation priority.
+    is_trusted_flagger: bool = Field(default=False)
+    acting_on_behalf_of: str | None = Field(default=None, max_length=300)
+    ip: str | None = Field(default=None, max_length=64)
+    user_agent: str | None = Field(default=None, max_length=400)
+    status: ReportStatus = Field(default=ReportStatus.OPEN, index=True)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC), index=True
+    )
+    # Decision stamps. Populated when an admin moves the report off OPEN.
+    decided_at: datetime | None = Field(default=None, index=True)
+    decided_by_user_id: int | None = Field(default=None, foreign_key="user.id")
+    # Short reason the admin gave; copied into the statement-of-reasons
+    # email to the affected user (DSA Article 17).
+    decision_reason: str | None = Field(default=None, max_length=2000)
+
+
+class PlatformAnnouncementAudience(str, Enum):
+    ALL = "all"
+    TUTORS_ONLY = "tutors_only"
+    STUDENTS_ONLY = "students_only"
+
+
+class PlatformAnnouncementSeverity(str, Enum):
+    INFO = "info"
+    POLICY_CHANGE = "policy_change"  # triggers P2B 15-day acknowledge gate
+    SECURITY = "security"
+
+
+class PlatformAnnouncement(SQLModel, table=True):
+    """A platform-wide banner. Drives the EU P2B Regulation Article 8
+    15-day-notice mechanism for tutor-facing T&C changes and the DSA
+    Article 14 disclosure obligations for content-moderation policy
+    changes. Admin-authored; publish_at gates visibility so we can stage
+    a notice in advance.
+    """
+
+    __tablename__ = "platform_announcement"
+
+    id: int | None = Field(default=None, primary_key=True)
+    title: str = Field(max_length=200)
+    body_md: str = Field(max_length=10_000)
+    audience: PlatformAnnouncementAudience = Field(
+        default=PlatformAnnouncementAudience.ALL, index=True
+    )
+    severity: PlatformAnnouncementSeverity = Field(
+        default=PlatformAnnouncementSeverity.INFO
+    )
+    # publish_at: when the banner first appears.
+    # effective_at: when the policy change takes effect (informational —
+    #     surfaced in the banner so users know the deadline).
+    publish_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC), index=True
+    )
+    effective_at: datetime | None = Field(default=None)
+    # Optional internal link the banner CTA points at — usually the
+    # changelog or the policy doc that changed.
+    cta_label: str | None = Field(default=None, max_length=80)
+    cta_url: str | None = Field(default=None, max_length=512)
+    # Severity=info banners can be dismissed; policy_change banners must
+    # be acknowledged (and the acknowledgement is stored — see
+    # AnnouncementDismissal) so we have proof the affected user was
+    # notified before the effective_at deadline.
+    dismissible: bool = Field(default=True)
+    is_retracted: bool = Field(default=False, index=True)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC), index=True
+    )
+    created_by_user_id: int | None = Field(default=None, foreign_key="user.id")
+
+
+class AnnouncementDismissal(SQLModel, table=True):
+    """Per-user record of dismissals/acknowledgements. For
+    severity=policy_change announcements the row is the legal proof the
+    user was notified at least 15 days before effective_at."""
+
+    __tablename__ = "announcement_dismissal"
+    __table_args__ = (
+        UniqueConstraint(
+            "announcement_id", "user_id", name="uq_announcement_dismissal_pair"
+        ),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    announcement_id: int = Field(foreign_key="platform_announcement.id", index=True)
+    user_id: int = Field(foreign_key="user.id", index=True)
+    dismissed_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC), index=True
+    )
+    # IP at the time of acknowledgement — needed if a tutor later
+    # claims they never saw a P2B notice.
+    ip: str | None = Field(default=None, max_length=64)
 
 
 class GroupSession(SQLModel, table=True):
@@ -620,6 +1012,11 @@ class GroupSession(SQLModel, table=True):
     classroom_room_url: str | None = Field(default=None, max_length=512)
     classroom_room_name: str | None = Field(default=None, max_length=128)
     notes: str | None = Field(default=None, max_length=2000)
+    # When this group session has been delivered (the lesson actually
+    # happened). Lets the minute-quota track group lessons the same way
+    # 1:1 lessons do: reserved until delivered_at, then actualised into
+    # the used bucket. Null = still in the future / reserved.
+    delivered_at: datetime | None = Field(default=None, index=True)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
@@ -635,6 +1032,9 @@ class BookingStatus(str, Enum):
     COMPLETED = "completed"  # tutor marked the lesson done
     CANCELLED = "cancelled"  # before the lesson; pre-refund-window
     REFUNDED = "refunded"  # refunded inside the 14-day window
+    # Tutor flagged the student as a no-show. No refund — the slot was
+    # held, the prep was done. Counts as terminal for stats purposes.
+    NO_SHOW = "no_show"
 
 
 class Booking(SQLModel, table=True):
@@ -653,6 +1053,13 @@ class Booking(SQLModel, table=True):
     tutor_id: int = Field(foreign_key="tutor.id", index=True)
     student_user_id: int = Field(foreign_key="user.id", index=True)
     lesson_pack_id: int = Field(foreign_key="lesson_pack.id", index=True)
+    # The TutorTeam the tutor belonged to at the moment of booking. Stamped
+    # here at creation time so we keep a faithful audit trail even if the
+    # tutor later leaves the team. Drives the non-compete protection on
+    # team-exit (services/team_protection.py).
+    tutor_team_id: int | None = Field(
+        default=None, foreign_key="tutor_team.id", index=True
+    )
     # For group lessons every booking points at the same GroupSession;
     # the cron evaluates seats by counting bookings with this id. Null
     # for 1:1 lessons.
@@ -1165,6 +1572,312 @@ class ModulePurchase(SQLModel, table=True):
     stripe_payment_intent_id: str | None = Field(default=None, max_length=128, index=True)
     paid_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     refunded_at: datetime | None = Field(default=None)
+    # EU Consumer Rights Directive 2011/83 Article 16(m) — for digital
+    # content delivered immediately, the buyer must give prior express
+    # consent waiving the 14-day right of withdrawal. We stamp the moment
+    # the consent was given + the IP at checkout-start. NULL on rows
+    # created before the waiver checkbox shipped.
+    withdrawal_waiver_at: datetime | None = Field(default=None)
+    withdrawal_waiver_ip: str | None = Field(default=None, max_length=64)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class ArticlePurchase(SQLModel, table=True):
+    """A Free student's piecemeal purchase of a single premium article.
+
+    Plus subscribers don't generate rows here — their access comes from
+    their User.subscription_tier. Audit-only: we never delete these,
+    we stamp refunded_at instead.
+    """
+
+    __tablename__ = "article_purchase"
+    __table_args__ = (
+        UniqueConstraint(
+            "article_id", "student_user_id", name="uq_article_purchase_pair"
+        ),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    article_id: int = Field(foreign_key="article.id", index=True)
+    tutor_id: int = Field(foreign_key="tutor.id", index=True)
+    student_user_id: int = Field(foreign_key="user.id", index=True)
+    amount_cents: int = Field(default=0, ge=0)
+    platform_fee_cents: int = Field(default=0, ge=0)
+    currency: str = Field(default="eur", max_length=3)
+    stripe_checkout_session_id: str | None = Field(default=None, max_length=128, index=True)
+    stripe_payment_intent_id: str | None = Field(default=None, max_length=128, index=True)
+    paid_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    refunded_at: datetime | None = Field(default=None)
+    # CRD Article 16(m) digital-content withdrawal waiver — see ModulePurchase.
+    withdrawal_waiver_at: datetime | None = Field(default=None)
+    withdrawal_waiver_ip: str | None = Field(default=None, max_length=64)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class PremiumArticleRead(SQLModel, table=True):
+    """A confirmed read of a premium article by a Plus subscriber.
+
+    Used to compute the monthly creator-pool payout. One row per
+    (user, article, month) — a refresh-spam loop can't inflate
+    earnings. Frontend posts to /articles/{id}/read only after the
+    reader has been on the page for ≥30 seconds AND scrolled past 50%,
+    which is what makes "read" actually mean read.
+
+    For the payout formula, see backend/services/creator_pool.py
+    (to be added at the first end-of-month run; until then the table
+    just collects data).
+    """
+
+    __tablename__ = "premium_article_read"
+    __table_args__ = (
+        UniqueConstraint(
+            "article_id", "student_user_id", "year_month",
+            name="uq_premium_read_triple",
+        ),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    article_id: int = Field(foreign_key="article.id", index=True)
+    tutor_id: int = Field(foreign_key="tutor.id", index=True)
+    student_user_id: int = Field(foreign_key="user.id", index=True)
+    # YYYY-MM bucket. Stored as a string so partitioning + grouping
+    # SQL stays trivial across SQLite + Postgres.
+    year_month: str = Field(max_length=7, index=True)
+    read_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    # Dwell time the frontend reported when registering the read.
+    # Kept for forensic checks (e.g. if a creator pool dispute opens).
+    dwell_seconds: int = Field(default=0, ge=0)
+    # Best-effort scroll % at registration time (0..100).
+    scroll_percent: int = Field(default=0, ge=0, le=100)
+
+
+class ArticleComment(SQLModel, table=True):
+    """Threaded comment on an article. Surfaces only when the tutor flips
+    `Article.comments_enabled = True`. Soft-hidden by the tutor (not
+    deleted) so moderation is auditable; deleted by the author hard-
+    deletes the row.
+    """
+
+    __tablename__ = "article_comment"
+
+    id: int | None = Field(default=None, primary_key=True)
+    article_id: int = Field(foreign_key="article.id", index=True)
+    author_user_id: int = Field(foreign_key="user.id", index=True)
+    # Threading: top-level comments have parent_id = NULL, replies point
+    # at their parent. We don't currently nest deeper than one level in
+    # the UI but the schema supports it.
+    parent_id: int | None = Field(default=None, foreign_key="article_comment.id", index=True)
+    body_markdown: str = Field(max_length=4000)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    # Soft moderation by the article's tutor. Hidden comments still
+    # surface to the tutor + the comment's own author so confusion is
+    # avoided ("why did my comment disappear?" gets "the tutor hid it").
+    hidden_at: datetime | None = Field(default=None)
+    hidden_by_tutor: bool = Field(default=False)
+
+
+class ArticleRating(SQLModel, table=True):
+    """A 1–5 star rating from a reader. Unique on (article, user); the
+    rating endpoint upserts so a reader can revise. The optional `body`
+    is a single line — not a review essay — to keep the surface light.
+    """
+
+    __tablename__ = "article_rating"
+    __table_args__ = (
+        UniqueConstraint(
+            "article_id", "user_id", name="uq_article_rating_pair"
+        ),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    article_id: int = Field(foreign_key="article.id", index=True)
+    user_id: int = Field(foreign_key="user.id", index=True)
+    stars: int = Field(ge=1, le=5)
+    body: str | None = Field(default=None, max_length=280)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class SkillBadge(SQLModel, table=True):
+    """A persistent achievement granted to a user. Phase 4.
+
+    Badges are granted by the engagement-tracking hooks when the user
+    crosses a threshold (e.g. read 25 premium articles, completed first
+    module, left first review). They're forever — no expiry.
+
+    `kind` is a free-form enum-like string; we keep it a string instead
+    of a Python enum so future kinds can ship without a DB migration.
+    Examples: first_lesson, first_module, first_review, articles_read_10,
+    articles_read_50, streak_7, streak_30.
+
+    `group_id` is optional — group-scoped badges (e.g. "JLPT N3 student"
+    when earned in the Japanese group) attribute to that group. Global
+    badges leave it NULL.
+    """
+
+    __tablename__ = "skill_badge"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "kind", "group_id", name="uq_skill_badge_triple"
+        ),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="user.id", index=True)
+    kind: str = Field(max_length=64, index=True)
+    group_id: int | None = Field(
+        default=None, foreign_key="languagegroup.id", index=True
+    )
+    earned_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    # Numerator for "X out of N" badges (e.g. articles read at time of grant).
+    counter: int | None = Field(default=None)
+
+
+class GroupActivityPoint(SQLModel, table=True):
+    """Event log for the monthly group leaderboard.
+
+    Each row is one earned point event for a user in a language group.
+    The leaderboard query sums points by user for the current year_month
+    bucket — keeping the rows append-only means we don't need to mutate
+    aggregates and replays are auditable.
+
+    `kind` examples: article_read (1pt), rating_left (3pt), comment (2pt),
+    module_purchased (5pt), lesson_completed (10pt), thread_posted (4pt),
+    thread_reply (2pt).
+    """
+
+    __tablename__ = "group_activity_point"
+
+    id: int | None = Field(default=None, primary_key=True)
+    group_id: int = Field(foreign_key="languagegroup.id", index=True)
+    user_id: int = Field(foreign_key="user.id", index=True)
+    kind: str = Field(max_length=64)
+    points: int = Field(default=1, ge=0)
+    # YYYY-MM bucket so monthly aggregates are a single index lookup.
+    year_month: str = Field(max_length=7, index=True)
+    occurred_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    # Optional dedupe key — the engagement hooks set this to e.g.
+    # "article:42" so the same article-read doesn't re-grant points if
+    # the read tracker fires twice in a month.
+    dedupe_key: str | None = Field(default=None, max_length=80, index=True)
+
+
+class GroupThread(SQLModel, table=True):
+    """Top-level async discussion thread inside a LanguageGroup.
+
+    Members of the group can post a thread (a question, a tip, a study
+    plan, etc.). Replies live in GroupThreadReply. We denormalise
+    reply_count + last_reply_at so the list view can sort and display
+    without touching the replies table.
+
+    Threads can be archived by the author (read-only, no new replies)
+    or soft-hidden by any tutor who teaches the group's language.
+    """
+
+    __tablename__ = "group_thread"
+
+    id: int | None = Field(default=None, primary_key=True)
+    group_id: int = Field(foreign_key="languagegroup.id", index=True)
+    author_user_id: int = Field(foreign_key="user.id", index=True)
+    title: str = Field(max_length=200)
+    body_markdown: str = Field(max_length=8000)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    # Sort key for the list view. Bumped on each new reply so live
+    # conversations float to the top.
+    last_reply_at: datetime = Field(default_factory=lambda: datetime.now(UTC), index=True)
+    reply_count: int = Field(default=0, ge=0)
+    # Author-side close: thread stays visible but no new replies allowed.
+    archived_at: datetime | None = Field(default=None)
+    # Tutor moderation. Hidden threads disappear for everyone except the
+    # author + the tutor who hid it.
+    hidden_at: datetime | None = Field(default=None)
+    hidden_by_user_id: int | None = Field(default=None, foreign_key="user.id")
+
+
+class GroupThreadReply(SQLModel, table=True):
+    """Reply on a GroupThread."""
+
+    __tablename__ = "group_thread_reply"
+
+    id: int | None = Field(default=None, primary_key=True)
+    thread_id: int = Field(foreign_key="group_thread.id", index=True)
+    author_user_id: int = Field(foreign_key="user.id", index=True)
+    body_markdown: str = Field(max_length=4000)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    hidden_at: datetime | None = Field(default=None)
+    hidden_by_user_id: int | None = Field(default=None, foreign_key="user.id")
+
+
+class Cohort(SQLModel, table=True):
+    """A tutor-posted group lesson series sold by-the-seat.
+
+    Lives inside a LanguageGroup. Students buy seats individually; when
+    `seats_filled >= max_seats` or the tutor manually confirms, status
+    flips to CONFIRMED and enrolment closes. If `enrollment_deadline`
+    passes with fewer than `min_seats` paid, the cron sweep marks the
+    cohort CANCELLED and refunds every paid seat.
+
+    Phase 2A: cohort marketplace + Stripe Connect checkout. Phase 2B
+    will auto-create Booking rows on CONFIRMED so the cohort actually
+    appears in the tutor's + students' booking lists. For now `lesson_schedule_note`
+    is the source of truth for "when does this meet".
+    """
+
+    __tablename__ = "cohort"
+
+    id: int | None = Field(default=None, primary_key=True)
+    tutor_id: int = Field(foreign_key="tutor.id", index=True)
+    group_id: int = Field(foreign_key="languagegroup.id", index=True)
+    title: str = Field(max_length=200)
+    description: str | None = Field(default=None, max_length=4000)
+    # Tutor-written human-readable schedule, e.g. "Tuesdays 18:00 UTC,
+    # 8 weeks starting March 4". Auto-Booking creation comes in 2B.
+    lesson_schedule_note: str | None = Field(default=None, max_length=500)
+    num_lessons: int = Field(ge=1, le=52)
+    duration_minutes: int = Field(ge=15, le=240)
+    price_per_seat_cents: int = Field(default=0, ge=0)
+    currency: str = Field(default="eur", max_length=3)
+    max_seats: int = Field(ge=2, le=50)
+    # Minimum seats required to confirm. Defaults to 1 (tutor-fronted).
+    min_seats: int = Field(default=1, ge=1)
+    # First session UTC — surfaced as the headline "starts" date on the
+    # cohort card.
+    first_session_at: datetime
+    # After this stamp, no new seat purchases. The cancellation cron
+    # checks seat count at this point.
+    enrollment_deadline: datetime
+    status: CohortStatus = Field(default=CohortStatus.DRAFT, index=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    confirmed_at: datetime | None = Field(default=None)
+    cancelled_at: datetime | None = Field(default=None)
+
+
+class CohortSeat(SQLModel, table=True):
+    """A student's paid seat in a Cohort. Mirrors ModulePurchase shape.
+
+    Unique on (cohort_id, student_user_id) — a student can only hold
+    one seat per cohort. Refunds stamp refunded_at without deleting the
+    row so the audit trail stays intact.
+    """
+
+    __tablename__ = "cohort_seat"
+    __table_args__ = (
+        UniqueConstraint(
+            "cohort_id", "student_user_id", name="uq_cohort_seat_pair"
+        ),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    cohort_id: int = Field(foreign_key="cohort.id", index=True)
+    tutor_id: int = Field(foreign_key="tutor.id", index=True)
+    student_user_id: int = Field(foreign_key="user.id", index=True)
+    amount_cents: int = Field(default=0, ge=0)
+    platform_fee_cents: int = Field(default=0, ge=0)
+    currency: str = Field(default="eur", max_length=3)
+    stripe_checkout_session_id: str | None = Field(default=None, max_length=128, index=True)
+    stripe_payment_intent_id: str | None = Field(default=None, max_length=128, index=True)
+    paid_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    refunded_at: datetime | None = Field(default=None)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
@@ -1270,6 +1983,9 @@ class Newsletter(SQLModel, table=True):
     # Tutor sometimes wants to verify the look before broadcasting; stamp
     # the last time we sent the test so the UI can confirm.
     last_test_sent_at: datetime | None = Field(default=None)
+    # Soft delete — DELETE flips deleted_at; the restore endpoint clears it.
+    # List endpoints filter out non-null rows.
+    deleted_at: datetime | None = Field(default=None, index=True)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
@@ -1294,6 +2010,49 @@ class NewsletterUnsubscribe(SQLModel, table=True):
     tutor_id: int = Field(foreign_key="tutor.id", index=True)
     student_user_id: int = Field(foreign_key="user.id", index=True)
     unsubscribed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class TutorNewsletterSubscriber(SQLModel, table=True):
+    """A direct newsletter subscriber for a specific tutor — someone who
+    filled in the public CTA form without necessarily having booked a
+    lesson. Double-opt-in: the row stays unconfirmed (confirmed_at NULL)
+    until the visitor clicks the link in the confirmation email; only
+    confirmed rows enter the broadcast audience.
+
+    Decoupled from the User table on purpose: a curious visitor signing
+    up for "Vasso's Greek tips" shouldn't be forced to create a platform
+    account. If the same email later registers as a User, the
+    relationship can be reconciled at that point (out of scope for now).
+    """
+
+    __tablename__ = "tutor_newsletter_subscriber"
+    __table_args__ = (
+        UniqueConstraint(
+            "tutor_id", "email", name="uq_newsletter_subscriber_pair"
+        ),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    tutor_id: int = Field(foreign_key="tutor.id", index=True)
+    # We normalise to lowercase before insert.
+    email: str = Field(max_length=320, index=True)
+    name: str | None = Field(default=None, max_length=120)
+    # Double-opt-in stamps. unsubscribed_at supersedes confirmed_at — a
+    # subscriber who unsubscribes is removed from broadcasts even if
+    # they re-confirm afterwards (they'd need to subscribe again).
+    confirmed_at: datetime | None = Field(default=None, index=True)
+    unsubscribed_at: datetime | None = Field(default=None, index=True)
+    # Hashed confirmation token + TTL. Hashed in DB so a leaked dump
+    # doesn't expose live links.
+    confirmation_token_hash: str | None = Field(default=None, max_length=255)
+    confirmation_expires_at: datetime | None = Field(default=None)
+    # Forensic columns. The IP + UA at signup help if abuse needs to be
+    # investigated (someone botting signups, etc.).
+    ip: str | None = Field(default=None, max_length=64)
+    user_agent: str | None = Field(default=None, max_length=400)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC), index=True
+    )
 
 
 class TutorEmailTemplate(SQLModel, table=True):
@@ -1355,6 +2114,14 @@ class Testimonial(SQLModel, table=True):
     # to the back — explicit ordering wins over recency.
     display_order: int = Field(default=100, index=True)
     is_published: bool = Field(default=True, index=True)
+    # Set when a student submits this testimonial through the public
+    # form (POST /testimonials/submit). Tutor-typed rows leave this
+    # null. Used by the dashboard to flag "needs approval" rows + to
+    # cross-check against the submitter's bookings before publish.
+    submitted_by_user_id: int | None = Field(
+        default=None, foreign_key="user.id", index=True
+    )
+    deleted_at: datetime | None = Field(default=None, index=True)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
@@ -1412,6 +2179,27 @@ class Article(SQLModel, table=True):
     # (`:::vocab`, `:::translate`) survive markdown round-trips because
     # the editor's serializer preserves them as shortcodes.
     body_markdown: str = Field(default="")
+    # Optional tutor-written hook shown to non-subscribers viewing a
+    # SUBSCRIBERS_ONLY article. If empty, the reader auto-falls-back to
+    # the first ~200 words of body_markdown. Either way the non-
+    # subscriber sees enough to decide whether to subscribe.
+    preview_markdown: str | None = Field(default=None, max_length=10_000)
+    # Piecemeal price for non-Plus students. 0 means "this article is
+    # only available to Plus subscribers and module owners — no
+    # one-shot purchase path". Plus subscribers always read free
+    # regardless of price.
+    price_cents: int = Field(default=0, ge=0)
+    currency: str = Field(default="eur", max_length=3)
+    # Phase 1B engagement layer.
+    # `comments_enabled` is opt-in per article: tutors flip it on when
+    # they want a conversation under their piece. Default off so spam
+    # surface is small.
+    comments_enabled: bool = Field(default=False)
+    # Denormalised rating summary so list views can sort/filter on
+    # quality without joining the ratings table. Updated by the rating
+    # endpoint on insert/update/delete.
+    rating_avg: float | None = Field(default=None)
+    rating_count: int = Field(default=0, ge=0)
     # Lexical editor state as JSON. Used by the reader for richer rendering
     # (clickable vocab tooltips, embedded media) without re-parsing
     # markdown. May be empty for articles created before Lexical landed
@@ -1419,6 +2207,7 @@ class Article(SQLModel, table=True):
     lexical_json: str | None = Field(default=None)
     is_published: bool = Field(default=False, index=True)
     published_at: datetime | None = Field(default=None)
+    deleted_at: datetime | None = Field(default=None, index=True)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
@@ -1543,6 +2332,19 @@ class Tutor(SQLModel, table=True):
     )
     custom_domain_verified_at: datetime | None = Field(default=None)
 
+    # ----- Team membership -----
+    # Set when this tutor belongs to a TutorTeam (e.g. a school with a
+    # shared Business subscription). Nullable for solo tutors. When set,
+    # the team's owner is the billing payer; this tutor inherits Business
+    # features and any team-wide custom theme.
+    team_id: int | None = Field(
+        default=None, foreign_key="tutor_team.id", index=True
+    )
+    # The custom design currently applied to this tutor's public site.
+    # Populated when a CustomTheme is "applied" (phase 3 — custom theme
+    # orders). Nullable means the tutor renders the platform default.
+    active_theme_id: int | None = Field(default=None, index=True)
+
     # ----- Free trial -----
     # Tutor opts in to offering a free trial lesson. When enabled, a managed
     # LessonPack with is_trial=True is auto-maintained — students see a
@@ -1568,7 +2370,17 @@ class Tutor(SQLModel, table=True):
     # plenty of notice. Bookings made INSIDE this window get a "no refund
     # if you no-show" warning at checkout and the cancel button stays
     # disabled afterwards.
-    cancellation_cutoff_hours: int = Field(default=48, ge=48, le=720)
+    cancellation_cutoff_hours: int = Field(default=48, ge=24, le=720)
+
+    # ----- Booking lead time -----
+    # Minimum gap (in minutes) between "now" and the start of a slot a
+    # student is allowed to book. Tutors set this to protect prep time —
+    # some want at least a day's notice, others are happy to take a
+    # booking 30 minutes out. Range covers "any time, even 1 minute from
+    # now" up to "a full month's notice required". The slot walker
+    # filters anything earlier than `now + lead` before returning the
+    # slot list; the booking POST re-checks at commit time.
+    min_booking_lead_minutes: int = Field(default=120, ge=0, le=43_200)
 
     # ----- Theme -----
     # Pro+ tutors can pick from a curated set of colour bundles. The string
@@ -1576,6 +2388,28 @@ class Tutor(SQLModel, table=True):
     # Free + Plus tutors stay on the default — `sage` is what the platform
     # ships with, so nothing changes visually for them.
     theme: str = Field(default="sage", max_length=32)
+
+    # ----- Newsletter signup CTA -----
+    # Public lead-capture controls. The slim footer bar and the dedicated
+    # homepage card can each be toggled independently; turning the master
+    # switch off hides both. Title + description default to reasonable
+    # placeholders so a tutor who never touches the dashboard still gets
+    # a sensible CTA.
+    newsletter_enabled: bool = Field(default=True)
+    newsletter_show_in_footer: bool = Field(default=True)
+    newsletter_show_homepage_section: bool = Field(default=True)
+    newsletter_cta_title: str | None = Field(default=None, max_length=120)
+    newsletter_cta_description: str | None = Field(default=None, max_length=400)
+
+    # ----- Cross-promotion -----
+    # When True (default), the tenant site renders a small "Browse
+    # Kotobaseed" link so a curious visitor can wander into the wider
+    # marketplace. Tutors with their own captive audience can flip this
+    # off in settings — the marketplace shouldn't be in their visitor's
+    # face if they don't want it to be. The flag is read on every page
+    # render of the tenant site by the themed components, and the apex
+    # marketplace surfaces ignore it entirely.
+    show_kotobaseed_link: bool = Field(default=True)
 
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
@@ -1608,6 +2442,116 @@ class StudentEnrollment(SQLModel, table=True):
 
     first_enrolled_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     last_active_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+# ---------------------------------------------------------------------------
+# Multi-seat teams (Business subscription tier)
+# ---------------------------------------------------------------------------
+
+
+class TutorTeamInviteStatus(str, Enum):
+    """Lifecycle of a single team invite."""
+
+    PENDING = "pending"
+    ACCEPTED = "accepted"
+    REVOKED = "revoked"
+    EXPIRED = "expired"
+
+
+class TutorTeam(SQLModel, table=True):
+    """A "school" — a Business subscriber that owns multiple Tutor seats.
+
+    The owner is the user who pays the Business subscription. Other team
+    members are tutors who accepted an invite; their Tutor rows carry
+    `team_id` pointing here. Subscription-tier perks (0% lesson fee, etc.)
+    flow through team membership — a member doesn't need their own paid
+    subscription. The team is auto-created when the owner's Business
+    subscription activates and torn down (or downgraded to a 1-seat
+    archive) when it ends.
+
+    Custom themes applied to a team are copied onto every member's
+    TutorPageSection rows at apply time so all seats present the same
+    brand to students.
+    """
+
+    __tablename__ = "tutor_team"
+
+    id: int | None = Field(default=None, primary_key=True)
+    owner_user_id: int = Field(foreign_key="user.id", index=True)
+
+    name: str = Field(max_length=120)
+    max_seats: int = Field(default=5, ge=1, le=100)
+
+    # When a member leaves, students they taught while in this team can't
+    # book the ex-member directly for this many days. Schools set this to
+    # protect their client list. 0 = no protection. Owner can change it
+    # at any time; new value applies only to future leave events.
+    poaching_protection_days: int = Field(default=90, ge=0, le=365)
+
+    # Stripe handles the base Business subscription on the owner User.
+    # Extra seats are added as a subscription_item on that same sub; we
+    # cache the item id here so we can update quantity without re-finding
+    # it on every API call.
+    stripe_seat_subscription_item_id: str | None = Field(
+        default=None, max_length=128
+    )
+
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class TutorProtectedStudent(SQLModel, table=True):
+    """Non-compete record — a student who can't book this ex-tutor while
+    the protection window is open.
+
+    Created when a tutor leaves a TutorTeam (whether removed by the owner
+    or self-leaving). For every distinct student the tutor taught while
+    on that team, we stamp one of these rows with
+    `protection_ends_at = now + team.poaching_protection_days`. Booking
+    checkout for the ex-tutor checks this table and refuses with a
+    helpful 403 until the window closes.
+
+    Rows are kept after expiry as an audit trail — the booking check is
+    a simple "still active?" comparison on protection_ends_at.
+    """
+
+    __tablename__ = "tutor_protected_student"
+
+    id: int | None = Field(default=None, primary_key=True)
+    tutor_id: int = Field(foreign_key="tutor.id", index=True)
+    student_user_id: int = Field(foreign_key="user.id", index=True)
+    former_team_id: int = Field(foreign_key="tutor_team.id", index=True)
+
+    protection_ends_at: datetime = Field(index=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class TutorTeamInvite(SQLModel, table=True):
+    """One outstanding invite to join a TutorTeam.
+
+    The token is a URL-safe random string; the accept link is
+    `https://kotobaseed.net/onboarding/team-accept?token=...`. Invites
+    expire after 14 days. Accepting flips status to ACCEPTED and stamps
+    the new member's user id + their Tutor.team_id.
+    """
+
+    __tablename__ = "tutor_team_invite"
+
+    id: int | None = Field(default=None, primary_key=True)
+    team_id: int = Field(foreign_key="tutor_team.id", index=True)
+    email: str = Field(max_length=255, index=True)
+    token: str = Field(unique=True, index=True, max_length=80)
+
+    invited_by_user_id: int = Field(foreign_key="user.id")
+    status: TutorTeamInviteStatus = Field(
+        default=TutorTeamInviteStatus.PENDING, index=True
+    )
+
+    expires_at: datetime
+    accepted_at: datetime | None = None
+    accepted_by_user_id: int | None = Field(default=None, foreign_key="user.id")
+
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class TutorVerification(SQLModel, table=True):
@@ -1645,74 +2589,13 @@ class TutorVerification(SQLModel, table=True):
 
 
 # ---------------------------------------------------------------------------
-# Tutor site customization — theming + landing-page sections
+# Tutor site customization — landing-page sections
+#
+# Theme + per-tutor branding live on the Tutor row (`Tutor.theme`) and in
+# services/themes.py (static catalogue). The old `Theme` table and
+# `TutorBranding` table were scaffolded in an earlier refactor and never
+# wired up — dropped in migration 20260611_drop_orphan_scaffolds.
 # ---------------------------------------------------------------------------
-
-
-class Theme(SQLModel, table=True):
-    """A curated theme — coordinated palette + typography pair.
-
-    Tutors pick from this list when configuring their site. The CSS class
-    prefix (`css_class_prefix`) tells the frontend which kit's stylesheet
-    to apply.
-    """
-
-    __tablename__ = "theme"
-
-    id: int | None = Field(default=None, primary_key=True)
-    key: str = Field(unique=True, index=True, max_length=64)
-    name: str = Field(max_length=120)
-    description: str | None = Field(default=None, max_length=500)
-    css_class_prefix: str = Field(
-        max_length=64,
-        description="e.g. 'kit-marketing-warm' — drives which CSS file loads",
-    )
-    primary_palette_json: str | None = Field(
-        default=None,
-        description="JSON-encoded list of {key, hex} swatches the tutor can pick from",
-    )
-    typography_pair_json: str | None = Field(
-        default=None,
-        description="JSON-encoded {display, body} font stack identifiers",
-    )
-
-    is_active: bool = Field(default=True, index=True)
-    display_order: int = Field(default=0)
-
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-
-
-class TutorBranding(SQLModel, table=True):
-    """Per-tutor theme choice + color/logo overrides."""
-
-    __tablename__ = "tutor_branding"
-
-    id: int | None = Field(default=None, primary_key=True)
-    tutor_id: int = Field(foreign_key="tutor.id", unique=True, index=True)
-    theme_id: int = Field(foreign_key="theme.id", index=True)
-
-    primary_color: str | None = Field(
-        default=None,
-        max_length=10,
-        description="Hex from theme's palette",
-    )
-    accent_color: str | None = Field(default=None, max_length=10)
-
-    logo_url: str | None = Field(default=None, max_length=512)
-    favicon_url: str | None = Field(default=None, max_length=512)
-
-    cefr_glyphs_json: str | None = Field(
-        default=None,
-        description=(
-            "JSON-encoded mapping of CEFR level → display glyph, "
-            "e.g. {'A1': 'α', 'A2': 'β'} for Greek or "
-            "{'A1': 'あ', 'A2': 'か'} for Japanese"
-        ),
-    )
-
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class TutorPageSection(SQLModel, table=True):
@@ -1738,6 +2621,179 @@ class TutorPageSection(SQLModel, table=True):
 
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+# ---------------------------------------------------------------------------
+# Custom designed themes (the paid bespoke service)
+# ---------------------------------------------------------------------------
+
+
+class CustomThemeStatus(str, Enum):
+    DRAFT = "draft"        # built locally but not yet ready to apply
+    READY = "ready"        # designer delivered + tutor approved + paid
+    ARCHIVED = "archived"  # superseded (e.g. tutor commissioned a new theme)
+
+
+class CustomTheme(SQLModel, table=True):
+    """A finished bespoke design, owned by a User (personal) OR by a Team
+    (school-wide). At least one of owner_user_id / owner_team_id must be
+    set; both is not allowed (validated at write time).
+
+    `design_payload_json` is the serialised TutorPageSection layout —
+    a list of {section_type, position, is_visible, content} dicts that
+    the apply helper writes onto every affected tutor's TutorPageSection
+    rows on delivery.
+    """
+
+    __tablename__ = "custom_theme"
+
+    id: int | None = Field(default=None, primary_key=True)
+    owner_user_id: int | None = Field(
+        default=None, foreign_key="user.id", index=True
+    )
+    owner_team_id: int | None = Field(
+        default=None, foreign_key="tutor_team.id", index=True
+    )
+
+    name: str = Field(max_length=160)
+    design_payload_json: str = Field(default="[]")
+    status: CustomThemeStatus = Field(
+        default=CustomThemeStatus.DRAFT, index=True
+    )
+    # Which order produced this theme — link back for support.
+    source_order_id: int | None = Field(
+        default=None, foreign_key="custom_theme_order.id", index=True
+    )
+
+    # ----- v2: scalable theme-upload system -----
+    # When set, this theme is renderable by the runtime CustomThemeSite
+    # component (Phase B). Older bespoke themes leave these null and
+    # continue rendering through their dedicated React component.
+    #
+    # `theme_key` is the short slug the frontend matches against
+    # `Tutor.theme` to decide whether to mount the v2 renderer.
+    # Format: `custom-<slug>`. Indexed so the lookup at page-load is cheap.
+    theme_key: str | None = Field(default=None, max_length=64, index=True)
+    # CSS-variable palette + radii/shadow tokens, as a JSON dict. Values
+    # are injected as inline styles on the themed root by the runtime
+    # renderer. e.g. `{"--brand": "#0a4f8a", "--accent": "#e8b84b"}`.
+    palette_json: str = Field(default="{}")
+    # Google Fonts loader URL + per-role font-family choices. e.g.
+    # `{"url": "https://fonts.googleapis.com/...", "display": "Commissioner",
+    #   "body": "Manrope", "logo": "Syne"}`.
+    fonts_json: str = Field(default="{}")
+    # Admin-uploaded preview screenshot shown on the tutor's theme picker.
+    preview_image_url: str | None = Field(default=None, max_length=2048)
+    # When true, every tutor sees this theme in their picker (curated
+    # catalogue). When false, only the owning user / team sees it.
+    is_public_catalogue: bool = Field(default=False, index=True)
+
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class CustomThemePackage(str, Enum):
+    """Two SKUs of the custom design service.
+
+    STANDARD : 3 concepts, up to 2 revisions, full home-page layout
+    PREMIUM  : everything in STANDARD + custom article templates, branded
+               module covers, custom Daily.co welcome screen
+    """
+
+    STANDARD = "standard"
+    PREMIUM = "premium"
+
+
+class CustomThemeOrderStatus(str, Enum):
+    """Order lifecycle.
+
+    DRAFT          : tutor filled the brief, deposit not paid
+    DEPOSIT_PAID   : 50% in escrow with us, queue waiting for designer
+    CONCEPTS_READY : admin uploaded 3 preview links, tutor needs to review
+    REVIEWING     : tutor is looking at the previews
+    REVISING       : tutor asked for adjustments (count tracked in revision_count)
+    APPROVED       : tutor picked a concept, ready for final payment
+    FINAL_PAID     : 50% balance collected, theme application running
+    DELIVERED      : theme written onto target tutor(s)' sections + active_theme_id
+    CANCELLED      : explicit cancellation; deposit non-refundable per T&Cs
+    """
+
+    DRAFT = "draft"
+    DEPOSIT_PAID = "deposit_paid"
+    CONCEPTS_READY = "concepts_ready"
+    REVIEWING = "reviewing"
+    REVISING = "revising"
+    APPROVED = "approved"
+    FINAL_PAID = "final_paid"
+    DELIVERED = "delivered"
+    CANCELLED = "cancelled"
+
+
+class CustomThemeOrder(SQLModel, table=True):
+    """One commission for a bespoke design.
+
+    `target_team_id` is set when the order is for a team's shared theme
+    (Business owners only). `target_tutor_id` is always set — for solo
+    orders this is the customer themself; for team orders it's the
+    initiator + a sentinel of "the theme will apply to every team member
+    on delivery".
+    """
+
+    __tablename__ = "custom_theme_order"
+
+    id: int | None = Field(default=None, primary_key=True)
+    ordering_user_id: int = Field(foreign_key="user.id", index=True)
+    target_tutor_id: int = Field(foreign_key="tutor.id", index=True)
+    target_team_id: int | None = Field(
+        default=None, foreign_key="tutor_team.id", index=True
+    )
+
+    package: CustomThemePackage = Field(default=CustomThemePackage.STANDARD)
+    status: CustomThemeOrderStatus = Field(
+        default=CustomThemeOrderStatus.DRAFT, index=True
+    )
+
+    # Pricing snapshot at order time (insulates against later tier changes).
+    deposit_cents: int = Field(ge=0)
+    final_cents: int = Field(ge=0)
+    discount_percent: int = Field(default=0, ge=0, le=100)
+    currency: str = Field(default="eur", max_length=8)
+
+    # JSON-encoded brief from the intake form: audience, tone, languages,
+    # color leanings, inspiration links, photo url, etc.
+    brief_payload_json: str = Field(default="{}")
+    # JSON-encoded list of 3 admin-uploaded concept descriptors:
+    # [{"label": "Modern Sage", "image_url": "...", "notes": "..."}, ...]
+    concept_previews_json: str = Field(default="[]")
+    selected_concept_index: int | None = None
+
+    revision_count: int = Field(default=0, ge=0, le=2)
+    # Tutor's per-round feedback: list of {"round": N, "notes": "..."} dicts.
+    revision_notes_json: str = Field(default="[]")
+    designer_notes: str | None = Field(default=None, max_length=2000)
+
+    # Stripe handles.
+    stripe_deposit_session_id: str | None = Field(default=None, max_length=255)
+    stripe_deposit_payment_intent_id: str | None = Field(
+        default=None, max_length=255
+    )
+    stripe_final_session_id: str | None = Field(default=None, max_length=255)
+    stripe_final_payment_intent_id: str | None = Field(
+        default=None, max_length=255
+    )
+
+    delivered_theme_id: int | None = Field(
+        default=None, foreign_key="custom_theme.id"
+    )
+
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    deposit_paid_at: datetime | None = None
+    concepts_ready_at: datetime | None = None
+    approved_at: datetime | None = None
+    final_paid_at: datetime | None = None
+    delivered_at: datetime | None = None
+    cancelled_at: datetime | None = None
 
 
 class SupportTicketStatus(str, Enum):
@@ -1981,6 +3037,122 @@ class PlatformSetting(SQLModel, table=True):
 
 
 # ---------------------------------------------------------------------------
+# Tutor onboarding tutorial progress
+# ---------------------------------------------------------------------------
+
+
+class TutorOnboardingProgress(SQLModel, table=True):
+    """Per-tutor state for the resumable onboarding walkthrough.
+
+    The list of available modules + their content lives on the frontend
+    (the wizard renders from a static catalogue). This row just records
+    which module keys the tutor has marked complete and where to drop
+    them back in when they return.
+    """
+
+    __tablename__ = "tutor_onboarding_progress"
+
+    id: int | None = Field(default=None, primary_key=True)
+    tutor_id: int = Field(foreign_key="tutor.id", unique=True, index=True)
+
+    # JSON-encoded list of module keys the tutor has marked complete.
+    # We keep it as a string column so adding/removing modules in the
+    # catalogue never requires a migration.
+    completed_module_keys_json: str = Field(default="[]")
+
+    # The last module the tutor opened — drives "Continue where you left
+    # off" so closing the tab and coming back lands them on the same step.
+    last_viewed_module_key: str | None = Field(default=None, max_length=64)
+
+    started_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    last_viewed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    completed_at: datetime | None = None
+
+
+# ---------------------------------------------------------------------------
+# Admin comps / service grants
+# ---------------------------------------------------------------------------
+
+
+class AdminGrantKind(str, Enum):
+    """What the comp gives the user.
+
+    - TIER_UPGRADE: temporarily set User.subscription_tier (e.g. give a
+      contracted reviewer Pro for 30 days). expires_at controls auto-revoke.
+    - MINUTE_PACK: drop a MinutePack row of N scheduled-min minutes onto
+      the target tutor's account. No expiry needed — pack expires when used.
+    - LESSON_CREDIT: grant N free 1:1 lessons (waives the platform fee
+      AND the student's Stripe charge). expires_at = use-by date.
+    - DISCOUNT: apply a percent or amount off the user's next subscription
+      invoice via a one-shot Stripe Coupon.
+
+    For TIER_UPGRADE + LESSON_CREDIT, leaving expires_at NULL means
+    "until an admin revokes."
+    """
+
+    TIER_UPGRADE = "tier_upgrade"
+    MINUTE_PACK = "minute_pack"
+    LESSON_CREDIT = "lesson_credit"
+    DISCOUNT = "discount"
+
+
+class AdminGrantStatus(str, Enum):
+    ACTIVE = "active"
+    EXPIRED = "expired"
+    REVOKED = "revoked"
+    CONSUMED = "consumed"  # used up before expiry (e.g. all minutes spent)
+
+
+class AdminGrant(SQLModel, table=True):
+    """One admin-issued comp / service grant.
+
+    Created via the admin panel for marketing / contract / testing
+    arrangements. The cron sweeps time-gated rows to auto-flip them to
+    EXPIRED and reverse any side effects (e.g. tier reversion). Revoking
+    manually does the same immediately.
+    """
+
+    __tablename__ = "admin_grant"
+
+    id: int | None = Field(default=None, primary_key=True)
+    granted_to_user_id: int = Field(foreign_key="user.id", index=True)
+    granted_by_user_id: int = Field(foreign_key="user.id")
+
+    kind: AdminGrantKind = Field(index=True)
+    # JSON-encoded payload — shape depends on `kind`:
+    #   TIER_UPGRADE   {"tier": "pro"}
+    #   MINUTE_PACK    {"minutes": 2000}
+    #   LESSON_CREDIT  {"count": 3, "max_lesson_minutes": 60}
+    #   DISCOUNT       {"percent_off": 50}  OR  {"amount_off_cents": 1000, "currency": "eur"}
+    payload_json: str = Field(default="{}")
+
+    # Optional expiry. None = until an admin revokes.
+    expires_at: datetime | None = Field(default=None, index=True)
+
+    status: AdminGrantStatus = Field(
+        default=AdminGrantStatus.ACTIVE, index=True
+    )
+    reason: str | None = Field(
+        default=None,
+        max_length=500,
+        description="Short note for the audit log: campaign, contract id, etc.",
+    )
+
+    # Backrefs we set when activation/revocation touches an existing row
+    # — e.g. when a TIER_UPGRADE grants Pro, we remember what tier the
+    # user had before so revocation can restore it cleanly.
+    previous_tier: str | None = Field(default=None, max_length=32)
+    # If the grant materialised side-effect rows (e.g. a MinutePack), we
+    # stash the ids here so revoke can clean them up.
+    side_effect_ids_json: str = Field(default="[]")
+
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    revoked_at: datetime | None = None
+    expired_at: datetime | None = None
+
+
+# ---------------------------------------------------------------------------
 # Classroom usage tracking + platform billing
 # ---------------------------------------------------------------------------
 
@@ -2006,28 +3178,38 @@ class TutorMinuteUsageLog(SQLModel, table=True):
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
-class PlatformSubscription(SQLModel, table=True):
-    """Tutor's Pro-plan subscription on the platform's own Stripe account.
+class MinutePack(SQLModel, table=True):
+    """One-time top-up of classroom minutes on top of the tier quota.
 
-    Separate from the Connect account (which receives tutoring + marketplace
-    income). This is what tutors pay Sophia for hosting / platform access.
+    Granted via Stripe checkout (see backend/routers/minute_packs.py + the
+    pledges webhook). Minutes are consumed FIFO across all of a tutor's
+    active packs after the base tier quota is exhausted.
+
+    `minutes_remaining` is decremented in place each time a booking
+    eats from this pack. When it reaches zero the pack stays in the row
+    history (audit trail) but no longer contributes to effective quota.
     """
 
-    __tablename__ = "platform_subscription"
+    __tablename__ = "minute_pack"
 
     id: int | None = Field(default=None, primary_key=True)
-    tutor_id: int = Field(foreign_key="tutor.id", unique=True, index=True)
-    stripe_subscription_id: str = Field(unique=True, index=True, max_length=128)
-    plan: TutorPlan = Field(default=TutorPlan.PRO)
-    status: str = Field(
-        default="incomplete",
-        index=True,
-        description="active / trialing / past_due / canceled / etc. (mirrors Stripe)",
+    tutor_id: int = Field(foreign_key="tutor.id", index=True)
+
+    minutes_purchased: int = Field(ge=1)
+    minutes_remaining: int = Field(ge=0)
+
+    price_cents: int = Field(ge=0)
+    currency: str = Field(default="eur", max_length=8)
+
+    stripe_checkout_session_id: str | None = Field(
+        default=None, max_length=255, index=True
     )
+    stripe_payment_intent_id: str | None = Field(default=None, max_length=255)
 
-    current_period_start: datetime | None = None
-    current_period_end: datetime | None = None
-    cancel_at_period_end: bool = Field(default=False)
+    purchased_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    last_used_at: datetime | None = None
 
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+# PlatformSubscription was scaffolded for tutor platform billing but the
+# canonical fields ended up on User.subscription_tier + Tutor.stripe_*.
+# The duplicate table was dropped in 20260611_drop_orphan_scaffolds.

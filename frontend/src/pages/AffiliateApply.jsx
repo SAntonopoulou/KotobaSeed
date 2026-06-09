@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import client from '../api/client';
+import { getErrorMessage } from '../utils/errors';
 
 const AffiliateApply = () => {
   const navigate = useNavigate();
@@ -24,7 +25,7 @@ const AffiliateApply = () => {
       await client.post('/affiliates/apply', form);
       setSubmitted(true);
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not submit your application.');
+      setError(getErrorMessage(err, 'Could not submit your application.'));
     } finally {
       setSubmitting(false);
     }

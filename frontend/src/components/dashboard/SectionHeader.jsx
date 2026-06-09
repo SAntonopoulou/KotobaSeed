@@ -1,10 +1,23 @@
 import React from 'react';
 
-const SectionHeader = ({ title, description }) => (
+// Used at the top of each dashboard panel. Kept tight (not magazine-sized)
+// because the dashboard prioritises density — Sophia's call during the
+// 2026-06-07 modernization sweep.
+
+const SectionHeader = ({ title, description, eyebrow }) => (
   <header className="mb-2">
-    <h1 className="text-2xl font-bold text-kotoba-primary">{title}</h1>
+    {eyebrow && (
+      <p className="text-[10px] uppercase tracking-[0.18em] font-bold text-kotoba-secondary-dark mb-1">
+        {eyebrow}
+      </p>
+    )}
+    <h1 className="font-display text-2xl sm:text-3xl font-bold text-kotoba-primary leading-tight tracking-[-0.015em]">
+      {title}
+    </h1>
     {description && (
-      <p className="mt-1 text-sm text-kotoba-text/70 max-w-2xl">{description}</p>
+      <p className="mt-2 text-sm text-kotoba-text/75 max-w-2xl leading-relaxed">
+        {description}
+      </p>
     )}
   </header>
 );

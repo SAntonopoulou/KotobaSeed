@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import client from '../api/client';
 import { useConfirm } from '../context/ModalContext';
 import { SkeletonCard } from './Skeleton';
+import { getErrorMessage } from '../utils/errors';
 
 // Student's recurring lessons — list current plans + cancel.
 // Plan creation happens on the tutor's site via BookingDialog where the
@@ -38,7 +39,7 @@ const MyRecurringPlans = () => {
       const res = await client.get('/recurring/plans/mine');
       setPlans(res.data || []);
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not load your recurring plans.');
+      setError(getErrorMessage(err, 'Could not load your recurring plans.'));
     } finally {
       setLoading(false);
     }
@@ -59,7 +60,7 @@ const MyRecurringPlans = () => {
       await client.post(`/recurring/plans/${plan.id}/cancel`);
       await load();
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not cancel.');
+      setError(getErrorMessage(err, 'Could not cancel.'));
     }
   };
 

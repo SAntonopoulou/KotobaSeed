@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import client from '../api/client';
+import { getErrorMessage } from '../utils/errors';
 
 // Single-toggle widget: should this tutor show up in the apex /library
 // directory? Default is on. Tutors who only want direct-link traffic to
@@ -18,7 +19,7 @@ const MarketplaceListingToggle = () => {
         const res = await client.get('/tutor/me');
         setListed(Boolean(res.data?.list_in_marketplace));
       } catch (err) {
-        setError(err?.response?.data?.detail || 'Could not load your listing setting.');
+        setError(getErrorMessage(err, 'Could not load your listing setting.'));
       } finally {
         setLoading(false);
       }
@@ -35,7 +36,7 @@ const MarketplaceListingToggle = () => {
       setListed(Boolean(res.data?.list_in_marketplace));
       setInfo(next ? 'You\'re listed on the directory.' : 'Removed from the directory.');
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not save.');
+      setError(getErrorMessage(err, 'Could not save.'));
     } finally {
       setSaving(false);
     }

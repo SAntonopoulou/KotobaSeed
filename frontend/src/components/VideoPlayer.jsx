@@ -4,7 +4,7 @@ const VideoPlayer = ({ url }) => {
   let embedUrl = '';
 
   if (!url) {
-    return <div className="max-w-md mx-auto aspect-w-1 aspect-h-1 bg-gray-200 flex items-center justify-center rounded-lg"><p className="text-gray-500">Video not available</p></div>;
+    return <div className="max-w-md mx-auto aspect-w-1 aspect-h-1 bg-kotoba-text/10 flex items-center justify-center rounded-lg"><p className="text-kotoba-text/60">Video not available</p></div>;
   }
 
   if (url.includes("youtube.com") || url.includes("youtu.be")) {
@@ -16,7 +16,7 @@ const VideoPlayer = ({ url }) => {
   }
 
   if (!embedUrl) {
-    return <div className="max-w-md mx-auto aspect-w-1 aspect-h-1 bg-gray-200 flex items-center justify-center rounded-lg"><p className="text-gray-500">Unsupported video URL</p></div>;
+    return <div className="max-w-md mx-auto aspect-w-1 aspect-h-1 bg-kotoba-text/10 flex items-center justify-center rounded-lg"><p className="text-kotoba-text/60">Unsupported video URL</p></div>;
   }
 
   return (

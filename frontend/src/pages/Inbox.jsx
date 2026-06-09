@@ -3,17 +3,28 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import client from '../api/client';
 import { useToast } from '../context/ToastContext';
 import { useInbox } from '../context/InboxContext';
-import { FaPaperPlane, FaVideo, FaReply, FaTimes, FaDollarSign, FaFileVideo, FaTag } from 'react-icons/fa';
+import { useAuth } from '../context/AuthContext';
+import { FaPaperPlane, FaVideo, FaReply, FaTimes, FaDollarSign, FaFileVideo, FaTag, FaPaperclip, FaSearch, FaFlag, FaBan, FaTrash } from 'react-icons/fa';
 import ConfirmationModal from '../components/ConfirmationModal';
 import { getVideoThumbnail } from '../utils/video'; // Assuming this might be useful later
+import { formatDateTime } from '../utils/dates';
+import { getErrorMessage } from '../utils/errors';
+import Avatar from '../components/Avatar';
+import ConversationListItem from '../components/ConversationListItem';
+import ReportConversationModal from '../components/ReportConversationModal';
+
+const UNDO_WINDOW_MS = 60_000;
 
 const Inbox = () => {
   const { conversationId } = useParams();
   const navigate = useNavigate();
   const { addToast } = useToast();
-  const { fetchUnreadCount } = useInbox();
-  const token = localStorage.getItem('token');
-  const [user, setUser] = useState(null);
+  const { fetchUnreadCount, messageTick, lastMessageAlert } = useInbox();
+  // Auth state via AuthContext so SSO works cross-subdomain. The
+  // WebSocket below still wants a literal JWT (see InboxContext for the
+  // same reasoning) so we read localStorage there as a fallback only.
+  const { currentUser, loading: authLoading } = useAuth();
+  const user = currentUser;
 
   const [conversations, setConversations] = useState([]);
   const [currentConversation, setCurrentConversation] = useState(null);
@@ -38,6 +49,31 @@ const Inbox = () => {
   const [confirmModalOpen, setConfirmModalOpen] = useState(false);
   const [modalConfig, setModalConfig] = useState({});
 
+  // Conversation search (server-side q= filter).
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Image attachment upload.
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const fileInputRef = useRef(null);
+
+  // Typing-indicator state. We track who is typing in the current
+  // conversation, and broadcast our own TYPING_ON/TYPING_OFF via the
+  // per-conv WS, debounced so we don't flood.
+  const [peerTyping, setPeerTyping] = useState(false);
+  const typingTimerRef = useRef(null);
+  const lastTypingSentAtRef = useRef(0);
+
+  // Report-conversation modal.
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportReason, setReportReason] = useState('spam');
+  const [reportNote, setReportNote] = useState('');
+
+  // Block state for the current other-participant.
+  const [isPeerBlocked, setIsPeerBlocked] = useState(false);
+
+  // "Nows" tick — drives the undo-button visibility on own recent messages.
+  const [now, setNow] = useState(Date.now());
+
   const messagesContainerRef = useRef(null);
   const ws = useRef(null);
 
@@ -60,38 +96,26 @@ const Inbox = () => {
   };
 
   useEffect(() => {
-    const fetchUser = async () => {
-      if (token) {
-        try {
-          const response = await client.get('/users/me');
-          setUser(response.data);
-        } catch (error) {
-          console.error("Failed to fetch user for Inbox", error);
-          localStorage.removeItem('token');
-          navigate('/login');
-        }
-      } else {
-        navigate('/login');
-      }
-    };
-    fetchUser();
-  }, [token, navigate]);
+    if (authLoading) return;
+    if (!currentUser) navigate('/login');
+  }, [authLoading, currentUser, navigate]);
 
-  const fetchConversations = useCallback(async () => {
-    if (!token) return;
+  const fetchConversations = useCallback(async (q) => {
+    if (!currentUser) return;
     setIsLoadingConversations(true);
     try {
-      const response = await client.get('/conversations/');
+      const params = q && q.trim() ? { q: q.trim() } : {};
+      const response = await client.get('/conversations/', { params });
       setConversations(response.data);
     } catch (error) {
       addToast('Failed to load conversations', 'error');
     } finally {
       setIsLoadingConversations(false);
     }
-  }, [addToast, token]);
+  }, [addToast, currentUser]);
 
   const fetchCurrentConversation = useCallback(async () => {
-    if (!conversationId || !token) {
+    if (!conversationId || !currentUser) {
       setCurrentConversation(null);
       return;
     }
@@ -110,35 +134,137 @@ const Inbox = () => {
     } finally {
       setIsLoadingMessages(false);
     }
-  }, [conversationId, addToast, fetchUnreadCount, token]);
+  }, [conversationId, addToast, fetchUnreadCount, currentUser]);
 
   useEffect(() => {
-    fetchConversations();
-  }, [fetchConversations]);
+    fetchConversations(searchQuery);
+    // Re-run when search box debounces (300ms) — captured locally so
+    // typing doesn't fire a request on every keystroke.
+    const handle = setTimeout(() => fetchConversations(searchQuery), 300);
+    return () => clearTimeout(handle);
+  }, [fetchConversations, searchQuery]);
+
+  // Re-tick once per second while the inbox is open so the 60s undo
+  // affordance hides on its own without state churn elsewhere.
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Block status fetched whenever we open a thread so we can hide
+  // controls + tag the header accordingly.
+  useEffect(() => {
+    if (!currentConversation || !user) {
+      setIsPeerBlocked(false);
+      return;
+    }
+    const peerId =
+      user.id === currentConversation.teacher_id
+        ? currentConversation.student_id
+        : currentConversation.teacher_id;
+    let cancelled = false;
+    client
+      .get(`/conversations/users/${peerId}/block`)
+      .then((res) => {
+        if (!cancelled) setIsPeerBlocked(!!res.data?.blocked);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [currentConversation, user]);
 
   useEffect(() => {
     fetchCurrentConversation();
   }, [fetchCurrentConversation]);
 
+  // Global WS NEW_MESSAGE_ALERT — refresh the conversation list (so the
+  // sidebar bumps with the latest unread counts + most-recent-first
+  // ordering). If the alert is for the conversation the user is
+  // currently viewing AND the per-conv WS hasn't already appended (e.g.
+  // teacher had list open with no thread selected, then navigated in),
+  // refetching the current conversation is the safe path.
   useEffect(() => {
-    if (currentConversation) {
-      console.log("Current Conversation:", currentConversation);
+    if (messageTick === 0 || !currentUser) return;
+    fetchConversations();
+    if (
+      lastMessageAlert &&
+      conversationId &&
+      lastMessageAlert.conversation_id === parseInt(conversationId, 10) &&
+      lastMessageAlert.sender_id !== currentUser.id
+    ) {
+      fetchCurrentConversation();
     }
-  }, [currentConversation]);
+  }, [
+    messageTick,
+    lastMessageAlert,
+    conversationId,
+    currentUser,
+    fetchConversations,
+    fetchCurrentConversation,
+  ]);
+
+  // Debug logging of full conversation objects was leaking message
+  // previews to anyone with devtools open — including during
+  // screen-shares with tutors. Drop it for prod safety.
 
   useEffect(() => {
-    if (!conversationId || !user || !token) return;
-  
+    const wsToken = localStorage.getItem('token');
+    if (!conversationId || !user || !wsToken) return;
+
     const isSecure = window.location.protocol === 'https:';
     const wsProtocol = isSecure ? 'wss' : 'ws';
-    const wsHost = import.meta.env.VITE_API_URL ? new URL(import.meta.env.VITE_API_URL).host : window.location.host;
-    const wsUrl = `${wsProtocol}://${wsHost}/conversations/${conversationId}/ws?token=${token}`;
+    const apiBase = import.meta.env.VITE_API_URL || '';
+    let wsHost = window.location.host;
+    let wsPath = `/api/conversations/${conversationId}/ws`;
+    if (/^https?:\/\//i.test(apiBase)) {
+      try {
+        const parsed = new URL(apiBase);
+        wsHost = parsed.host;
+        wsPath = `/conversations/${conversationId}/ws`;
+      } catch (_) {
+        /* fall through to relative defaults */
+      }
+    }
+    const wsUrl = `${wsProtocol}://${wsHost}${wsPath}?token=${wsToken}`;
   
     ws.current = new WebSocket(wsUrl);
   
     ws.current.onopen = () => console.log("WebSocket connected");
     ws.current.onmessage = (event) => {
       const data = JSON.parse(event.data);
+      if (data.type === 'TYPING_ON') {
+        if (data.sender_id !== user.id) {
+          setPeerTyping(true);
+          if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+          // Auto-clear after 4 seconds of no further TYPING_ON.
+          typingTimerRef.current = setTimeout(() => setPeerTyping(false), 4000);
+        }
+        return;
+      }
+      if (data.type === 'TYPING_OFF') {
+        if (data.sender_id !== user.id) setPeerTyping(false);
+        return;
+      }
+      if (data.type === 'MESSAGE_DELETED') {
+        setCurrentConversation((prev) => {
+          if (!prev || prev.id !== data.conversation_id) return prev;
+          return {
+            ...prev,
+            messages: prev.messages.map((m) =>
+              m.id === data.message_id
+                ? {
+                    ...m,
+                    content: '',
+                    deleted_at: new Date().toISOString(),
+                    attachment_url: null,
+                  }
+                : m,
+            ),
+          };
+        });
+        return;
+      }
       if (data.type === 'OFFER_ACCEPTED') {
         navigate(`/projects/${data.project_id}`);
       } else if (data.type === 'CONVERSATION_CLOSED') {
@@ -186,7 +312,7 @@ const Inbox = () => {
     return () => {
       if (ws.current) ws.current.close();
     };
-  }, [conversationId, user, token, fetchUnreadCount, navigate, fetchConversations, addToast]);
+  }, [conversationId, user, fetchUnreadCount, navigate, fetchConversations, addToast]);
 
   useEffect(() => {
     if (messagesContainerRef.current) {
@@ -244,7 +370,7 @@ const Inbox = () => {
   const handleLeaveConversation = async () => {
     if (!currentConversation || !user || user.id !== currentConversation.student_id) return;
     setModalConfig({
-      title: "Leave Conversation",
+      title: "Leave conversation",
       message: "Are you sure you want to leave this conversation? This action cannot be undone.",
       onConfirm: executeLeaveConversation,
       isDanger: true,
@@ -267,7 +393,7 @@ const Inbox = () => {
   const handleTeacherLeaveConversation = async () => {
     if (!currentConversation || !user || user.id !== currentConversation.teacher_id) return;
     setModalConfig({
-      title: "Leave Conversation",
+      title: "Leave conversation",
       message: "Are you sure you want to leave this conversation? This will remove the request from your list and archive this chat.",
       onConfirm: executeTeacherLeaveConversation,
       isDanger: true,
@@ -358,24 +484,125 @@ const Inbox = () => {
     }
   };
 
+  // Typing-indicator emitter: send TYPING_ON when the user types and
+  // TYPING_OFF 3s after the last keystroke. We coalesce so we send at
+  // most one TYPING_ON every 2 seconds.
+  const handleTypingActivity = useCallback(() => {
+    if (!ws.current || ws.current.readyState !== WebSocket.OPEN) return;
+    const nowMs = Date.now();
+    if (nowMs - lastTypingSentAtRef.current > 2000) {
+      ws.current.send(JSON.stringify({ type: 'TYPING_ON' }));
+      lastTypingSentAtRef.current = nowMs;
+    }
+    if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+    typingTimerRef.current = setTimeout(() => {
+      if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+        ws.current.send(JSON.stringify({ type: 'TYPING_OFF' }));
+        lastTypingSentAtRef.current = 0;
+      }
+    }, 3000);
+  }, []);
+
+  const handlePickAttachment = () => fileInputRef.current?.click();
+
+  const handleAttachmentSelected = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !currentConversation) return;
+    if (!/^image\//.test(file.type)) {
+      addToast('Only image attachments are supported right now.', 'error');
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      addToast('Image is too large (max 8 MB).', 'error');
+      return;
+    }
+    setUploadingAttachment(true);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      if (newMessage.trim()) form.append('caption', newMessage.trim());
+      await client.post(
+        `/conversations/${currentConversation.id}/messages/attachment`,
+        form,
+        { headers: { 'Content-Type': 'multipart/form-data' } },
+      );
+      setNewMessage('');
+    } catch (err) {
+      addToast(getErrorMessage(err, 'Could not upload attachment.'), 'error');
+    } finally {
+      setUploadingAttachment(false);
+    }
+  };
+
+  const handleUndoMessage = async (messageId) => {
+    if (!currentConversation) return;
+    try {
+      await client.post(
+        `/conversations/${currentConversation.id}/messages/${messageId}/undo`,
+      );
+    } catch (err) {
+      addToast(getErrorMessage(err, 'Could not undo this message.'), 'error');
+    }
+  };
+
+  const handleSubmitReport = async () => {
+    if (!currentConversation) return;
+    try {
+      await client.post(`/conversations/${currentConversation.id}/report`, {
+        reason: reportReason,
+        note: reportNote.trim() || null,
+      });
+      addToast('Thanks — our team will review this.', 'success');
+      setShowReportModal(false);
+      setReportNote('');
+      setReportReason('spam');
+    } catch (err) {
+      addToast(getErrorMessage(err, 'Could not submit report.'), 'error');
+    }
+  };
+
+  const handleToggleBlock = async () => {
+    if (!currentConversation || !user) return;
+    const peerId =
+      user.id === currentConversation.teacher_id
+        ? currentConversation.student_id
+        : currentConversation.teacher_id;
+    try {
+      if (isPeerBlocked) {
+        await client.delete(`/conversations/users/${peerId}/block`);
+        setIsPeerBlocked(false);
+        addToast('Unblocked.', 'info');
+      } else {
+        await client.post(`/conversations/users/${peerId}/block`);
+        setIsPeerBlocked(true);
+        addToast('Blocked. They can no longer message you.', 'info');
+      }
+    } catch (err) {
+      addToast(getErrorMessage(err, 'Could not change block status.'), 'error');
+    }
+  };
+
   const formatCurrency = (amountInCents) => new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(amountInCents / 100);
-  const formatDateTime = (dateString) => new Date(dateString).toLocaleString();
+  // `formatDateTime` is imported from `../utils/dates` above. An earlier
+  // sweep accidentally re-declared a local alias that called itself
+  // (stack overflow); removing it lets the imported helper win.
 
   if (!user) return <div className="p-10 text-center">Loading user data...</div>;
 
   const hasPendingOffer = currentConversation?.messages?.some(m => m.message_type === 'offer' && m.offer_status === 'pending');
 
   const renderOfferMessage = (message) => (
-    <div className="p-4 rounded-lg bg-white border-2 border-kotoba-primary/30 shadow-md my-2 text-gray-800">
+    <div className="p-4 rounded-lg bg-white border-2 border-kotoba-primary/30 shadow-md my-2 text-kotoba-text/90">
       <h4 className="font-bold text-lg text-kotoba-primary mb-2">Project Offer from {message.sender_full_name}</h4>
       <div className="space-y-3">
         <div>
-          <p className="font-semibold text-gray-600">Project Title</p>
-          <p className="text-gray-900">{message.offer_title}</p>
+          <p className="font-semibold text-kotoba-text/70">Project Title</p>
+          <p className="text-kotoba-text">{message.offer_title}</p>
         </div>
         <div>
-          <p className="font-semibold text-gray-600">Description</p>
-          <p className="text-gray-900">{message.offer_description}</p>
+          <p className="font-semibold text-kotoba-text/70">Description</p>
+          <p className="text-kotoba-text">{message.offer_description}</p>
         </div>
         {message.offer_is_series && (
           <div className="bg-kotoba-primary/5 p-3 rounded-md">
@@ -387,26 +614,26 @@ const Inbox = () => {
         )}
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <p className="font-semibold text-gray-600">Language</p>
+            <p className="font-semibold text-kotoba-text/70">Language</p>
             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-kotoba-secondary/20 text-kotoba-text">{message.offer_language}</span>
           </div>
           <div>
-            <p className="font-semibold text-gray-600">Level</p>
+            <p className="font-semibold text-kotoba-text/70">Level</p>
             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">{message.offer_level}</span>
           </div>
         </div>
         {message.offer_tags && (
           <div>
-            <p className="font-semibold text-gray-600">Tags</p>
+            <p className="font-semibold text-kotoba-text/70">Tags</p>
             <div className="flex flex-wrap gap-2 mt-1">
               {message.offer_tags.split(',').map(tag => tag.trim()).filter(Boolean).map((tag, index) => (
-                <span key={index} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800"><FaTag className="mr-1.5" />{tag}</span>
+                <span key={index} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-kotoba-background/60 text-kotoba-text/90"><FaTag className="mr-1.5" />{tag}</span>
               ))}
             </div>
           </div>
         )}
-        <div className="pt-3 border-t border-gray-200">
-          <p className="font-semibold text-gray-600">Total Price</p>
+        <div className="pt-3 border-t border-kotoba-text/10">
+          <p className="font-semibold text-kotoba-text/70">Total Price</p>
           <p className="text-2xl font-bold text-kotoba-primary">{formatCurrency(message.offer_price)}</p>
         </div>
       </div>
@@ -422,24 +649,48 @@ const Inbox = () => {
   );
 
   return (
-    <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
-      <div className="flex h-[calc(100vh-128px)] bg-white shadow-lg rounded-lg">
-        <div className="w-1/3 border-r border-gray-200 overflow-y-auto">
-          <div className="p-4 border-b border-gray-200">
-            <h2 className="text-xl font-bold text-gray-800">Inbox</h2>
+    <div className="font-sans max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+      <div className="flex h-[calc(100vh-128px)] bg-white shadow-soft rounded-3xl overflow-hidden">
+        <div className="w-1/3 border-r border-kotoba-text/[0.06] overflow-y-auto">
+          <div className="p-4 border-b border-kotoba-text/[0.06] space-y-3">
+            <h2 className="font-display text-xl font-bold text-kotoba-primary tracking-[-0.015em]">Inbox</h2>
+            <div className="relative">
+              <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-kotoba-text/40 text-sm" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search conversations…"
+                className="w-full pl-9 pr-3 py-2 text-sm border border-kotoba-text/15 rounded-2xl focus:outline-none focus:border-kotoba-primary focus:ring-4 focus:ring-kotoba-primary/10 transition-all"
+                aria-label="Search conversations"
+              />
+            </div>
           </div>
-          {isLoadingConversations ? <div className="p-4 text-gray-500">Loading conversations...</div> : conversations.length === 0 ? <div className="p-4 text-gray-500">No conversations yet.</div> : (conversations.map((conv) => (<div key={conv.id} onClick={() => navigate(`/messages/${conv.id}`)} className={`flex items-center p-4 border-b border-gray-200 cursor-pointer hover:bg-gray-50 ${conversationId == conv.id ? 'bg-kotoba-primary/5 border-l-4 border-kotoba-primary' : ''}`}><div className="flex-shrink-0 mr-3">{conv.other_participant.avatar_url ? <img className="h-10 w-10 rounded-full object-cover" src={conv.other_participant.avatar_url} alt={conv.other_participant.full_name} /> : <div className="h-10 w-10 rounded-full bg-kotoba-primary/10 flex items-center justify-center text-kotoba-primary font-bold text-sm">{conv.other_participant.full_name ? conv.other_participant.full_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) : '??'}</div>}</div><div className="flex-1"><div className="flex justify-between items-center"><p className="text-sm font-medium text-gray-900">{conv.other_participant.full_name}</p><p className="text-sm text-gray-600 truncate">{conv.request_title}</p></div>{conv.unread_messages_count > 0 && <span className="text-xs font-semibold text-kotoba-primary">{conv.unread_messages_count} unread</span>}</div></div>)))}
-          <div className="p-4 border-t border-gray-200">
-            <Link to="/messages/archive" className="text-kotoba-primary hover:underline">View Previous Conversations</Link>
+          {isLoadingConversations ? (
+            <div className="p-4 text-kotoba-text/60">Loading conversations...</div>
+          ) : conversations.length === 0 ? (
+            <div className="p-4 text-kotoba-text/60">No conversations yet.</div>
+          ) : (
+            conversations.map((conv) => (
+              <ConversationListItem
+                key={conv.id}
+                conversation={conv}
+                active={conversationId == conv.id}
+                onClick={() => navigate(`/messages/${conv.id}`)}
+              />
+            ))
+          )}
+          <div className="p-4 border-t border-kotoba-text/10">
+            <Link to="/messages/archive" className="text-kotoba-primary hover:underline">View previous conversations</Link>
           </div>
         </div>
         <div className="flex-1 flex flex-col">
           {currentConversation ? (
             <>
-              <div className="bg-white p-4 border-b border-gray-200 flex justify-between items-center">
+              <div className="bg-white p-4 border-b border-kotoba-text/10 flex justify-between items-center">
                 <div>
-                  <h3 className="text-lg font-bold text-gray-800">{currentConversation.request_title}</h3>
-                  <p className="text-sm text-gray-600">{user.id === currentConversation.teacher_id ? `Student: ${currentConversation.student.full_name}` : `Teacher: ${currentConversation.teacher.full_name}`}</p>
+                  <h3 className="text-lg font-bold text-kotoba-text/90">{currentConversation.request_title}</h3>
+                  <p className="text-sm text-kotoba-text/70">{user.id === currentConversation.teacher_id ? `Student: ${currentConversation.student.full_name}` : `Teacher: ${currentConversation.teacher.full_name}`}</p>
                   {user.id === currentConversation.teacher_id && currentConversation.student_demo_video_url && (
                     <div className="mt-2">
                       <a href={currentConversation.student_demo_video_url} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-kotoba-primary hover:text-kotoba-primary flex items-center">
@@ -449,13 +700,33 @@ const Inbox = () => {
                     </div>
                   )}
                 </div>
-                <div className="flex space-x-2">
-                  {currentConversation.status === 'open' && user.id === currentConversation.student_id && <button onClick={handleLeaveConversation} className="bg-gray-500 hover:bg-gray-600 text-white text-sm font-medium py-2 px-4 rounded-md">Leave Conversation</button>}
-                  {currentConversation.status === 'open' && user.id === currentConversation.teacher_id && <button onClick={handleTeacherLeaveConversation} className="bg-gray-500 hover:bg-gray-600 text-white text-sm font-medium py-2 px-4 rounded-md">Leave Conversation</button>}
+                <div className="flex space-x-2 items-center">
+                  {currentConversation.status === 'open' && (
+                    <>
+                      <button
+                        onClick={() => setShowReportModal(true)}
+                        className="text-kotoba-text/60 hover:text-red-600 p-2 rounded-md"
+                        aria-label="Report this conversation"
+                        title="Report"
+                      >
+                        <FaFlag />
+                      </button>
+                      <button
+                        onClick={handleToggleBlock}
+                        className={`text-kotoba-text/60 hover:text-red-600 p-2 rounded-md ${isPeerBlocked ? 'text-red-600' : ''}`}
+                        aria-label={isPeerBlocked ? 'Unblock this user' : 'Block this user'}
+                        title={isPeerBlocked ? 'Unblock' : 'Block'}
+                      >
+                        <FaBan />
+                      </button>
+                    </>
+                  )}
+                  {currentConversation.status === 'open' && user.id === currentConversation.student_id && <button onClick={handleLeaveConversation} className="bg-kotoba-text/60 hover:bg-kotoba-text/70 text-white text-sm font-medium py-2 px-4 rounded-md">Leave conversation</button>}
+                  {currentConversation.status === 'open' && user.id === currentConversation.teacher_id && <button onClick={handleTeacherLeaveConversation} className="bg-kotoba-text/60 hover:bg-kotoba-text/70 text-white text-sm font-medium py-2 px-4 rounded-md">Leave conversation</button>}
                 </div>
               </div>
-              <div ref={messagesContainerRef} className="flex-1 p-4 overflow-y-auto bg-gray-50 min-h-0">
-                {isLoadingMessages ? <div className="text-center text-gray-500">Loading messages...</div> : currentConversation.messages.map((message) => {
+              <div ref={messagesContainerRef} className="flex-1 p-4 overflow-y-auto bg-kotoba-background/40 min-h-0">
+                {isLoadingMessages ? <div className="text-center text-kotoba-text/60">Loading messages...</div> : currentConversation.messages.map((message) => {
                   const embedUrl = message.message_type === 'demo_video' ? getEmbedUrl(message.content) : null;
                   return (
                     <div key={message.id}>
@@ -469,10 +740,12 @@ const Inbox = () => {
                         renderOfferMessage(message)
                       ) : (
                         <div className={`flex mb-4 ${message.sender_id === user.id ? 'justify-end' : 'justify-start'}`}>
-                          <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg shadow relative ${message.sender_id === user.id ? 'bg-kotoba-primary text-white' : 'bg-gray-300 text-gray-800'}`}>
-                            {message.replied_to_message_id && <div className={`mb-2 p-2 rounded-md border-l-4 ${message.sender_id === user.id ? 'border-kotoba-primary/30 bg-kotoba-primary' : 'border-gray-400 bg-gray-200'}`}><p className={`text-xs font-semibold ${message.sender_id === user.id ? 'text-kotoba-primary/70' : 'text-gray-700'}`}>{message.replied_to_sender_name || 'Deleted User'}</p><p className={`text-xs italic ${message.sender_id === user.id ? 'text-kotoba-primary/70' : 'text-gray-600'} truncate`}>{message.replied_to_message_content}</p></div>}
-                            
-                            {message.message_type === 'demo_video' ? (
+                          <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg shadow relative ${message.deleted_at ? 'bg-kotoba-text/10 text-kotoba-text/60 italic' : message.sender_id === user.id ? 'bg-kotoba-primary text-white' : 'bg-kotoba-text/20 text-kotoba-text/90'}`}>
+                            {message.replied_to_message_id && !message.deleted_at && <div className={`mb-2 p-2 rounded-md border-l-4 ${message.sender_id === user.id ? 'border-kotoba-primary/30 bg-kotoba-primary' : 'border-kotoba-text/30 bg-kotoba-text/10'}`}><p className={`text-xs font-semibold ${message.sender_id === user.id ? 'text-kotoba-primary/70' : 'text-kotoba-text/80'}`}>{message.replied_to_sender_name || 'Deleted User'}</p><p className={`text-xs italic ${message.sender_id === user.id ? 'text-kotoba-primary/70' : 'text-kotoba-text/70'} truncate`}>{message.replied_to_message_content}</p></div>}
+
+                            {message.deleted_at ? (
+                              <p className="text-sm">Message deleted</p>
+                            ) : message.message_type === 'demo_video' ? (
                               embedUrl ? (
                                 <div className="aspect-w-16 aspect-h-9">
                                   <iframe src={embedUrl} frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen title="Submitted Demo Video"></iframe>
@@ -481,26 +754,79 @@ const Inbox = () => {
                                 <p className="text-sm">Video submitted: <a href={message.content} target="_blank" rel="noopener noreferrer" className="underline">{message.content}</a></p>
                               )
                             ) : (
-                              <p className="text-sm">{message.content}</p>
+                              <>
+                                {message.attachment_url && message.attachment_kind === 'image' && (
+                                  <a
+                                    href={message.attachment_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="block mb-2"
+                                  >
+                                    <img
+                                      src={message.attachment_url}
+                                      alt="Attachment"
+                                      className="rounded-md max-h-80 w-auto"
+                                      loading="lazy"
+                                    />
+                                  </a>
+                                )}
+                                {message.content && <p className="text-sm whitespace-pre-wrap">{message.content}</p>}
+                              </>
                             )}
-                            
-                            <span className="block text-xs text-right opacity-75 mt-1">{formatDateTime(message.created_at)}</span>
-                            {message.message_type === 'text' && currentConversation.status === 'open' && <button onClick={() => setReplyingToMessage(message)} aria-label="Reply to message" className={`absolute -bottom-2 ${message.sender_id === user.id ? '-left-8' : '-right-8'} p-1 rounded-full bg-gray-200 text-gray-600 hover:bg-gray-300`} title="Reply"><FaReply size={12} /></button>}
+
+                            <span className="block text-xs text-right opacity-75 mt-1">
+                              {formatDateTime(message.created_at)}
+                              {message.sender_id === user.id && !message.deleted_at && (
+                                <span className="ml-1" aria-label={message.is_read ? 'Read' : 'Sent'} title={message.is_read ? 'Read' : 'Sent'}>
+                                  {message.is_read ? '✓✓' : '✓'}
+                                </span>
+                              )}
+                            </span>
+                            {!message.deleted_at && message.message_type === 'text' && currentConversation.status === 'open' && (
+                              <button
+                                onClick={() => setReplyingToMessage(message)}
+                                aria-label="Reply to message"
+                                className={`absolute -bottom-2 ${message.sender_id === user.id ? '-left-8' : '-right-8'} p-1 rounded-full bg-kotoba-text/10 text-kotoba-text/70 hover:bg-kotoba-text/20`}
+                                title="Reply"
+                              >
+                                <FaReply size={12} />
+                              </button>
+                            )}
+                            {!message.deleted_at
+                              && message.sender_id === user.id
+                              && currentConversation.status === 'open'
+                              && now - new Date(message.created_at).getTime() < UNDO_WINDOW_MS && (
+                                <button
+                                  onClick={() => handleUndoMessage(message.id)}
+                                  aria-label="Undo this message"
+                                  className="absolute -top-2 -left-8 p-1 rounded-full bg-kotoba-text/10 text-kotoba-text/70 hover:bg-red-600 hover:text-white"
+                                  title="Undo (within 60s)"
+                                >
+                                  <FaTrash size={12} />
+                                </button>
+                              )}
                           </div>
                         </div>
                       )}
                     </div>
                   );
                 })}
+                {peerTyping && (
+                  <div className="text-xs italic text-kotoba-text/60 mt-2">
+                    {currentConversation.teacher_id === user.id
+                      ? currentConversation.student?.full_name || 'They'
+                      : currentConversation.teacher?.full_name || 'They'} is typing…
+                  </div>
+                )}
               </div>
-              {currentConversation.status === 'open' ? <div className="bg-white p-4 border-t border-gray-200">
-                {replyingToMessage && <div className="mb-2 p-2 rounded-md bg-gray-100 border-l-4 border-kotoba-primary flex justify-between items-center"><div><p className="text-sm font-semibold text-gray-700">Replying to {replyingToMessage.sender_full_name}</p><p className="text-sm text-gray-600 truncate">{replyingToMessage.content}</p></div><button onClick={() => setReplyingToMessage(null)} aria-label="Cancel reply" className="text-gray-500 hover:text-gray-700"><FaTimes /></button></div>}
+              {currentConversation.status === 'open' ? <div className="bg-white p-4 border-t border-kotoba-text/10">
+                {replyingToMessage && <div className="mb-2 p-2 rounded-md bg-kotoba-background/60 border-l-4 border-kotoba-primary flex justify-between items-center"><div><p className="text-sm font-semibold text-kotoba-text/80">Replying to {replyingToMessage.sender_full_name}</p><p className="text-sm text-kotoba-text/70 truncate">{replyingToMessage.content}</p></div><button onClick={() => setReplyingToMessage(null)} aria-label="Cancel reply" className="text-kotoba-text/60 hover:text-kotoba-text/80"><FaTimes /></button></div>}
                 
                 {user.id === currentConversation.student_id && currentConversation.demo_video_requested && !currentConversation.student_demo_video_url && (
                   <div className="mb-4">
-                    <label htmlFor="demoVideo" className="block text-sm font-medium text-gray-700">Submit Your Demo Video URL</label>
+                    <label htmlFor="demoVideo" className="block text-sm font-medium text-kotoba-text/80">Submit Your Demo Video URL</label>
                     <div className="mt-1 flex rounded-md shadow-sm">
-                      <input type="url" name="demoVideo" id="demoVideo" className="flex-1 block w-full rounded-none rounded-l-md border-gray-300 focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" placeholder="https://youtube.com/watch?v=..." value={demoVideoUrl} onChange={(e) => setDemoVideoUrl(e.target.value)} />
+                      <input type="url" name="demoVideo" id="demoVideo" className="flex-1 block w-full rounded-none rounded-l-md border-kotoba-text/20 focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" placeholder="https://youtube.com/watch?v=..." value={demoVideoUrl} onChange={(e) => setDemoVideoUrl(e.target.value)} />
                       <button type="button" onClick={handleUpdateDemoVideo} className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-r-md shadow-sm text-white bg-kotoba-primary hover:bg-kotoba-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-kotoba-primary"><FaVideo className="mr-2" /> Submit</button>
                     </div>
                   </div>
@@ -525,16 +851,62 @@ const Inbox = () => {
                       <button type="button" onClick={handleRequestDemoVideo} className="bg-kotoba-primary hover:bg-kotoba-primary/90 text-white font-medium py-2 px-3 flex items-center justify-center mr-1" disabled={currentConversation.demo_video_requested}><FaFileVideo className="mr-1" /> Demo</button>
                     </>
                   )}
-                  <input type="text" value={newMessage} onChange={(e) => setNewMessage(e.target.value)} placeholder="Type your message..." className={`flex-1 border border-gray-300 py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary ${user.id === currentConversation.teacher_id ? '' : 'rounded-l-md'}`} disabled={isSending} />
-                  <button type="submit" className="bg-kotoba-primary hover:bg-kotoba-primary/90 text-white font-medium py-2 px-4 rounded-r-md flex items-center justify-center" disabled={isSending}><FaPaperPlane className="mr-2" /> Send</button>
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleAttachmentSelected}
+                    aria-hidden="true"
+                  />
+                  <button
+                    type="button"
+                    onClick={handlePickAttachment}
+                    disabled={isSending || uploadingAttachment || isPeerBlocked}
+                    className={`bg-kotoba-background/60 hover:bg-kotoba-background text-kotoba-text/70 font-medium py-2 px-3 flex items-center justify-center mr-1 ${user.id === currentConversation.teacher_id ? '' : 'rounded-l-md'}`}
+                    aria-label="Attach an image"
+                    title="Attach an image"
+                  >
+                    <FaPaperclip />
+                  </button>
+                  <input
+                    type="text"
+                    value={newMessage}
+                    onChange={(e) => {
+                      setNewMessage(e.target.value);
+                      handleTypingActivity();
+                    }}
+                    placeholder={isPeerBlocked ? 'You have blocked this user.' : 'Type your message...'}
+                    className="flex-1 border border-kotoba-text/20 py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary"
+                    disabled={isSending || isPeerBlocked}
+                  />
+                  <button
+                    type="submit"
+                    className="bg-kotoba-primary hover:bg-kotoba-primary/90 text-white font-medium py-2 px-4 rounded-r-md flex items-center justify-center disabled:opacity-50"
+                    disabled={isSending || isPeerBlocked || uploadingAttachment}
+                  >
+                    <FaPaperPlane className="mr-2" /> Send
+                  </button>
                 </form>
-              </div> : <div className="bg-white p-4 border-t border-gray-200 text-center text-gray-600">This conversation is closed.</div>}
+                {uploadingAttachment && (
+                  <p className="text-xs text-kotoba-text/60 mt-2">Uploading attachment…</p>
+                )}
+              </div> : <div className="bg-white p-4 border-t border-kotoba-text/10 text-center text-kotoba-text/70">This conversation is closed.</div>}
             </>
-          ) : <div className="flex-1 flex items-center justify-center text-gray-500">Select a conversation to start chatting.</div>}
+          ) : <div className="flex-1 flex items-center justify-center text-kotoba-text/60">Select a conversation to start chatting.</div>}
         </div>
       </div>
-      {showOfferModal && <div className="fixed z-10 inset-0 overflow-y-auto"><div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0"><div className="fixed inset-0 transition-opacity" aria-hidden="true"><div className="absolute inset-0 bg-gray-500 opacity-75"></div></div><span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span><div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full"><div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4"><h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">Make Project Offer</h3><div className="space-y-4"><div><label htmlFor="offerTitle" className="block text-sm font-medium text-gray-700">Project Title</label><input type="text" id="offerTitle" className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={offerTitle} onChange={(e) => setOfferTitle(e.target.value)} /></div><div><label htmlFor="offerDescription" className="block text-sm font-medium text-gray-700">Project Description</label><textarea id="offerDescription" rows="3" className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={offerDescription} onChange={(e) => setOfferDescription(e.target.value)}></textarea></div><div className="grid grid-cols-2 gap-4"><div><label htmlFor="offerLanguage" className="block text-sm font-medium text-gray-700">Language</label><input type="text" id="offerLanguage" className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={offerLanguage} onChange={(e) => setOfferLanguage(e.target.value)} /></div><div><label htmlFor="offerLevel" className="block text-sm font-medium text-gray-700">Level</label><input type="text" id="offerLevel" className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={offerLevel} onChange={(e) => setOfferLevel(e.target.value)} /></div></div><div><label htmlFor="offerTags" className="block text-sm font-medium text-gray-700">Tags (comma-separated)</label><input type="text" id="offerTags" className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={offerTags} onChange={(e) => setOfferTags(e.target.value)} /></div><div className="flex items-center"><input id="offerIsSeries" type="checkbox" className="h-4 w-4 text-kotoba-primary border-gray-300 rounded" checked={offerIsSeries} onChange={(e) => setOfferIsSeries(e.target.checked)} /><label htmlFor="offerIsSeries" className="ml-2 block text-sm text-gray-900">Is this a series?</label></div>{offerIsSeries && (<div className="grid grid-cols-2 gap-4"><div><label htmlFor="offerNumVideos" className="block text-sm font-medium text-gray-700">Number of Videos</label><input type="number" id="offerNumVideos" min="1" className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={offerNumVideos} onChange={(e) => setOfferNumVideos(parseInt(e.target.value, 10))} /></div><div><label htmlFor="offerPricePerVideo" className="block text-sm font-medium text-gray-700">Price Per Video (EUR)</label><input type="number" id="offerPricePerVideo" min="0" step="0.01" className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={offerPricePerVideo} onChange={(e) => setOfferPricePerVideo(parseFloat(e.target.value))} /></div></div>)}<div><label htmlFor="offerPrice" className="block text-sm font-medium text-gray-700">Total Offer Price (EUR)</label><input type="number" id="offerPrice" min="0" className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={offerPrice} onChange={(e) => setOfferPrice(parseFloat(e.target.value))} disabled={offerIsSeries} /></div></div></div><div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse"><button type="button" onClick={handleMakeOffer} className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-kotoba-primary text-base font-medium text-white hover:bg-kotoba-primary/90 focus:outline-none sm:ml-3 sm:w-auto sm:text-sm">Send Offer</button><button type="button" onClick={() => setShowOfferModal(false)} className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">Cancel</button></div></div></div></div>}
+      {showOfferModal && <div className="fixed z-10 inset-0 overflow-y-auto"><div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0"><div className="fixed inset-0 transition-opacity" aria-hidden="true"><div className="absolute inset-0 bg-gray-500 opacity-75"></div></div><span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span><div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full"><div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4"><h3 className="text-lg leading-6 font-medium text-kotoba-text mb-4">Make Project Offer</h3><div className="space-y-4"><div><label htmlFor="offerTitle" className="block text-sm font-medium text-kotoba-text/80">Project Title</label><input type="text" id="offerTitle" className="mt-1 block w-full border border-kotoba-text/20 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={offerTitle} onChange={(e) => setOfferTitle(e.target.value)} /></div><div><label htmlFor="offerDescription" className="block text-sm font-medium text-kotoba-text/80">Project Description</label><textarea id="offerDescription" rows="3" className="mt-1 block w-full border border-kotoba-text/20 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={offerDescription} onChange={(e) => setOfferDescription(e.target.value)}></textarea></div><div className="grid grid-cols-2 gap-4"><div><label htmlFor="offerLanguage" className="block text-sm font-medium text-kotoba-text/80">Language</label><input type="text" id="offerLanguage" className="mt-1 block w-full border border-kotoba-text/20 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={offerLanguage} onChange={(e) => setOfferLanguage(e.target.value)} /></div><div><label htmlFor="offerLevel" className="block text-sm font-medium text-kotoba-text/80">Level</label><input type="text" id="offerLevel" className="mt-1 block w-full border border-kotoba-text/20 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={offerLevel} onChange={(e) => setOfferLevel(e.target.value)} /></div></div><div><label htmlFor="offerTags" className="block text-sm font-medium text-kotoba-text/80">Tags (comma-separated)</label><input type="text" id="offerTags" className="mt-1 block w-full border border-kotoba-text/20 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={offerTags} onChange={(e) => setOfferTags(e.target.value)} /></div><div className="flex items-center"><input id="offerIsSeries" type="checkbox" className="h-4 w-4 text-kotoba-primary border-kotoba-text/20 rounded" checked={offerIsSeries} onChange={(e) => setOfferIsSeries(e.target.checked)} /><label htmlFor="offerIsSeries" className="ml-2 block text-sm text-kotoba-text">Is this a series?</label></div>{offerIsSeries && (<div className="grid grid-cols-2 gap-4"><div><label htmlFor="offerNumVideos" className="block text-sm font-medium text-kotoba-text/80">Number of Videos</label><input type="number" id="offerNumVideos" min="1" className="mt-1 block w-full border border-kotoba-text/20 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={offerNumVideos} onChange={(e) => setOfferNumVideos(parseInt(e.target.value, 10))} /></div><div><label htmlFor="offerPricePerVideo" className="block text-sm font-medium text-kotoba-text/80">Price Per Video (EUR)</label><input type="number" id="offerPricePerVideo" min="0" step="0.01" className="mt-1 block w-full border border-kotoba-text/20 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={offerPricePerVideo} onChange={(e) => setOfferPricePerVideo(parseFloat(e.target.value))} /></div></div>)}<div><label htmlFor="offerPrice" className="block text-sm font-medium text-kotoba-text/80">Total Offer Price (EUR)</label><input type="number" id="offerPrice" min="0" className="mt-1 block w-full border border-kotoba-text/20 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={offerPrice} onChange={(e) => setOfferPrice(parseFloat(e.target.value))} disabled={offerIsSeries} /></div></div></div><div className="bg-kotoba-background/40 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse"><button type="button" onClick={handleMakeOffer} className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-kotoba-primary text-base font-medium text-white hover:bg-kotoba-primary/90 focus:outline-none sm:ml-3 sm:w-auto sm:text-sm">Send Offer</button><button type="button" onClick={() => setShowOfferModal(false)} className="mt-3 w-full inline-flex justify-center rounded-md border border-kotoba-text/20 shadow-sm px-4 py-2 bg-white text-base font-medium text-kotoba-text/80 hover:bg-kotoba-background/40 focus:outline-none sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">Cancel</button></div></div></div></div>}
       <ConfirmationModal isOpen={confirmModalOpen} onClose={() => setConfirmModalOpen(false)} onConfirm={modalConfig.onConfirm} title={modalConfig.title} message={modalConfig.message} confirmText={modalConfig.confirmText} isDanger={modalConfig.isDanger} />
+      <ReportConversationModal
+        open={showReportModal}
+        reason={reportReason}
+        note={reportNote}
+        onReasonChange={setReportReason}
+        onNoteChange={setReportNote}
+        onCancel={() => setShowReportModal(false)}
+        onSubmit={handleSubmitReport}
+      />
     </div>
   );
 };

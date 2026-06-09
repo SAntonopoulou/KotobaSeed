@@ -1,12 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import client from '../api/client';
 import { SkeletonCard } from './Skeleton';
+import { getErrorMessage } from '../utils/errors';
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const SLOT_MIN = 30;              // each cell = 30 minutes
 const SLOTS_PER_DAY = 24 * (60 / SLOT_MIN); // 48
-const VISIBLE_START_HOUR = 6;     // 6am — the top of the scroll
-const VISIBLE_END_HOUR = 23;      // 11pm — the bottom
+// Show the full 24-hour day so tutors teaching across timezones (or
+// running late-night / early-morning slots) can mark any hour available.
+const VISIBLE_START_HOUR = 0;
+const VISIBLE_END_HOUR = 23;
 
 // Cell states. Trial implies regular underneath — never trial without regular.
 const STATE_OFF = 0;
@@ -82,7 +85,7 @@ const AvailabilityEditor = () => {
       setGrid(g);
       setOriginal(JSON.parse(JSON.stringify(g)));
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not load availability.');
+      setError(getErrorMessage(err, 'Could not load availability.'));
     } finally {
       setLoading(false);
     }
@@ -152,7 +155,7 @@ const AvailabilityEditor = () => {
       setOriginal(JSON.parse(JSON.stringify(grid)));
       setInfo('Availability saved.');
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not save.');
+      setError(getErrorMessage(err, 'Could not save.'));
     } finally {
       setSaving(false);
     }

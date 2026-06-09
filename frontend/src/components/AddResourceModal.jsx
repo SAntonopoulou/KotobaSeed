@@ -37,23 +37,23 @@ const AddResourceModal = ({ videoId, onClose, onSuccess }) => {
         <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
           <form onSubmit={handleSubmit}>
             <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-              <h3 className="text-lg leading-6 font-medium text-gray-900">Add a New Resource</h3>
+              <h3 className="text-lg leading-6 font-medium text-kotoba-text">Add a New Resource</h3>
               <div className="mt-4 space-y-4">
                 <div>
-                  <label htmlFor="resource-title" className="block text-sm font-medium text-gray-700">Resource Title</label>
-                  <input type="text" id="resource-title" value={title} onChange={(e) => setTitle(e.target.value)} required className="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md py-2 px-3" />
+                  <label htmlFor="resource-title" className="block text-sm font-medium text-kotoba-text/80">Resource Title</label>
+                  <input type="text" id="resource-title" value={title} onChange={(e) => setTitle(e.target.value)} required className="mt-1 block w-full shadow-sm sm:text-sm border-kotoba-text/20 rounded-md py-2 px-3" />
                 </div>
                 <div>
-                  <label htmlFor="resource-url" className="block text-sm font-medium text-gray-700">Resource URL</label>
-                  <input type="url" id="resource-url" value={url} onChange={(e) => setUrl(e.target.value)} required className="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md py-2 px-3" />
+                  <label htmlFor="resource-url" className="block text-sm font-medium text-kotoba-text/80">Resource URL</label>
+                  <input type="url" id="resource-url" value={url} onChange={(e) => setUrl(e.target.value)} required className="mt-1 block w-full shadow-sm sm:text-sm border-kotoba-text/20 rounded-md py-2 px-3" />
                 </div>
               </div>
             </div>
-            <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+            <div className="bg-kotoba-background/40 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
               <button type="submit" disabled={isSubmitting} className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-kotoba-primary text-base font-medium text-white hover:bg-kotoba-primary/90 sm:ml-3 sm:w-auto sm:text-sm disabled:bg-kotoba-primary/40">
                 {isSubmitting ? 'Adding...' : 'Add Resource'}
               </button>
-              <button type="button" onClick={onClose} className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 sm:mt-0 sm:w-auto sm:text-sm">
+              <button type="button" onClick={onClose} className="mt-3 w-full inline-flex justify-center rounded-md border border-kotoba-text/20 shadow-sm px-4 py-2 bg-white text-base font-medium text-kotoba-text/80 hover:bg-kotoba-background/40 sm:mt-0 sm:w-auto sm:text-sm">
                 Cancel
               </button>
             </div>

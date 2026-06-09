@@ -1,15 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import client from '../../api/client';
+import AvatarUploader from '../AvatarUploader';
 
 const ProfileEditor = ({ tutor, onSaved }) => {
   const [form, setForm] = useState({
     display_name: tutor.display_name || '',
     bio: tutor.bio || '',
-    photo_url: tutor.photo_url || '',
     languages_taught: tutor.languages_taught || '',
     languages_spoken: tutor.languages_spoken || '',
     public_reply_email: tutor.public_reply_email || '',
   });
+  const [photoUrl, setPhotoUrl] = useState(tutor.photo_url || '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [savedAt, setSavedAt] = useState(null);
@@ -18,11 +19,11 @@ const ProfileEditor = ({ tutor, onSaved }) => {
     setForm({
       display_name: tutor.display_name || '',
       bio: tutor.bio || '',
-      photo_url: tutor.photo_url || '',
       languages_taught: tutor.languages_taught || '',
       languages_spoken: tutor.languages_spoken || '',
       public_reply_email: tutor.public_reply_email || '',
     });
+    setPhotoUrl(tutor.photo_url || '');
   }, [tutor]);
 
   const handleChange = (e) => {
@@ -96,20 +97,14 @@ const ProfileEditor = ({ tutor, onSaved }) => {
           </p>
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-kotoba-text mb-1" htmlFor="photo_url">
-            Photo URL
-          </label>
-          <input
-            id="photo_url"
-            name="photo_url"
-            type="url"
-            value={form.photo_url}
-            onChange={handleChange}
-            placeholder="https://…"
-            className="w-full px-3 py-2 border border-kotoba-text/20 rounded-md focus:outline-none focus:ring-2 focus:ring-kotoba-primary"
-          />
-        </div>
+        <AvatarUploader
+          currentUrl={photoUrl}
+          size={96}
+          onUpdated={(newUrl) => {
+            setPhotoUrl(newUrl || '');
+            onSaved?.({ ...tutor, photo_url: newUrl || null });
+          }}
+        />
 
         <div className="grid sm:grid-cols-2 gap-4">
           <div>

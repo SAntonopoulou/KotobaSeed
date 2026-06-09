@@ -47,6 +47,26 @@ const Dashboard = () => {
     }
   }, [addToast, location.search]);
 
+  // Re-fetch when the tab regains focus or the window becomes visible.
+  // Without this, a tutor who creates/cancels/marks-ready a project in a
+  // sub-route and bounces back via SPA history sees stale state until a
+  // manual refresh.
+  useEffect(() => {
+    const onVisible = () => {
+      if (!document.hidden) fetchData();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', fetchData);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', fetchData);
+    };
+    // fetchData closes over addToast; it's recreated each render, but
+    // the listeners are reattached each render too — safe enough for a
+    // mount-once panel, and avoids a useCallback churn elsewhere.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleSetupPayouts = async () => {
     try {
       const response = await client.post('/users/stripe-onboarding-link');
@@ -70,9 +90,9 @@ const Dashboard = () => {
 
   const confirmMarkAsReady = (projectId) => {
     setModalConfig({
-      title: "Mark Project as Ready",
-      message: "Are you sure? This will notify all backers to confirm the project is complete.",
-      confirmText: "Mark as Ready",
+      title: "Mark project as ready",
+      message: "Notify every backer to confirm the project is complete?",
+      confirmText: "Mark as ready",
       isDanger: false,
       onConfirm: () => handleMarkAsReady(projectId)
     });
@@ -93,9 +113,9 @@ const Dashboard = () => {
 
   const confirmCancelProject = (projectId) => {
     setModalConfig({
-      title: "Cancel Project",
-      message: "Are you sure? This will refund all backers and cannot be undone.",
-      confirmText: "Cancel Project",
+      title: "Cancel project",
+      message: "Refund every backer and cancel this project? This can't be undone.",
+      confirmText: "Cancel + refund",
       isDanger: true,
       onConfirm: () => handleCancelProject(projectId)
     });
@@ -119,10 +139,11 @@ const Dashboard = () => {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Teacher Dashboard</h1>
+        <h1 className="text-3xl font-bold text-kotoba-text">Teacher Dashboard</h1>
         <Link
           to="/teacher/create-project"
           className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-kotoba-primary hover:bg-kotoba-primary/90 focus:outline-none"
+          data-tour="new-project-cta"
         >
           Create New Project
         </Link>
@@ -172,10 +193,13 @@ const Dashboard = () => {
         </div>
       )}
 
-      <div className="bg-white shadow overflow-hidden sm:rounded-md">
-        <ul className="divide-y divide-gray-200">
+      <div
+        className="bg-white shadow overflow-hidden sm:rounded-md"
+        data-tour="projects-list"
+      >
+        <ul className="divide-y divide-kotoba-text/10">
           {projects.length === 0 ? (
-            <li className="px-4 py-4 sm:px-6 text-center text-gray-500">
+            <li className="px-4 py-4 sm:px-6 text-center text-kotoba-text/60">
               No active projects. Create one to get started!
             </li>
           ) : (
@@ -211,16 +235,16 @@ const Dashboard = () => {
                           <Link to={`/projects/${project.id}`} className="text-sm font-medium text-kotoba-primary hover:text-kotoba-primary truncate">
                             {project.title}
                           </Link>
-                          <p className="text-xs text-gray-500">Status: {project.status}</p>
+                          <p className="text-xs text-kotoba-text/60">Status: {project.status}</p>
                           {project.is_series && (
-                            <p className="text-xs text-gray-500">Videos uploaded: {videoCount} / {project.num_videos}</p>
+                            <p className="text-xs text-kotoba-text/60">Videos uploaded: {videoCount} / {project.num_videos}</p>
                           )}
                       </div>
-                      <div className="ml-2 flex-shrink-0 flex space-x-2">
+                      <div className="ml-2 flex-shrink-0 flex flex-wrap gap-2">
                         {project.status === 'draft' && (
                           <Link
                             to={`/teacher/projects/${project.id}/edit`}
-                            className="px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800 hover:bg-gray-200"
+                            className="px-2 py-1 text-xs font-semibold rounded-full bg-kotoba-background/60 text-kotoba-text/90 hover:bg-kotoba-text/10"
                           >
                             Edit
                           </Link>
@@ -238,11 +262,11 @@ const Dashboard = () => {
                             )}
                             <button
                               onClick={() => confirmMarkAsReady(project.id)}
-                              className={`px-2 py-1 text-xs font-semibold rounded-full ${isMarkAsReadyDisabled ? 'bg-gray-300 text-gray-600 cursor-not-allowed' : 'bg-green-100 text-green-800 hover:bg-green-200'}`}
+                              className={`px-2 py-1 text-xs font-semibold rounded-full ${isMarkAsReadyDisabled ? 'bg-kotoba-text/20 text-kotoba-text/70 cursor-not-allowed' : 'bg-green-100 text-green-800 hover:bg-green-200'}`}
                               disabled={isMarkAsReadyDisabled}
                               title={markAsReadyTooltip}
                             >
-                              Mark as Ready
+                              Mark as ready
                             </button>
                           </>
                         )}
@@ -257,12 +281,12 @@ const Dashboard = () => {
                         )}
                       </div>
                     </div>
-                    <div className="mt-2 sm:flex sm:justify-between">
+                    <div className="mt-2 sm:flex sm:justify-between" data-tour="funding-summary">
                       <div className="sm:flex">
-                        <p className="flex items-center text-sm text-gray-500">
+                        <p className="flex items-center text-sm text-kotoba-text/60">
                           Goal: €{(project.funding_goal / 100).toFixed(2)}
                         </p>
-                        <p className="mt-2 flex items-center text-sm text-gray-500 sm:mt-0 sm:ml-6">
+                        <p className="mt-2 flex items-center text-sm text-kotoba-text/60 sm:mt-0 sm:ml-6">
                           Raised: €{(project.current_funding / 100).toFixed(2)}
                         </p>
                       </div>

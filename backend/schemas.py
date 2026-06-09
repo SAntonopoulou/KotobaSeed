@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from .models import (
     ConversationStatus,
@@ -12,6 +12,17 @@ from .models import (
     RequestStatus,
     UserRole,
 )
+
+
+def _utc_aware(v):
+    """Naive-datetime → UTC-aware. Pydantic field_validator(mode="before")
+    target so timestamps land in ISO strings with a Z suffix and the
+    browser doesn't shift them by the user's local offset."""
+    if v is None or not isinstance(v, datetime):
+        return v
+    if v.tzinfo is None:
+        return v.replace(tzinfo=UTC)
+    return v
 
 
 class RequestCreate(BaseModel):
@@ -238,13 +249,26 @@ class MessageRead(BaseModel):
     offer_is_series: bool | None = None
     offer_num_videos: int | None = None
     offer_price_per_video: int | None = None
+    # Undo-send + attachments. deleted_at flipped non-null means the
+    # sender retracted within the 60-second window; clients should
+    # render a "Message deleted" placeholder and ignore content.
+    deleted_at: datetime | None = None
+    attachment_url: str | None = None
+    attachment_kind: str | None = None
+
+    @field_validator("created_at", "deleted_at", mode="before")
+    @classmethod
+    def _ensure_utc(cls, v):
+        return _utc_aware(v)
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class ConversationRead(BaseModel):
     id: int
-    request_id: int
+    # Nullable: direct (booking-flow / dashboard) conversations don't
+    # belong to any marketplace request.
+    request_id: int | None = None
     teacher_id: int
     student_id: int
     status: ConversationStatus
@@ -253,27 +277,39 @@ class ConversationRead(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    request: RequestRead
+    request: RequestRead | None = None
     teacher: UserPublicRead
     student: UserPublicRead
     messages: list[MessageRead] = []
+
+    @field_validator("created_at", "updated_at", mode="before")
+    @classmethod
+    def _ensure_utc(cls, v):
+        return _utc_aware(v)
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class ConversationSummaryRead(BaseModel):
     id: int
-    request_id: int
+    request_id: int | None = None
     teacher_id: int
     student_id: int
     status: ConversationStatus
     updated_at: datetime
 
-    request_title: str
+    # Nullable since direct conversations (booking-flow DMs, message
+    # buttons on dashboards) have no marketplace request behind them.
+    request_title: str | None = None
     other_participant: UserPublicRead
     last_message_content: str | None = None
     last_message_created_at: datetime | None = None
     unread_messages_count: int = 0
+
+    @field_validator("updated_at", "last_message_created_at", mode="before")
+    @classmethod
+    def _ensure_utc(cls, v):
+        return _utc_aware(v)
 
     model_config = ConfigDict(from_attributes=True)
 

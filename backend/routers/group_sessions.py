@@ -176,6 +176,20 @@ def create_group_session(
             detail="Sessions must be scheduled in the future.",
         )
 
+    # Quota gate (covers Sophia's Daily.co bill — one room, regardless of
+    # how many seats sell).
+    from ..services import minute_quota
+    if minute_quota.would_exceed_quota(
+        tutor, tutor.user, pack.duration_minutes, session
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail=(
+                "You've hit this month's classroom-minute quota. "
+                "Upgrade your plan or schedule the session for next month."
+            ),
+        )
+
     threshold = sched - timedelta(hours=pack.group_min_threshold_hours)
     gs = GroupSession(
         tutor_id=tutor.id,
@@ -188,6 +202,7 @@ def create_group_session(
     session.add(gs)
     session.commit()
     session.refresh(gs)
+    minute_quota.record_group_session_minutes(gs, session, commit=True)
     return _serialize(session, gs)
 
 
@@ -231,6 +246,11 @@ def cancel_group_session(
     from ..services import group_lessons
 
     group_lessons.refund_session_bookings(session, gs, reason="tutor_cancelled")
+    # Release the reserved-minute row so the quota meter actually drops
+    # — the auto-evaluation cron path does this already; the tutor-
+    # initiated cancel path was leaking minutes forever and eventually
+    # bricked the meter at "fully booked" for the rest of the cycle.
+    minute_quota.release_group_session_minutes(gs, session)
     session.commit()
     return None
 
@@ -306,6 +326,21 @@ def start_group_booking_checkout(
             detail="You already booked this group session.",
         )
 
+    # Non-compete: same protection that applies to 1:1 + trial bookings.
+    from ..services import team_protection as _protection
+    blocked = _protection.is_student_protected_from_tutor(
+        tutor_id=tutor.id, student_user_id=current.id, session=session
+    )
+    if blocked is not None:
+        ends = blocked.protection_ends_at.strftime("%d %b %Y")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                f"This tutor recently moved from a school where you studied. "
+                f"Direct bookings between you re-open on {ends}."
+            ),
+        )
+
     view = _serialize(session, gs)
     if view.seats_available <= 0:
         raise HTTPException(
@@ -329,6 +364,7 @@ def start_group_booking_checkout(
         student_user_id=current.id,
         lesson_pack_id=pack.id,
         group_session_id=gs.id,
+        tutor_team_id=tutor.team_id,
         scheduled_at=gs.scheduled_at,
         duration_minutes=gs.duration_minutes,
         price_cents=pack.price_cents,
@@ -337,6 +373,10 @@ def start_group_booking_checkout(
         status=BookingStatus.PENDING_PAYMENT,
     )
     session.add(booking)
+    from ..services import enrollment as _enroll
+    _enroll.ensure_enrollment(
+        student_user_id=current.id, tutor_id=tutor.id, session=session
+    )
     session.commit()
     session.refresh(booking)
 
@@ -374,11 +414,11 @@ def start_group_booking_checkout(
                 "group_session_id": str(gs.id),
             },
         )
-    except stripe.error.StripeError as exc:
+    except stripe.error.StripeError:
         log.exception("Stripe error starting group booking checkout")
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=str(exc),
+            detail="Could not start checkout. Try again in a moment.",
         ) from None
 
     booking.stripe_checkout_session_id = checkout["id"]

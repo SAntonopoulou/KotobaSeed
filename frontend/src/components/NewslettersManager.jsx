@@ -1,17 +1,82 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import client from '../api/client';
 import { useConfirm } from '../context/ModalContext';
+import { useToast } from '../context/ToastContext';
 import { SkeletonCard } from './Skeleton';
+import { getErrorMessage } from '../utils/errors';
+import { formatDateTime } from '../utils/dates';
+import MarkdownEditor from './editor/MarkdownEditor';
 
 // Per-tutor newsletter compose + history. Two panes: top is the compose
 // form (drafts + editing one); below is a list of past sends + current
-// drafts. No rich editor — markdown textarea with the same subset the
-// transactional emails support (paragraphs / bold / italic / links).
+// drafts. Markdown body with inline image upload + starter templates so
+// tutors aren't staring at an empty box.
+
+const STARTER_TEMPLATES = {
+  welcome: {
+    subject: 'Welcome — here are a few things to get you started',
+    body: `Hi there,
+
+I'm so glad you signed up. Here are a few things to know:
+
+- **Where to start:** the Journal has my latest posts, and a few free pieces to give you a feel.
+- **What to expect:** a short note from me every couple of weeks — a thought, a phrase I love, sometimes a recommendation.
+- **One favour:** hit reply and tell me where you are in your learning. It helps me write things that actually help.
+
+Talk soon,
+`,
+  },
+  weekly_tip: {
+    subject: 'A small thing that makes a big difference',
+    body: `Quick note this week.
+
+The trick I use most often with new students:
+
+> **Say the sentence out loud before you write it.**
+
+If your tongue stumbles, your pen will too. Voicing the sentence first lets you catch the awkward bit while it's still easy to fix.
+
+Try it on the next thing you write. Tell me how it goes.
+
+— Your tutor`,
+  },
+  announcement: {
+    subject: "Something new I'm working on",
+    body: `Hi,
+
+I wanted to share something new I'm putting together — a [short description].
+
+Here's what's in it:
+
+- Point one
+- Point two
+- Point three
+
+If that sounds interesting, [link to it](#).
+
+Thanks for reading,
+`,
+  },
+  new_module: {
+    subject: 'A new module just went live',
+    body: `Hi,
+
+I just published a new module: **[Module name]**.
+
+It covers [what it covers], and it's designed for [who it's for]. There are [N] lessons inside.
+
+[Open it on my site](#)
+
+Let me know what you think — I read every reply.
+
+— Your tutor`,
+  },
+};
 
 const formatDate = (iso) => {
   if (!iso) return '';
   try {
-    return new Date(iso).toLocaleString();
+    return formatDateTime(iso);
   } catch {
     return iso;
   }
@@ -19,6 +84,7 @@ const formatDate = (iso) => {
 
 const NewslettersManager = () => {
   const confirm = useConfirm();
+  const { addToast } = useToast();
   const [items, setItems] = useState([]);
   const [audienceCount, setAudienceCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -28,6 +94,10 @@ const NewslettersManager = () => {
   const [busy, setBusy] = useState(false);
   const [testEmail, setTestEmail] = useState('');
   const [previewHtml, setPreviewHtml] = useState(null);
+  // Bump this when we need to re-mount MarkdownEditor with new initialMarkdown
+  // (e.g. starter template applied, image inserted). The editor is an
+  // uncontrolled component — props are only read on first mount.
+  const [editorReloadKey, setEditorReloadKey] = useState(0);
 
   const load = async () => {
     setLoading(true);
@@ -40,7 +110,7 @@ const NewslettersManager = () => {
       setItems(list.data || []);
       setAudienceCount(count.data?.count ?? 0);
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not load newsletters.');
+      setError(getErrorMessage(err, 'Could not load newsletters.'));
     } finally {
       setLoading(false);
     }
@@ -95,7 +165,7 @@ const NewslettersManager = () => {
       setInfo('Draft saved.');
       await load();
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not save.');
+      setError(getErrorMessage(err, 'Could not save.'));
     } finally {
       setBusy(false);
     }
@@ -112,7 +182,7 @@ const NewslettersManager = () => {
       const res = await client.post(`/tutor/newsletters/${editing.id}/preview`);
       setPreviewHtml(res.data?.body_html ?? '');
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not preview.');
+      setError(getErrorMessage(err, 'Could not preview.'));
     } finally {
       setBusy(false);
     }
@@ -135,7 +205,7 @@ const NewslettersManager = () => {
       });
       setInfo(`Test sent to ${testEmail.trim()}.`);
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not send test.');
+      setError(getErrorMessage(err, 'Could not send test.'));
     } finally {
       setBusy(false);
     }
@@ -159,7 +229,7 @@ const NewslettersManager = () => {
       setInfo(`Sent to ${res.data.recipient_count} ${res.data.recipient_count === 1 ? 'student' : 'students'}.`);
       await load();
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not send.');
+      setError(getErrorMessage(err, 'Could not send.'));
     } finally {
       setBusy(false);
     }
@@ -168,7 +238,7 @@ const NewslettersManager = () => {
   const handleDelete = async (item) => {
     if (!(await confirm({
       title: 'Delete draft',
-      message: `Delete the draft "${item.subject}"?`,
+      message: `Delete the draft "${item.subject}"? You can undo from the toast.`,
       confirmText: 'Delete',
       destructive: true,
     }))) return;
@@ -178,8 +248,22 @@ const NewslettersManager = () => {
       await client.delete(`/tutor/newsletters/${item.id}`);
       if (editing?.id === item.id) cancelEdit();
       await load();
+      addToast({
+        message: `Deleted draft "${item.subject}".`,
+        type: 'success',
+        undo: {
+          onUndo: async () => {
+            try {
+              await client.post(`/tutor/newsletters/${item.id}/restore`);
+              await load();
+            } catch (err) {
+              setError(getErrorMessage(err, 'Restore failed.'));
+            }
+          },
+        },
+      });
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not delete.');
+      setError(getErrorMessage(err, 'Could not delete.'));
     } finally {
       setBusy(false);
     }
@@ -193,7 +277,7 @@ const NewslettersManager = () => {
         <div>
           <h2 className="text-lg font-bold text-kotoba-primary">Newsletter</h2>
           <p className="text-sm text-kotoba-text/70 mt-1">
-            Send markdown updates to <strong>{audienceCount}</strong> {audienceCount === 1 ? 'student' : 'students'} who've booked with you. Recipients can unsubscribe with one click from any email.
+            Send markdown updates to <strong>{audienceCount}</strong> {audienceCount === 1 ? 'student' : 'students'} who've booked with you <em>and</em> opted in to Kotobaseed emails at signup. Recipients can unsubscribe with one click from any email.
           </p>
         </div>
         {!editing && (
@@ -220,6 +304,34 @@ const NewslettersManager = () => {
 
       {editing && (
         <div className="border border-kotoba-text/15 rounded-lg p-4 mb-4 bg-kotoba-background/20 space-y-3">
+          {!isSent && editing.id == null && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <label className="text-xs font-medium text-kotoba-text/70">Start with a template</label>
+              <select
+                value=""
+                onChange={(e) => {
+                  const key = e.target.value;
+                  if (!key || !STARTER_TEMPLATES[key]) return;
+                  const tpl = STARTER_TEMPLATES[key];
+                  setEditing((prev) => ({
+                    ...prev,
+                    subject: tpl.subject,
+                    body_markdown: tpl.body,
+                  }));
+                  setEditorReloadKey((k) => k + 1);
+                }}
+                disabled={busy}
+                className="px-3 py-1.5 text-sm border border-kotoba-text/20 rounded focus:outline-none focus:ring-2 focus:ring-kotoba-primary"
+              >
+                <option value="">— blank —</option>
+                <option value="welcome">Welcome (new subscriber)</option>
+                <option value="weekly_tip">Weekly tip</option>
+                <option value="announcement">Announcement</option>
+                <option value="new_module">New module launched</option>
+              </select>
+            </div>
+          )}
+
           <div>
             <label className="block text-xs font-medium text-kotoba-text/70 mb-1">Subject</label>
             <input
@@ -233,16 +345,50 @@ const NewslettersManager = () => {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-kotoba-text/70 mb-1">Body (markdown)</label>
-            <textarea
-              value={editing.body_markdown}
-              onChange={(e) => setEditing({ ...editing, body_markdown: e.target.value })}
-              rows={10}
-              disabled={busy || isSent}
-              className="w-full px-3 py-2 border border-kotoba-text/20 rounded font-mono text-sm focus:outline-none focus:ring-2 focus:ring-kotoba-primary disabled:bg-kotoba-background"
-            />
+            <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
+              <label className="block text-xs font-medium text-kotoba-text/70">Body</label>
+              {!isSent && (
+                <NewsletterImageUploadButton
+                  onInsert={(url) => {
+                    setEditing((prev) => {
+                      const sep =
+                        !prev.body_markdown || prev.body_markdown.endsWith('\n\n')
+                          ? ''
+                          : prev.body_markdown.endsWith('\n')
+                            ? '\n'
+                            : '\n\n';
+                      return {
+                        ...prev,
+                        body_markdown: `${prev.body_markdown}${sep}![](${url})\n\n`,
+                      };
+                    });
+                    setEditorReloadKey((k) => k + 1);
+                  }}
+                  addToast={addToast}
+                  busy={busy}
+                />
+              )}
+            </div>
+            {isSent ? (
+              <div className="border border-kotoba-text/15 rounded-lg p-4 bg-kotoba-background/50 font-mono text-sm whitespace-pre-wrap text-kotoba-text/80">
+                {editing.body_markdown || '(empty)'}
+              </div>
+            ) : (
+              <MarkdownEditor
+                key={`${editing.id ?? 'new'}-${editorReloadKey}`}
+                initialMarkdown={editing.body_markdown}
+                enableVocab={false}
+                minHeight={260}
+                placeholder="Write something your students will be glad to read…"
+                onChange={({ markdown }) =>
+                  setEditing((prev) =>
+                    prev ? { ...prev, body_markdown: markdown } : prev,
+                  )
+                }
+              />
+            )}
             <p className="mt-1 text-xs text-kotoba-text/60">
-              Markdown supported: <code className="font-mono">**bold**</code>, <code className="font-mono">*italic*</code>, <code className="font-mono">[link](https://...)</code>. Each paragraph goes between blank lines.
+              Use the toolbar above for formatting, or type markdown shortcuts (<code className="font-mono">**bold**</code>, <code className="font-mono">## heading</code>, <code className="font-mono">- list</code>). Sent emails include your name + avatar at the top automatically.
             </p>
           </div>
 
@@ -351,7 +497,7 @@ const NewslettersManager = () => {
         <p className="text-sm text-kotoba-text/70">Loading…</p>
       ) : items.length === 0 && !editing ? (
         <p className="text-sm text-kotoba-text/70 bg-kotoba-background/40 rounded-md p-4">
-          No newsletters yet. Send a quick update about your availability, a new lesson series, or just say hi — students who've booked with you are the warmest possible audience.
+          No newsletters yet. Send a quick update about your availability, a new lesson series, or just say hi — students who've booked with you and opted in to email at signup are the warmest possible audience.
         </p>
       ) : (
         items.length > 0 && (
@@ -407,8 +553,202 @@ const NewslettersManager = () => {
           </ul>
         )
       )}
+
+      <NewsletterPrefsPanel />
     </section>
   );
 };
+
+
+// Inline image upload — opens a file picker, posts to the owner-side
+// upload endpoint, and inserts the resulting URL into the markdown
+// body via the parent's `onInsert` callback.
+const NewsletterImageUploadButton = ({ onInsert, addToast, busy }) => {
+  const ref = useRef(null);
+  const [uploading, setUploading] = useState(false);
+  const pickFile = () => {
+    if (ref.current) ref.current.click();
+  };
+  const onChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await client.post(
+        '/tutor/newsletters/upload-image',
+        fd,
+        { headers: { 'Content-Type': 'multipart/form-data' } },
+      );
+      if (res.data?.url) {
+        onInsert(res.data.url);
+        addToast('Image inserted.', 'success');
+      }
+    } catch (err) {
+      addToast(getErrorMessage(err, 'Could not upload the image.'), 'error');
+    } finally {
+      setUploading(false);
+    }
+  };
+  return (
+    <>
+      <input
+        ref={ref}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/gif"
+        onChange={onChange}
+        className="hidden"
+        disabled={busy || uploading}
+      />
+      <button
+        type="button"
+        onClick={pickFile}
+        disabled={busy || uploading}
+        className="text-xs px-3 py-1 rounded-md border border-kotoba-text/20 text-kotoba-text hover:bg-kotoba-background disabled:opacity-50"
+      >
+        {uploading ? 'Uploading…' : '+ Insert image'}
+      </button>
+    </>
+  );
+};
+
+
+// Public-CTA preference panel. Toggles whether the signup form appears
+// in the footer and/or as a dedicated card on the tutor's homepage, and
+// lets the tutor customise the headline + pitch shown to visitors.
+const NewsletterPrefsPanel = () => {
+  const { addToast } = useToast();
+  const [prefs, setPrefs] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await client.get('/tutor/newsletters/prefs');
+        setPrefs(res.data);
+      } catch {
+        // Silent — panel just won't render
+      }
+    })();
+  }, []);
+
+  if (!prefs) return null;
+
+  const update = (patch) => setPrefs((p) => ({ ...p, ...patch }));
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      const res = await client.patch('/tutor/newsletters/prefs', prefs);
+      setPrefs(res.data);
+      addToast('Signup preferences saved.', 'success');
+    } catch (err) {
+      addToast(getErrorMessage(err, 'Could not save preferences.'), 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="mt-8 border-t border-kotoba-text/10 pt-6">
+      <h3 className="text-base font-bold text-kotoba-primary">
+        Where the signup form appears
+      </h3>
+      <p className="text-xs text-kotoba-text/60 mt-1 mb-4">
+        Control where visitors to your site see the newsletter signup.
+      </p>
+
+      <div className="space-y-3">
+        <label className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={prefs.newsletter_enabled}
+            onChange={(e) => update({ newsletter_enabled: e.target.checked })}
+            disabled={busy}
+            className="mt-1"
+          />
+          <span>
+            <strong>Accept newsletter signups.</strong> Turn this off and the form hides everywhere.
+          </span>
+        </label>
+        <label className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={prefs.newsletter_show_in_footer}
+            onChange={(e) =>
+              update({ newsletter_show_in_footer: e.target.checked })
+            }
+            disabled={busy || !prefs.newsletter_enabled}
+            className="mt-1"
+          />
+          <span>Show a slim signup form in my site footer (every page).</span>
+        </label>
+        <label className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={prefs.newsletter_show_homepage_section}
+            onChange={(e) =>
+              update({ newsletter_show_homepage_section: e.target.checked })
+            }
+            disabled={busy || !prefs.newsletter_enabled}
+            className="mt-1"
+          />
+          <span>
+            Show a dedicated signup card near the bottom of my homepage.
+          </span>
+        </label>
+      </div>
+
+      <div className="mt-4 space-y-3">
+        <div>
+          <label className="block text-xs font-medium text-kotoba-text/70 mb-1">
+            CTA headline (shown to visitors)
+          </label>
+          <input
+            type="text"
+            value={prefs.newsletter_cta_title || ''}
+            onChange={(e) =>
+              update({ newsletter_cta_title: e.target.value || null })
+            }
+            disabled={busy || !prefs.newsletter_enabled}
+            maxLength={120}
+            placeholder="Stay in touch — defaults to your name if left blank"
+            className="w-full px-3 py-2 border border-kotoba-text/20 rounded text-sm focus:outline-none focus:ring-2 focus:ring-kotoba-primary disabled:bg-kotoba-background"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-kotoba-text/70 mb-1">
+            Short description
+          </label>
+          <textarea
+            value={prefs.newsletter_cta_description || ''}
+            onChange={(e) =>
+              update({ newsletter_cta_description: e.target.value || null })
+            }
+            disabled={busy || !prefs.newsletter_enabled}
+            maxLength={400}
+            rows={2}
+            placeholder="A one-liner about what visitors get if they subscribe"
+            className="w-full px-3 py-2 border border-kotoba-text/20 rounded text-sm focus:outline-none focus:ring-2 focus:ring-kotoba-primary disabled:bg-kotoba-background"
+          />
+        </div>
+      </div>
+
+      <div className="mt-4 flex justify-end">
+        <button
+          type="button"
+          onClick={save}
+          disabled={busy}
+          className="px-4 py-2 rounded-md bg-kotoba-primary text-white font-semibold hover:bg-kotoba-primary/90 disabled:opacity-50 text-sm"
+        >
+          {busy ? 'Saving…' : 'Save preferences'}
+        </button>
+      </div>
+    </div>
+  );
+};
+
 
 export default NewslettersManager;

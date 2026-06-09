@@ -122,11 +122,28 @@ def test_delete_requires_owner(client, vasso_tutor, teacher_user, student_user):
     assert r.status_code == 403
 
 
-def test_delete_removes_row(client, vasso_tutor, teacher_user, db_session: Session):
+def test_delete_soft_deletes_and_hides_row(client, vasso_tutor, teacher_user, db_session: Session):
+    """DELETE soft-deletes — row stays in DB, drops out of list endpoints,
+    and can be restored via POST /:id/restore."""
     a = _create(client, auth_headers_for(teacher_user))
+    item_id = a.json()["id"]
     r = client.delete(
-        f"/testimonials/{a.json()['id']}",
+        f"/testimonials/{item_id}",
         headers={"Host": HOST, **auth_headers_for(teacher_user)},
     )
     assert r.status_code == 204
-    assert db_session.get(Testimonial, a.json()["id"]) is None
+    row = db_session.get(Testimonial, item_id)
+    assert row is not None
+    assert row.deleted_at is not None
+    listing = client.get(
+        "/testimonials/all",
+        headers={"Host": HOST, **auth_headers_for(teacher_user)},
+    )
+    assert all(item["id"] != item_id for item in listing.json())
+    restored = client.post(
+        f"/testimonials/{item_id}/restore",
+        headers={"Host": HOST, **auth_headers_for(teacher_user)},
+    )
+    assert restored.status_code == 200
+    db_session.expire_all()
+    assert db_session.get(Testimonial, item_id).deleted_at is None

@@ -52,6 +52,30 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
+def _ensure_wide_version_column(connection) -> None:
+    """Pre-create `alembic_version` with VARCHAR(64) so revision ids over
+    32 chars can be stored (e.g.
+    ``20260607_drop_tutor_marketplace_profile`` is 39 chars).
+
+    Alembic's auto-create uses VARCHAR(32) which truncates on Postgres.
+    By materialising the table here first, alembic's CREATE-IF-NOT-EXISTS
+    is a no-op and the wider column wins. Idempotent on every invocation.
+    """
+    dialect = connection.dialect.name
+    if dialect != "postgresql":
+        return
+    connection.exec_driver_sql(
+        "CREATE TABLE IF NOT EXISTS alembic_version "
+        "(version_num VARCHAR(64) NOT NULL, "
+        "CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num))"
+    )
+    connection.exec_driver_sql(
+        "ALTER TABLE alembic_version "
+        "ALTER COLUMN version_num TYPE VARCHAR(64)"
+    )
+    connection.commit()
+
+
 def run_migrations_online() -> None:
     """Run migrations with a live DB connection."""
     connectable = engine_from_config(
@@ -60,6 +84,7 @@ def run_migrations_online() -> None:
         poolclass=pool.NullPool,
     )
     with connectable.connect() as connection:
+        _ensure_wide_version_column(connection)
         context.configure(
             connection=connection,
             target_metadata=target_metadata,

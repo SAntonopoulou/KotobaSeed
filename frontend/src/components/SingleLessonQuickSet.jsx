@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import client from '../api/client';
 import { useConfirm } from '../context/ModalContext';
+import { getErrorMessage } from '../utils/errors';
 
 // Headline single-lesson price editor — most tutors have one rate
 // (e.g. €25 / 60 min) and don't need the full lesson-pack editor for it.
@@ -53,7 +54,7 @@ const SingleLessonQuickSet = () => {
         currency: data.currency || 'eur',
       });
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not load your single-lesson price.');
+      setError(getErrorMessage(err, 'Could not load your single-lesson price.'));
     } finally {
       setLoading(false);
     }
@@ -91,7 +92,7 @@ const SingleLessonQuickSet = () => {
       setExisting(res.data);
       setInfo('Saved.');
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not save.');
+      setError(getErrorMessage(err, 'Could not save.'));
     } finally {
       setSaving(false);
     }
@@ -115,7 +116,7 @@ const SingleLessonQuickSet = () => {
       setForm(blank);
       setInfo('Removed.');
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not remove.');
+      setError(getErrorMessage(err, 'Could not remove.'));
     } finally {
       setSaving(false);
     }
