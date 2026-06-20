@@ -64,7 +64,7 @@ def _check_rate_limit(ip: str) -> None:
 # --- Schemas ----------------------------------------------------------
 
 
-DemoRole = Literal["tutor", "creator", "student"]
+DemoRole = Literal["tutor", "student"]
 
 
 class DemoEnterPayload(BaseModel):
@@ -115,7 +115,7 @@ def _redirect_for(session: Session, user: User) -> str:
     route — it's tenant-scoped). Returns a full absolute URL so the
     frontend can cross the subdomain boundary with location.assign.
 
-    Creator + student: apex paths, returned as paths (same-origin nav).
+    Student: apex `/discover`, returned as a path (same-origin nav).
     """
     role = user.demo_role
     if role == "tutor":
@@ -126,8 +126,6 @@ def _redirect_for(session: Session, user: User) -> str:
             log.warning("demo tutor user_id=%s has no Tutor row; landing on apex", user.id)
             return "/discover"
         return _tenant_url(tutor.tutor_slug, "/dashboard")
-    if role == "creator":
-        return "/teacher/dashboard"
     return "/discover"
 
 
@@ -191,13 +189,8 @@ def enter_demo(
         )
 
     # Mint fresh.
-    # Both "tutor" and "creator" demo flows map onto the same User.role
-    # (TUTOR). They differ only in onboarding shape — the "creator" demo
-    # skips the tenant-subdomain seeding and lands the user on the apex
-    # /teacher/dashboard, useful for marketplace-only content sellers.
     role_enum = {
         "tutor": UserRole.TUTOR,
-        "creator": UserRole.TUTOR,
         "student": UserRole.STUDENT,
     }[role]
 

@@ -21,14 +21,6 @@ const ROLE_COPY = {
     blurb: 'Pre-filled with a sample tutor site, a couple of articles, a module, and a lesson pack. Edit anything. Nothing goes live until you convert.',
     submitLabel: 'Take me into the demo',
   },
-  creator: {
-    label: 'Creator',
-    eyebrow: 'For marketplace creators',
-    headline: 'Try making projects here.',
-    accent: 'See what the marketplace looks like as a creator.',
-    blurb: 'Pre-filled with a funded project, a completed one, and a few backers. Edit anything. No real money moves.',
-    submitLabel: 'Take me into the demo',
-  },
   student: {
     label: 'Student',
     eyebrow: 'For students',
@@ -214,13 +206,10 @@ const Try = ({ role }) => {
 // bar will still mount once auth settles and they can navigate from
 // there.
 const _redirectForRole = (role) => {
-  // `role` here is the DEMO persona ('tutor' | 'creator' | 'student'),
-  // not the User.role enum. Both demo flows are backed by UserRole.TUTOR
-  // server-side after the 2026-06-09 rename, but the redirect target
-  // still differs: a "tutor" demo gets a tenant subdomain, a "creator"
-  // demo lands on the apex teacher dashboard.
+  // `role` here is the DEMO persona ('tutor' | 'student') — the creator
+  // persona was retired 2026-06-21 since the platform only has tutors
+  // and students now.
   if (role === 'tutor') return '/';
-  if (role === 'creator') return '/teacher/dashboard';
   return '/discover';
 };
 

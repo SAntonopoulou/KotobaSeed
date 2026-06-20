@@ -117,8 +117,6 @@ def seed_workspace(session: Session, user: User) -> None:
     try:
         if user.demo_role == "tutor":
             _seed_tutor(session, user)
-        elif user.demo_role == "creator":
-            _seed_creator(session, user)
         elif user.demo_role == "student":
             _seed_student(session, user)
         user.demo_workspace_seeded_at = datetime.now(UTC)

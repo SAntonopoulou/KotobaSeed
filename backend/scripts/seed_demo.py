@@ -76,7 +76,7 @@ RNG = random.Random(20260607)
 def _seed_sentinel(session: Session) -> bool:
     """True if our sentinel email already exists — abort to avoid double-seed."""
     existing = session.exec(
-        select(User).where(User.email == "vasso@kotobaseed-demo.example")
+        select(User).where(User.email == "nikos@kotobaseed-demo.example")
     ).first()
     return existing is not None
 
@@ -86,10 +86,13 @@ def _seed_sentinel(session: Session) -> bool:
 # specific.
 TUTORS = [
     {
-        "slug": "vasso",
-        "display_name": "Vasso",
-        "full_name": "Vasso Antonopoulou",
-        "email": "vasso@kotobaseed-demo.example",
+        # Renamed from "vasso" 2026-06-21 — staging seed must not share
+        # a slug with any real premier tutor on prod (real Vasso is at
+        # vasso.kotobaseed.net + greekwithvasso.com).
+        "slug": "nikos",
+        "display_name": "Nikos",
+        "full_name": "Nikos Andreou",
+        "email": "nikos@kotobaseed-demo.example",
         "languages": "Greek, English",
         "bio": "Modern Greek tutor based in Athens. Conversational focus, A1–C1.",
         "theme": "aegean",
@@ -401,7 +404,7 @@ def _create_articles(session: Session, tutors: list[Tutor], tutor_users: list[Us
     """Two-to-three articles per tutor at varied recency. Mix of public
     and subscriber-only so the marketplace shows the access tiers."""
     base_titles = {
-        "vasso": [
+        "nikos": [
             ("Three idioms that make your Greek sound native", "Snippets you'll hear in any Athens café."),
             ("Greek accent marks — the only rules worth memorising", "What the textbooks overcomplicate."),
             ("Από where? Greek prepositions in plain English", "A working map of the trickier prepositions."),

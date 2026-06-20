@@ -43,7 +43,6 @@ const DemoBar = () => {
 
   const roleLabel =
     demoRole === 'tutor' ? 'Tutor' :
-    demoRole === 'creator' ? 'Creator' :
     demoRole === 'student' ? 'Student' :
     'Demo';
 

@@ -272,7 +272,6 @@ const ApexShell = () => {
         <Routes>
           <Route path="/" element={currentUser ? <ProjectList /> : <Landing />} />
           <Route path="/try/tutor" element={<Try role="tutor" />} />
-          <Route path="/try/creator" element={<Try role="creator" />} />
           <Route path="/try/student" element={<Try role="student" />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
