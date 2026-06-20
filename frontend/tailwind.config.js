@@ -13,6 +13,11 @@ export default {
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
+    // Static chrome template — single source of truth for the apex
+    // signed-out Navbar + Footer (also pushed into the BeeRanked /news
+    // plugin by scripts/sync_news_chrome.sh). Tailwind needs to scan
+    // it so the classes used here end up in the compiled bundle.
+    "./src/components/apex_chrome.signed_out.html",
   ],
   theme: {
     extend: {

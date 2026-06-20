@@ -8,6 +8,14 @@ import { useAuth } from '../context/AuthContext';
 import { FaEnvelope, FaBars, FaTimes, FaCaretDown } from 'react-icons/fa';
 import { tutorSiteUrl } from '../hooks/useTenant';
 import Avatar from './Avatar';
+// Single source of truth for the signed-out chrome. The same HTML is
+// pushed into the BeeRanked /news plugin by scripts/sync_news_chrome.py
+// so the apex and the blog stay visually identical without me
+// maintaining two copies.
+import chromeHtml from './apex_chrome.signed_out.html?raw';
+
+const SIGNED_OUT_NAV_HTML =
+  chromeHtml.match(/<nav class="bg-white[\s\S]*?<\/nav>/)?.[0] || '';
 
 // Apex navbar. Identity is Kotobaseed-first — tutor SaaS is the headline,
 // the legacy CompInput-era pledges / projects / requests UI hides under a
@@ -115,6 +123,17 @@ const Navbar = () => {
         { to: '/referrals', label: 'Referrals', show: true },
       ].filter((i) => i.show)
     : [];
+
+  // Signed-out path: render the static chrome template verbatim. This is
+  // the SAME HTML that ships into the BeeRanked /news plugin via
+  // scripts/sync_news_chrome.py — single source of truth for the
+  // signed-out navbar across kotobaseed.net and /news/*.
+  // Signed-in path falls through to the React JSX below (avatar,
+  // dropdowns, inbox count, notifications — all the dynamic widgets
+  // that can't live in a static template).
+  if (!user) {
+    return <div dangerouslySetInnerHTML={{ __html: SIGNED_OUT_NAV_HTML }} />;
+  }
 
   return (
     <nav className="bg-white shadow-md sticky top-0 z-50">

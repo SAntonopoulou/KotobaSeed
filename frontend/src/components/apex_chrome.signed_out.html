@@ -1,0 +1,116 @@
+<!--
+  SINGLE SOURCE OF TRUTH for the apex signed-out chrome.
+
+  This file is consumed by THREE places:
+    1. frontend/src/components/Navbar.jsx — renders this when !user via
+       dangerouslySetInnerHTML, then overlays signed-in widgets when user
+       is present
+    2. frontend/src/components/Footer.jsx — renders this footer always
+    3. The BeeRanked /news plugin — `scripts/sync_news_chrome.sh` reads
+       this file, splits on the <nav>…</nav> / <footer>…</footer> blocks
+       and POSTs them to the BeeRanked MCP as banner / footer slots
+
+  Edit ONCE; run sync_news_chrome.sh + a frontend rebuild to land the
+  change everywhere.
+
+  Links use absolute https://kotobaseed.net/* URLs so they work
+  identically from the apex (where a relative href would also resolve
+  fine) and from /news/* (where a relative href would break — e.g.
+  href="/news" on /news/ becomes /news/news).
+
+  The /news link is the exception: it uses href="/news" deliberately
+  because we always want to land at the apex /news section, never
+  cause a /news/news loop.
+-->
+
+<!-- ==== NAVBAR ============================================================ -->
+<nav class="bg-white shadow-md sticky top-0 z-50 font-sans">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="flex justify-between h-16 items-center gap-4">
+
+      <!-- left cluster: logo + primary nav -->
+      <div class="flex items-center min-w-0">
+        <a href="https://kotobaseed.net/" class="flex-shrink-0">
+          <img class="h-8 w-auto" src="https://kotobaseed.net/branding/logo.png" alt="Kotobaseed" />
+        </a>
+        <div class="hidden lg:flex lg:ml-8 lg:items-center lg:space-x-7">
+          <a href="https://kotobaseed.net/library" class="inline-flex items-center px-1 pt-1 border-b-2 border-transparent text-kotoba-text/70 hover:text-kotoba-text hover:border-kotoba-text/20 text-sm font-medium">Find a tutor</a>
+          <a href="https://kotobaseed.net/discover" class="inline-flex items-center px-1 pt-1 border-b-2 border-transparent text-kotoba-text/70 hover:text-kotoba-text hover:border-kotoba-text/20 text-sm font-medium">Discover</a>
+          <a href="https://kotobaseed.net/news" class="inline-flex items-center px-1 pt-1 border-b-2 border-transparent text-kotoba-text/70 hover:text-kotoba-text hover:border-kotoba-text/20 text-sm font-medium">News</a>
+          <a href="https://kotobaseed.net/pricing" class="inline-flex items-center px-1 pt-1 border-b-2 border-transparent text-kotoba-text/70 hover:text-kotoba-text hover:border-kotoba-text/20 text-sm font-medium">Pricing</a>
+          <a href="https://kotobaseed.net/help/tutor-getting-started" class="inline-flex items-center px-1 pt-1 border-b-2 border-transparent text-kotoba-text/70 hover:text-kotoba-text hover:border-kotoba-text/20 text-sm font-medium">For tutors</a>
+        </div>
+      </div>
+
+      <!-- center: search -->
+      <form action="https://kotobaseed.net/library" method="get" class="hidden lg:block flex-1 max-w-sm">
+        <label for="kb-navbar-search" class="sr-only">Search</label>
+        <div class="relative">
+          <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <svg class="h-4 w-4 text-kotoba-text/40" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+              <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd" />
+            </svg>
+          </div>
+          <input id="kb-navbar-search" name="search" class="block w-full pl-9 pr-3 py-1.5 border border-kotoba-text/20 rounded-md text-sm bg-white placeholder-kotoba-text/50 focus:outline-none focus:ring-1 focus:ring-kotoba-primary focus:border-kotoba-primary" placeholder="Find a tutor or topic" type="search" />
+        </div>
+      </form>
+
+      <!-- right cluster: login + get started -->
+      <div class="hidden lg:flex lg:items-center lg:gap-4">
+        <div class="flex items-center gap-3">
+          <a href="https://kotobaseed.net/login" class="text-kotoba-text/70 hover:text-kotoba-text px-3 py-2 text-sm font-medium">Log in</a>
+          <a href="https://kotobaseed.net/register" class="bg-kotoba-primary text-white hover:bg-kotoba-primary/90 px-4 py-2 rounded-md text-sm font-medium">Get started</a>
+        </div>
+      </div>
+
+      <!-- mobile burger -->
+      <div class="flex items-center lg:hidden">
+        <button type="button" onclick="document.documentElement.classList.toggle('kb-mob-open')" aria-label="Open menu" class="p-2 text-kotoba-text/70 hover:text-kotoba-primary">
+          <svg width="20" height="20" viewBox="0 0 448 512" fill="currentColor" aria-hidden="true">
+            <path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- mobile drawer (toggled by burger) -->
+    <div class="kb-mobile-drawer lg:hidden border-t border-kotoba-text/10 py-3 space-y-1">
+      <a href="https://kotobaseed.net/library" class="block px-2 py-2 rounded text-base text-kotoba-text/80 hover:bg-kotoba-background/40">Find a tutor</a>
+      <a href="https://kotobaseed.net/discover" class="block px-2 py-2 rounded text-base text-kotoba-text/80 hover:bg-kotoba-background/40">Discover</a>
+      <a href="https://kotobaseed.net/news" class="block px-2 py-2 rounded text-base text-kotoba-text/80 hover:bg-kotoba-background/40">News</a>
+      <a href="https://kotobaseed.net/pricing" class="block px-2 py-2 rounded text-base text-kotoba-text/80 hover:bg-kotoba-background/40">Pricing</a>
+      <a href="https://kotobaseed.net/help/tutor-getting-started" class="block px-2 py-2 rounded text-base text-kotoba-text/80 hover:bg-kotoba-background/40">For tutors</a>
+      <a href="https://kotobaseed.net/login" class="block px-2 py-2 rounded text-base text-kotoba-text/80 hover:bg-kotoba-background/40">Log in</a>
+      <a href="https://kotobaseed.net/register" class="block px-2 py-2 rounded text-base font-semibold text-kotoba-primary hover:bg-kotoba-primary/5">Get started</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ==== FOOTER ============================================================ -->
+<footer class="bg-white border-t border-kotoba-text/10 mt-auto font-sans">
+  <div class="max-w-7xl mx-auto py-10 px-4 sm:px-6 lg:px-8">
+
+    <nav class="flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm text-kotoba-text/70 mb-3">
+      <a href="https://kotobaseed.net/privacy" class="hover:text-kotoba-primary">Privacy</a>
+      <a href="https://kotobaseed.net/terms" class="hover:text-kotoba-primary">Terms</a>
+      <a href="https://kotobaseed.net/legal/tutor-agreement" class="hover:text-kotoba-primary">Tutor agreement</a>
+      <a href="https://kotobaseed.net/legal/acceptable-use" class="hover:text-kotoba-primary">Acceptable use</a>
+      <a href="https://kotobaseed.net/legal/cookies" class="hover:text-kotoba-primary">Cookies</a>
+      <a href="https://kotobaseed.net/refunds" class="hover:text-kotoba-primary">Refunds</a>
+      <a href="https://kotobaseed.net/pricing" class="hover:text-kotoba-primary">Pricing</a>
+      <a href="https://kotobaseed.net/news" class="hover:text-kotoba-primary">News</a>
+      <a href="https://kotobaseed.net/help" class="hover:text-kotoba-primary">Help</a>
+      <a href="https://kotobaseed.net/status" class="hover:text-kotoba-primary">Status</a>
+    </nav>
+
+    <nav class="flex flex-wrap justify-center gap-x-6 gap-y-1 text-xs text-kotoba-text/55 mb-4">
+      <a href="mailto:dpo@kotobaseed.net" class="hover:text-kotoba-primary">Data protection (DPO): dpo@kotobaseed.net</a>
+      <a href="https://kotobaseed.net/legal/report-content" class="hover:text-kotoba-primary">Report illegal content</a>
+    </nav>
+
+    <p class="text-center text-sm text-kotoba-text/50">
+      &copy; <span class="kb-year"></span> Kotobaseed. All rights reserved.
+    </p>
+  </div>
+  <script>document.querySelectorAll('.kb-year').forEach(function(el){el.textContent=new Date().getFullYear();});</script>
+</footer>
