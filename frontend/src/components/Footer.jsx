@@ -77,6 +77,10 @@ const Footer = () => {
           <Link to="/legal/cookies" className="hover:text-kotoba-primary">Cookies</Link>
           <Link to="/refunds" className="hover:text-kotoba-primary">Refunds</Link>
           <Link to="/pricing" className="hover:text-kotoba-primary">Pricing</Link>
+          {/* /news/ is served by Caddy (BeeRanked-synced static), not a
+              React route — must be a plain <a> so the browser does a
+              full navigation. */}
+          <a href="/news" className="hover:text-kotoba-primary">News</a>
           <Link to="/help" className="hover:text-kotoba-primary">Help</Link>
           <Link to="/status" className="hover:text-kotoba-primary">Status</Link>
           {config.support_email && (

@@ -132,6 +132,11 @@ const Navbar = () => {
               <Link to="/discover" className={primaryLinkCls}>
                 Discover
               </Link>
+              {/* /news/ is served by Caddy (BeeRanked static), not a React
+                  route — plain <a> so the browser navigates out of the SPA. */}
+              <a href="/news" className={primaryLinkCls}>
+                News
+              </a>
               {user && (
                 <Link to="/groups" className={primaryLinkCls}>
                   Groups
@@ -388,6 +393,13 @@ const Navbar = () => {
             >
               Discover
             </Link>
+            <a
+              href="/news"
+              onClick={() => setMobileOpen(false)}
+              className="block px-2 py-2 rounded text-base text-kotoba-text/80 hover:bg-kotoba-background/40"
+            >
+              News
+            </a>
             {user && (
               <Link
                 to="/groups"
