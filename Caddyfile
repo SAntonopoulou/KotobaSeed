@@ -67,6 +67,18 @@ api.{$PLATFORM_APEX} {
         }
     }
 
+    # Stable branding assets on the APEX. Static integrations (BeeRanked
+    # plugin slots) reference these — the path doesn't change on frontend
+    # rebuilds the way /assets/Logo-<hash>.png does.
+    @apex_branding {
+        host {$PLATFORM_APEX}
+        path /branding/*
+    }
+    handle @apex_branding {
+        root * /srv
+        file_server
+    }
+
     # /news/* on the APEX ONLY (never on tutor subdomains). BeeRanked's
     # outbound-only agent syncs static blog + SEO content into the
     # shared `beeranked_content` volume; Caddy serves it directly so

@@ -196,6 +196,11 @@ services:
       # BeeRanked-synced blog/SEO content. The agent below writes here;
       # Caddy serves it read-only at /news on the apex (see Caddyfile).
       - beeranked_content:/srv/beeranked-content:ro
+      # Stable branding assets — Caddy serves these at kotobaseed.net/branding/*
+      # so static integrations (e.g. BeeRanked plugin slots) can reference
+      # them without depending on the Vite-hashed /assets/Logo-<hash>.png URL
+      # that changes on every frontend rebuild.
+      - ./branding:/srv/branding:ro
 
   # BeeRanked agent. Outbound-only — pulls published blog/SEO content
   # from studio.beeranked.online and writes static HTML into the shared
