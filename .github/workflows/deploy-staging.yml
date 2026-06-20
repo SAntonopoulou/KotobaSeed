@@ -83,8 +83,14 @@ jobs:
 
       - name: Build and restart stack
         run: |
+          # Force VITE_API_URL=/api at build time so the frontend bundle
+          # hits same-origin (Caddy on staging proxies /api/* → backend).
+          # Without this, the build falls back to the docker-compose
+          # default `https://api.kotobaseed.net` and the staging frontend
+          # would talk to PROD's API, showing prod tutors on demo. Burned
+          # by this 2026-06-21.
           ssh -i ~/.ssh/id_deploy "$STAGING_USER@$STAGING_HOST" \
-            "cd $STAGING_PATH && docker compose up -d --build backend frontend"
+            "cd $STAGING_PATH && VITE_API_URL=/api VITE_PLATFORM_APEX=demo.kotobaseed.net docker compose up -d --build backend frontend"
 
       - name: Wait for backend to come up
         run: |
