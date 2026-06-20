@@ -208,6 +208,7 @@ services:
       BEERANKED_KEY: ${BEERANKED_KEY:?BEERANKED_KEY must be set}
       BEERANKED_ENDPOINT: ${BEERANKED_ENDPOINT:-https://studio.beeranked.online/api/agent}
       BEERANKED_PATH: ${BEERANKED_PATH:-/news}
+      BEERANKED_INTERVAL: ${BEERANKED_INTERVAL:-60}
     volumes:
       - beeranked_content:/out
 
