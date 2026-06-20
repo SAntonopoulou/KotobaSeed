@@ -193,6 +193,23 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
+      # BeeRanked-synced blog/SEO content. The agent below writes here;
+      # Caddy serves it read-only at /news on the apex (see Caddyfile).
+      - beeranked_content:/srv/beeranked-content:ro
+
+  # BeeRanked agent. Outbound-only — pulls published blog/SEO content
+  # from studio.beeranked.online and writes static HTML into the shared
+  # `beeranked_content` volume. Nothing inbound; Caddy serves the files.
+  # Configured by BEERANKED_KEY in .env (connector key from the MCP).
+  beeranked-agent:
+    image: beeranked/agent:latest
+    restart: unless-stopped
+    environment:
+      BEERANKED_KEY: ${BEERANKED_KEY:?BEERANKED_KEY must be set}
+      BEERANKED_ENDPOINT: ${BEERANKED_ENDPOINT:-https://studio.beeranked.online/api/agent}
+      BEERANKED_PATH: ${BEERANKED_PATH:-/news}
+    volumes:
+      - beeranked_content:/out
 
 volumes:
   postgres_data:
@@ -200,3 +217,4 @@ volumes:
   backend_data:
   caddy_data:
   caddy_config:
+  beeranked_content:
