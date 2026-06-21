@@ -1477,12 +1477,12 @@ article {
   .docs-toc-rail.docs-toc-rail { display: none; }
 }
 
-/* --- Page wrappers BR emits for wiki + docs ------------------------- */
-
-.wiki-page.wiki-page,
-.docs-page.docs-page {
-  padding: 2.5rem 0 4rem;
-}
+/* --- Page wrappers BR emits for wiki + docs -------------------------
+   BR sets `class="wiki-page"` / `class="docs-page"` on the BODY
+   element itself. We deliberately DO NOT add padding or layout here
+   — it would push the apex Navbar down and break the sticky chrome.
+   Use these only as scoping prefixes if a per-type override is ever
+   needed (e.g. .wiki-page .br-app … to target a wiki-only tweak). */
 
 /* --- Changelog (renders when entries are published) ----------------- */
 
