@@ -72,10 +72,19 @@ const Try = ({ role }) => {
       // Cookie is set by the response. Calling login('') re-triggers
       // the auth bootstrap so /users/me reads back the new session.
       login('');
+      // Tutor demos land in the brand wizard first — visitors who pick
+      // "Try as a tutor" expect to actually build something, not be
+      // dropped into a half-seeded dashboard. The wizard runs on the
+      // apex (demo.kotobaseed.net/try/tutor/build) and finishes by
+      // crossing into the tutor subdomain dashboard.
+      if (role === 'tutor') {
+        navigate('/try/tutor/build', { replace: true });
+        return;
+      }
       const dest = res.data?.redirect_path || _redirectForRole(role);
-      // Tutor lands on a tenant subdomain; that requires a full-page
-      // nav so the browser actually crosses origins (react-router
-      // would leave us stranded on the apex).
+      // Students land on /discover or a tenant subdomain depending on
+      // the seeded session; cross origins via window.location when the
+      // server hands us an absolute URL.
       if (/^https?:\/\//i.test(dest)) {
         window.location.assign(dest);
       } else {

@@ -28,6 +28,7 @@ const GroupDetail = lazy(() => import('./pages/GroupDetail'));
 const GroupThreads = lazy(() => import('./pages/GroupThreads'));
 const GroupThreadDetail = lazy(() => import('./pages/GroupThreadDetail'));
 const Try = lazy(() => import('./pages/Try'));
+const TryBuild = lazy(() => import('./pages/TryBuild'));
 import TutorHome from './pages/TutorHome';
 import ConsentNotice from './components/ConsentNotice';
 import { useTenant, isDemoEnv } from './hooks/useTenant';
@@ -290,6 +291,7 @@ const ApexShell = () => {
           />
           <Route path="/try" element={<TryLanding />} />
           <Route path="/try/tutor" element={<Try role="tutor" />} />
+          <Route path="/try/tutor/build" element={<TryBuild />} />
           <Route path="/try/student" element={<Try role="student" />} />
           {/* On demo, /login and /register funnel into /try — the role
               chooser is the conversion path. TryLanding offers an
