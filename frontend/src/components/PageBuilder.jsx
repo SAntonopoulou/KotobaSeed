@@ -38,6 +38,20 @@ const nextUid = (() => {
 })();
 const withUid = (s) => (s._uid ? s : { ...s, _uid: nextUid() });
 
+// Human-friendly "Saved 12s ago" for the auto-save indicator. The label
+// is intentionally low-res ("just now" / "Xs" / "Xm" / "X hours") — we
+// don't want users counting seconds, we want them confident their work
+// has hit the server.
+const formatSavedAgo = (when) => {
+  const seconds = Math.floor((Date.now() - when.getTime()) / 1000);
+  if (seconds < 5) return 'just now';
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ago`;
+};
+
 // Pro+ feature. The dashboard renders this regardless of tier and the
 // component itself shows the gate prompt for non-Pro tutors — keeps the
 // "what would I get?" reasoning visible without forcing them to upgrade
@@ -61,6 +75,14 @@ const PageBuilder = () => {
   const [showPicker, setShowPicker] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [tutorSlug, setTutorSlug] = useState(null);
+  // Auto-save state. `lastSavedAt` powers the "Saved 12s ago" label;
+  // `autoSaveError` lets the user trigger a manual retry when the
+  // debounced save couldn't reach the server.
+  const [lastSavedAt, setLastSavedAt] = useState(null);
+  const [autoSaveError, setAutoSaveError] = useState(null);
+  // Tick state so the "Saved Xs ago" indicator stays fresh without
+  // forcing the editor to re-render on every keystroke.
+  const [, setIndicatorTick] = useState(0);
 
   const isPro = tier === 'pro' || tier === 'business';
 
@@ -219,28 +241,99 @@ const PageBuilder = () => {
     load();
   }, []);
 
+  // Auto-save: any time the user dirties the layout, schedule a save
+  // 800ms after the most recent edit. Cancel if more edits land in
+  // that window (typing keeps the timer pushed out). Skip when the
+  // initial load is still running, a save is already in flight, or
+  // the tutor doesn't have Pro (the API would 402 and surface as a
+  // permanent error banner).
+  useEffect(() => {
+    if (!dirty || loading || saving || !isPro) return undefined;
+    const handle = setTimeout(() => {
+      save();
+    }, 800);
+    return () => clearTimeout(handle);
+  }, [dirty, loading, saving, isPro, sections]);
+
+  // Keep the "Saved Xs ago" indicator from going stale. Re-render once
+  // every 5s — cheap, and the indicator's only granularity is "just
+  // now / Xs ago / Xm ago", so a 5s tick is sufficient resolution.
+  useEffect(() => {
+    if (!lastSavedAt) return undefined;
+    const handle = setInterval(() => setIndicatorTick((n) => n + 1), 5000);
+    return () => clearInterval(handle);
+  }, [lastSavedAt]);
+
+  // Warn before the user closes the tab with unsaved edits in the
+  // debounce window. The browser ignores the message text but shows
+  // its default "leave site?" prompt as long as preventDefault fires.
+  useEffect(() => {
+    if (!dirty) return undefined;
+    const handler = (e) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [dirty]);
+
   const save = async () => {
+    // Snapshot the sections at save-call time AND the dirty flag's
+    // pre-call state. If the user kept typing during the HTTP roundtrip,
+    // the response merge would otherwise stomp their in-flight edits.
+    const snapshot = sections;
     setSaving(true);
     setError('');
     setInfo('');
+    setAutoSaveError(null);
     try {
       const payload = {
-        sections: sections.map((s) => ({
+        sections: snapshot.map((s) => ({
           section_type: s.section_type,
           is_visible: s.is_visible !== false,
           content: s.content || {},
         })),
       };
       const res = await client.put('/tutor/page-sections', payload);
-      setSections((res.data || []).map(withUid));
-      setDirty(false);
-      setInfo('Saved.');
+      const serverRows = (res.data || []).map(withUid);
+      // Merge server response by position so we pick up newly-assigned
+      // ids for sections the user added, without clobbering content the
+      // user typed while the HTTP roundtrip was in flight. We hold the
+      // current `sections` reference at adopt time so the comparison
+      // uses live state, not the snapshot.
+      setSections((current) => {
+        if (current === snapshot) {
+          // Nothing changed during the save — adopt the server's
+          // canonical view (with assigned ids) wholesale.
+          return serverRows;
+        }
+        // Edits happened during save. Adopt only the server-side `id`
+        // for sections still in the same position; keep everything
+        // else (content, _uid, is_visible) from the user's current
+        // local state. They'll re-save on the next debounce tick.
+        return current.map((row, idx) => {
+          const serverRow = serverRows[idx];
+          if (!serverRow) return row;
+          return row.id != null ? row : { ...row, id: serverRow.id };
+        });
+      });
+      // Mark clean only if no edits sneaked in during the roundtrip.
+      // If they did, leaving dirty=true triggers the next debounce
+      // cycle automatically.
+      setDirty((wasDirtyAtAdoptTime) =>
+        sections === snapshot ? false : wasDirtyAtAdoptTime,
+      );
+      setLastSavedAt(new Date());
     } catch (err) {
       const status = err?.response?.status;
       if (status === 402) {
-        setError('The page builder is a Pro feature. Upgrade to save changes.');
+        const msg = 'The page builder is a Pro feature. Upgrade to save changes.';
+        setError(msg);
+        setAutoSaveError(msg);
       } else {
-        setError(getErrorMessage(err, 'Could not save your layout.'));
+        const msg = getErrorMessage(err, "Couldn't save your layout.");
+        setError(msg);
+        setAutoSaveError(msg);
       }
     } finally {
       setSaving(false);
@@ -442,18 +535,34 @@ const PageBuilder = () => {
         >
           Reset to default layout
         </button>
-        <div className="flex items-center gap-3">
-          {dirty && (
-            <span className="text-xs text-kotoba-text/60">Unsaved changes</span>
-          )}
-          <button
-            type="button"
-            onClick={save}
-            disabled={saving || !dirty || !isPro}
-            className="px-5 py-2 rounded-md bg-kotoba-primary text-white font-semibold hover:bg-kotoba-primary/90 disabled:opacity-50"
-          >
-            {saving ? 'Saving…' : 'Save layout'}
-          </button>
+        <div className="flex items-center gap-3 text-sm" aria-live="polite">
+          {autoSaveError ? (
+            <>
+              <span className="text-red-600">Couldn't save</span>
+              <button
+                type="button"
+                onClick={save}
+                disabled={saving || !isPro}
+                className="px-3 py-1.5 rounded-md border border-kotoba-text/20 text-kotoba-text/80 hover:bg-kotoba-background/60 disabled:opacity-50"
+              >
+                Retry
+              </button>
+            </>
+          ) : saving ? (
+            <span className="inline-flex items-center gap-1.5 text-kotoba-text/60">
+              <span
+                aria-hidden
+                className="inline-block h-1.5 w-1.5 rounded-full bg-kotoba-primary animate-pulse"
+              />
+              Saving…
+            </span>
+          ) : dirty ? (
+            <span className="text-kotoba-text/60">Editing…</span>
+          ) : lastSavedAt ? (
+            <span className="text-kotoba-text/60">
+              Saved {formatSavedAgo(lastSavedAt)}
+            </span>
+          ) : null}
         </div>
       </div>
         </div>
