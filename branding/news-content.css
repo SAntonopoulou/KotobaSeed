@@ -1742,6 +1742,157 @@ article {
    Use these only as scoping prefixes if a per-type override is ever
    needed (e.g. .wiki-page .br-app … to target a wiki-only tweak). */
 
+/* --- Category archive page (same shape as the blog listing) -------- */
+
+/* BR archive pages reuse `.container-wide` + `<h1>Title</h1><p>Sub</p>`
+   + `.entry-card` grid (already styled). The category name + count
+   line render through the existing listing-intro styles. We only add:
+   the type-context line ABOVE the category name (small-caps kicker)
+   when BR emits one as `.archive-kicker`/`.category-kicker` — both
+   selectors targeted defensively. */
+
+.archive-kicker.archive-kicker,
+.category-kicker.category-kicker,
+.br-app .container-wide [class$="-kicker"] {
+  display: inline-block;
+  font-family: 'Quicksand', sans-serif;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgb(var(--kotoba-primary-rgb, 22 86 29));
+  margin-bottom: 1rem;
+}
+
+/* --- Pagination ----------------------------------------------------- */
+
+/* Editorial pagination: tight centered row beneath the listing, with
+   a hairline rule above. Numbered pages render as italic Fraunces;
+   Prev/Next as small-caps Quicksand with the underline-reveal
+   treatment. Current page reads in honey gold. Targets `.pagination`,
+   `.pager`, and generic `nav[aria-label*="agination"]` defensively
+   so it covers whichever shape BR ships. */
+
+.br-app .pagination,
+.br-app .pager,
+.br-app nav[aria-label*='agination' i] {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  max-width: 1100px;
+  margin: 4rem auto 2rem;
+  padding: 2.5rem 2rem 0;
+  border-top: 1px solid var(--kb-border);
+  font-family: 'Quicksand', sans-serif;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--kb-text-mute);
+}
+
+.br-app .pagination a,
+.br-app .pager a,
+.br-app nav[aria-label*='agination' i] a {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  padding: 0.5rem 0.85rem;
+  color: var(--kb-text) !important;
+  text-decoration: none !important;
+  position: relative;
+  font-family: 'Quicksand', sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  transition: color 0.18s ease;
+}
+
+.br-app .pagination a::after,
+.br-app .pager a::after,
+.br-app nav[aria-label*='agination' i] a::after {
+  content: '';
+  position: absolute;
+  left: 0.85rem;
+  right: 0.85rem;
+  bottom: 0.15rem;
+  height: 1px;
+  background: var(--kb-text);
+  transform: scaleX(0);
+  transform-origin: center;
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.br-app .pagination a:hover::after,
+.br-app .pager a:hover::after,
+.br-app nav[aria-label*='agination' i] a:hover::after {
+  transform: scaleX(1);
+}
+
+/* Numbered page links (Fraunces italic). Sits between the prev/next
+   small-caps anchors, reads as the volume marker in a magazine. */
+.br-app .pagination .page,
+.br-app .pagination li > a:not(.prev):not(.next):not([rel='prev']):not([rel='next']),
+.br-app .pager .page,
+.br-app nav[aria-label*='agination' i] .page {
+  font-family: 'Fraunces', 'Lora', Georgia, serif;
+  font-style: italic;
+  font-weight: 400;
+  font-size: 1.125rem;
+  letter-spacing: -0.01em;
+  text-transform: none;
+}
+
+/* Current page — honey gold italic, no hover underline. */
+.br-app .pagination [aria-current='page'],
+.br-app .pagination .is-current,
+.br-app .pagination .active,
+.br-app .pager [aria-current='page'],
+.br-app nav[aria-label*='agination' i] [aria-current='page'] {
+  font-family: 'Fraunces', 'Lora', Georgia, serif;
+  font-style: italic;
+  font-weight: 600;
+  font-size: 1.25rem;
+  color: var(--kb-honey) !important;
+  background: transparent;
+  border: 0;
+  letter-spacing: -0.01em;
+  text-transform: none;
+  padding: 0.5rem 0.85rem;
+  pointer-events: none;
+}
+
+/* Disabled / non-link pagination items (ellipsis, current, gaps). */
+.br-app .pagination .disabled,
+.br-app .pagination span:not([aria-current]) {
+  color: var(--kb-text-mute);
+  padding: 0.5rem 0.85rem;
+}
+
+/* Prev / next labels — italic-arrow embellishment on the small caps
+   anchor. */
+.br-app .pagination .prev::before,
+.br-app .pagination [rel='prev']::before,
+.br-app .pager .prev::before {
+  content: '←';
+  margin-right: 0.3rem;
+  font-family: 'Fraunces', serif;
+  font-style: italic;
+  font-size: 0.95rem;
+}
+
+.br-app .pagination .next::after,
+.br-app .pagination [rel='next']::after,
+.br-app .pager .next::after {
+  content: '→';
+  margin-left: 0.3rem;
+  font-family: 'Fraunces', serif;
+  font-style: italic;
+  font-size: 0.95rem;
+}
+
 /* --- Changelog (renders when entries are published) ----------------- */
 
 .changelog.changelog,
