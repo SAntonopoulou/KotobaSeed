@@ -133,12 +133,17 @@ export function apexUrl(path = '/') {
  * make sense in a demo context — e.g. /login and /register, which on
  * demo should funnel to /try (the role chooser) instead of the real
  * auth pages, because demo accounts are passwordless seeded.
+ *
+ * NOTE: don't derive this from PLATFORM_APEX. The staging build sets
+ * PLATFORM_APEX = "demo.kotobaseed.net" itself, so `demo.${PLATFORM_APEX}`
+ * would resolve to "demo.demo.kotobaseed.net" and never match anything.
+ * Hard-coding the literal demo hostname is correct and intentional.
  */
+const DEMO_APEX = 'demo.kotobaseed.net';
 export function isDemoEnv() {
   if (typeof window === 'undefined') return false;
   const host = window.location.hostname;
-  const demoApex = `demo.${PLATFORM_APEX}`;
-  return host === demoApex || host.endsWith(`.${demoApex}`);
+  return host === DEMO_APEX || host.endsWith(`.${DEMO_APEX}`);
 }
 
 /**

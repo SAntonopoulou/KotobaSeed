@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { isDemoEnv } from '../hooks/useTenant';
 
 // /try landing — the role chooser shown to signed-out visitors on the
 // public demo host (demo.kotobaseed.net). On the real apex,
@@ -84,12 +85,24 @@ const TryLanding = () => (
           }}
         >
           Already have a real account?{' '}
-          <Link
-            to="/login"
-            className="text-kotoba-primary underline decoration-kotoba-primary/40 hover:decoration-kotoba-primary underline-offset-4"
-          >
-            Sign in
-          </Link>
+          {/* On demo, /login redirects back to /try (sealed flow), so the
+              escape hatch must leave demo entirely — point at the apex's
+              real auth page. On the apex this stays as an internal link. */}
+          {isDemoEnv() ? (
+            <a
+              href="https://kotobaseed.net/login"
+              className="text-kotoba-primary underline decoration-kotoba-primary/40 hover:decoration-kotoba-primary underline-offset-4"
+            >
+              Sign in
+            </a>
+          ) : (
+            <Link
+              to="/login"
+              className="text-kotoba-primary underline decoration-kotoba-primary/40 hover:decoration-kotoba-primary underline-offset-4"
+            >
+              Sign in
+            </Link>
+          )}
           .
         </p>
       </section>

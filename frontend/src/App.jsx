@@ -30,7 +30,7 @@ const GroupThreadDetail = lazy(() => import('./pages/GroupThreadDetail'));
 const Try = lazy(() => import('./pages/Try'));
 import TutorHome from './pages/TutorHome';
 import ConsentNotice from './components/ConsentNotice';
-import { useTenant } from './hooks/useTenant';
+import { useTenant, isDemoEnv } from './hooks/useTenant';
 
 // Lazy-loaded routes — each becomes its own chunk on demand.
 const ProjectList = lazy(() => import('./pages/ProjectList'));
@@ -291,8 +291,19 @@ const ApexShell = () => {
           <Route path="/try" element={<TryLanding />} />
           <Route path="/try/tutor" element={<Try role="tutor" />} />
           <Route path="/try/student" element={<Try role="student" />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
+          {/* On demo, /login and /register funnel into /try — the role
+              chooser is the conversion path. TryLanding offers an
+              "Already have a real account?" escape that points at the
+              real apex (kotobaseed.net/login) to avoid the redirect
+              loop and let crossover users out of the demo entirely. */}
+          <Route
+            path="/login"
+            element={isDemoEnv() ? <Navigate to="/try" replace /> : <Login />}
+          />
+          <Route
+            path="/register"
+            element={isDemoEnv() ? <Navigate to="/try" replace /> : <Register />}
+          />
           <Route path="/archive" element={<Archive />} />
           <Route path="/pricing" element={<Pricing />} />
           <Route path="/library" element={<Library />} />
