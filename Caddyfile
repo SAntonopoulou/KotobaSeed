@@ -91,10 +91,28 @@ api.{$PLATFORM_APEX} {
         path /news /news/*
     }
     handle @apex_news {
-        uri strip_prefix /news
-        root * /srv/beeranked-out
-        try_files {path} {path}/index.html
-        file_server
+        # `route` forces textual directive order — outside a route the
+        # default ordering runs `rewrite` BEFORE `handle`, which would
+        # send every request to / regardless of file existence.
+        route {
+            uri strip_prefix /news
+            root * /srv/beeranked-out
+
+            # If the requested file exists in the rewriter's output,
+            # serve it. Otherwise fall through to the apex SPA —
+            # react-router's `<Route path="*" element={<Navigate to="/"
+            # replace />} />` redirects the user to the apex home, the
+            # apex's "default 404" behaviour, applied to /news too.
+            @news_file file {
+                try_files {path} {path}/index.html
+            }
+            handle @news_file {
+                file_server
+            }
+
+            rewrite * /
+            reverse_proxy frontend:80
+        }
     }
 
     # /api/* on the apex (and any tenant subdomain) forwards to the
