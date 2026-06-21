@@ -138,20 +138,45 @@ a {
   text-align: center;
 }
 
+/* Hero badge: text-only wordmark, no pill, no logo. The Kotobaseed
+   image BR drops in carries a baked-in white background that reads as
+   a hard rectangle on any non-white surface — so we hide it and let
+   the wordmark below carry the brand. */
+.hero-logo {
+  display: none !important;
+}
+
 .hero-badge.hero-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.4rem 0.85rem;
-  border-radius: 9999px;
-  background: var(--kb-primary-soft);
-  color: var(--kb-primary);
-  font-family: 'Quicksand', sans-serif;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  margin-bottom: 1.25rem;
+  display: inline-block;
+  padding: 0 !important;
+  background: transparent !important;
+  border-radius: 0 !important;
+  text-transform: none !important;
+  margin-bottom: 1.5rem !important;
+}
+
+/* The BR-emitted <span>Kotobaseed</span> inside .hero-badge. Render it
+   as a serif wordmark and split the colour at the "Kotoba" / "seed"
+   boundary using a linear-gradient with a hard stop, then mask the
+   gradient through the text via background-clip. */
+.hero-badge.hero-badge > span {
+  font-family: 'Fraunces', 'Lora', Georgia, serif !important;
+  font-weight: 700 !important;
+  font-size: clamp(1.75rem, 3.5vw, 2.5rem) !important;
+  letter-spacing: -0.02em !important;
+  line-height: 1 !important;
+  color: transparent !important;
+  background: linear-gradient(
+    to right,
+    rgb(var(--kotoba-primary-rgb, 22 86 29)) 0%,
+    rgb(var(--kotoba-primary-rgb, 22 86 29)) 60%,
+    var(--kb-honey) 60%,
+    var(--kb-honey) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  display: inline-block;
 }
 
 .hero-title.hero-title {
