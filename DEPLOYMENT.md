@@ -267,10 +267,91 @@ Before announcing the launch, click through:
 
 ## Re-deploying after changes
 
+> **Post-launch rule (2026-06-21):** Kotobaseed has paying tutors on
+> LIVE Stripe. Direct-to-prod deploys are no longer acceptable except
+> as a declared incident hotfix. Every change goes staging → soak →
+> scheduled prod window. The sections below walk that flow.
+
+### Day-to-day: staging on every merge
+
+`deploy-staging.yml` is the canonical staging deploy. It runs
+automatically on every push to `main` (after `ci.yml` is green) and
+rebuilds `demo.kotobaseed.net`. No human action needed.
+
+To verify a staging deploy landed:
+
 ```bash
-ssh kotobaseed@<SERVER_IP>
+gh run list --workflow=deploy-staging.yml --limit 3
+curl -sk https://demo.kotobaseed.net/api/healthz
+# Then hit the surfaces you changed in a browser.
+```
+
+If you absolutely must bypass CI (the CI runner is down, or you're
+shipping a fix at 03:00 and waiting on tests would block paying
+tutors), use the tar-over-SSH recipe at the bottom of this section
+and write a one-line note in the PR explaining why CI was skipped.
+
+### Prod: scheduled window, not on merge
+
+Prod ships on a tagged release — `deploy-prod.yml` is gated behind
+the `production` GitHub Environment and Sophia clicks "Approve and
+deploy" in the Actions UI. Mechanics + rollback are in the CI/CD
+section below; the discipline around timing lives here.
+
+**Required for every prod deploy:**
+
+1. **Soak ≥24h on staging** with no regressions reported. Exception:
+   declared hotfix (broken payments, security exposure, active
+   incident) — write the reason into the tag annotation:
+   `git tag -a v1.4.3 -m "HOTFIX: stripe webhook 5xx (incident-2026-06-22)"`.
+2. **Scheduled window.** Default slot is Tuesday or Wednesday
+   06:00–07:00 Athens time. Move it only if a tutor has flagged a
+   live class in that window — check the admin bookings view first.
+3. **Maintenance banner posted ≥12h ahead.** Admin → Maintenance →
+   "Schedule a banner". Wording: "Kotobaseed will be briefly
+   unavailable on `<date>` between `<start>` and `<end>` (Athens
+   time) for a planned update." Bilingual if the audience needs it.
+4. **Pre-deploy checklist** (in the PR description):
+   - [ ] Touched flows smoke-tested on staging in a browser
+   - [ ] `pytest` + `npm run build` both green in CI
+   - [ ] Migration risk assessed; rollback plan written if non-trivial
+   - [ ] DB snapshot will be taken by the workflow (no action needed,
+         just confirm `db_backup` ran in the last 24h)
+   - [ ] Vasso / Dafni / Mary not in a live class at the window
+5. **Tag + push.** From a clean `main`:
+   ```bash
+   git checkout main && git pull
+   git tag vX.Y.Z          # SemVer; bump minor for features, patch for fixes
+   git push origin vX.Y.Z
+   ```
+   Go to Actions → Deploy production → Approve and deploy.
+6. **Smoke + drop banner.** Workflow runs its own smoke step;
+   manually walk the touched flows. When green, drop the maintenance
+   banner.
+
+### Migrations during a prod deploy
+
+Migrations apply automatically on container start via `entrypoint.sh`.
+The workflow snapshots `database.db` *before* `up --build` runs, so a
+broken migration is recoverable from `/data/database.db.deploy-*.bak`.
+
+If a migration is risky enough to warrant attention, write the rollback
+SQL into the PR before shipping. The auto-create-then-stamp pattern
+(memory: `feedback_migration_patterns.md`) means most additive
+migrations are silent no-ops on second run — but destructive changes
+(drop column, rename type) need a manual safety net.
+
+### Emergency: direct-to-server (incident only)
+
+When CI is down or you need to revert in seconds, this is the path.
+**Write a follow-up PR with the same change** so the workspace and the
+servers don't drift.
+
+```bash
+ssh -i ~/.ssh/sakurastudios root@167.233.29.52     # prod
+# or root@138.199.167.136                          # staging
 cd /opt/kotobaseed
-git pull
+# … tar-over-ssh the changed files in (see git history for the recipe)
 docker compose up -d --build backend frontend
 ```
 
@@ -282,9 +363,11 @@ docker compose up -d --build backend frontend
 > looked deployed but weren't, so default to `--build` even for "trivial"
 > backend changes.
 
-Migrations apply automatically on container start via `entrypoint.sh`.
-
-If a migration looks risky, back up the SQLite DB first:
+If you skip a migration backup and the migration breaks, the
+maintenance feature gives you space to restore from the daily
+backup at `/data/backups/`. Set the banner to "extended maintenance
+in progress" and follow the restore drill in
+`OPERATIONS.md §4 Backup restoration drill`.
 
 ```bash
 docker compose exec backend cp /data/database.db /data/database.db.$(date +%Y%m%d).bak
