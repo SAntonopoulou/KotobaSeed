@@ -171,6 +171,13 @@ class TutorPageSectionType(str, Enum):
     CTA_BAND = "cta_band"
     LANGUAGE_INTRO = "language_intro"
     NEWSLETTER_SIGNUP = "newsletter_signup"
+    # Tier-2 "schools" blocks. Available to TutorTeam owners (Business
+    # subscribers) on the page builder. Solo tutors can technically add
+    # them too — they'll render as a single-card team / empty programs
+    # list — but the editor surfaces them only to Business accounts.
+    TEAM_ROSTER = "team_roster"
+    PROGRAMS_SHOWCASE = "programs_showcase"
+    BOOKING_CTA = "booking_cta"
 
 
 # Association table for User and LanguageGroup

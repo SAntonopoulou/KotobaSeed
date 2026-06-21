@@ -384,6 +384,124 @@ const EDITORS = {
       </div>
     </div>
   ),
+  team_roster: ({ content, onChange }) => (
+    <div className="space-y-3">
+      <div className="bg-kotoba-secondary/10 border border-kotoba-secondary/20 rounded-xl p-3 text-xs text-kotoba-text/75">
+        Team members render automatically from your TutorTeam roster. Solo accounts hide this section.
+      </div>
+      <TextField
+        label="Eyebrow"
+        value={content.eyebrow}
+        onChange={(v) => onChange({ ...content, eyebrow: v })}
+        placeholder="Our team"
+      />
+      <TextField
+        label="Title"
+        value={content.title}
+        onChange={(v) => onChange({ ...content, title: v })}
+        placeholder="Defaults to your team name"
+      />
+      <TextArea
+        label="Subhead"
+        value={content.sub}
+        onChange={(v) => onChange({ ...content, sub: v })}
+        rows={2}
+        placeholder="Optional intro line."
+      />
+    </div>
+  ),
+  programs_showcase: ({ content, onChange }) => {
+    const slugsText = Array.isArray(content.module_slugs)
+      ? content.module_slugs.join('\n')
+      : '';
+    return (
+      <div className="space-y-3">
+        <TextField
+          label="Eyebrow"
+          value={content.eyebrow}
+          onChange={(v) => onChange({ ...content, eyebrow: v })}
+          placeholder="Programs"
+        />
+        <TextField
+          label="Title"
+          value={content.title}
+          onChange={(v) => onChange({ ...content, title: v })}
+          placeholder="Programs we run"
+        />
+        <TextArea
+          label="Subhead"
+          value={content.sub}
+          onChange={(v) => onChange({ ...content, sub: v })}
+          rows={2}
+        />
+        <div>
+          <label className={labelCls}>Module slugs (one per line)</label>
+          <textarea
+            value={slugsText}
+            onChange={(e) => {
+              const slugs = e.target.value
+                .split('\n')
+                .map((s) => s.trim())
+                .filter(Boolean);
+              onChange({ ...content, module_slugs: slugs });
+            }}
+            rows={5}
+            placeholder={'greek-a1-foundations\ngreek-business-intro'}
+            className={inputCls}
+          />
+          <p className="text-[11px] text-kotoba-text/55 mt-1">
+            The order here is the order on the page. Find slugs in Dashboard → Modules.
+          </p>
+        </div>
+      </div>
+    );
+  },
+  booking_cta: ({ content, onChange }) => (
+    <div className="space-y-3">
+      <TextField
+        label="Eyebrow"
+        value={content.eyebrow}
+        onChange={(v) => onChange({ ...content, eyebrow: v })}
+        placeholder="Book a lesson"
+      />
+      <TextField
+        label="Title"
+        value={content.title}
+        onChange={(v) => onChange({ ...content, title: v })}
+        placeholder="Find a time that works for you."
+      />
+      <TextArea
+        label="Subhead"
+        value={content.sub}
+        onChange={(v) => onChange({ ...content, sub: v })}
+        rows={2}
+      />
+      <TextField
+        label="Primary button label"
+        value={content.cta_label}
+        onChange={(v) => onChange({ ...content, cta_label: v })}
+        placeholder="See availability"
+      />
+      <TextField
+        label="Primary button link"
+        value={content.cta_href}
+        onChange={(v) => onChange({ ...content, cta_href: v })}
+        placeholder="/book"
+      />
+      <TextField
+        label="Secondary button label (optional)"
+        value={content.secondary_label}
+        onChange={(v) => onChange({ ...content, secondary_label: v })}
+        placeholder="Talk to us first"
+      />
+      <TextField
+        label="Secondary button link (optional)"
+        value={content.secondary_href}
+        onChange={(v) => onChange({ ...content, secondary_href: v })}
+        placeholder="/contact"
+      />
+    </div>
+  ),
 };
 
 const PageSectionEditor = ({ sectionType, content, onChange, variantSchema }) => {

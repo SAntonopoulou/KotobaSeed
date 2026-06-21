@@ -9,6 +9,9 @@ import VideoEmbed from './VideoEmbed';
 import CtaBand from './CtaBand';
 import LanguageIntro from './LanguageIntro';
 import NewsletterSignup from './NewsletterSignup';
+import TeamRoster from './TeamRoster';
+import ProgramsShowcase from './ProgramsShowcase';
+import BookingCta from './BookingCta';
 
 // section_type → React component. Keep keys aligned with TutorPageSectionType
 // in backend/models.py. New types must be added in both places.
@@ -24,6 +27,9 @@ export const SECTION_COMPONENTS = {
   cta_band: CtaBand,
   language_intro: LanguageIntro,
   newsletter_signup: NewsletterSignup,
+  team_roster: TeamRoster,
+  programs_showcase: ProgramsShowcase,
+  booking_cta: BookingCta,
 };
 
 // Tutor-facing labels for the page builder picker.
@@ -39,6 +45,9 @@ export const SECTION_LABELS = {
   cta_band: 'Call to action',
   language_intro: 'Language intro',
   newsletter_signup: 'Newsletter signup',
+  team_roster: 'Team roster (schools)',
+  programs_showcase: 'Programs showcase (schools)',
+  booking_cta: 'Booking CTA (schools)',
 };
 
 // Short blurb shown in the section picker.
@@ -54,6 +63,9 @@ export const SECTION_DESCRIPTIONS = {
   cta_band: 'Final "ready to start?" prompt with a button.',
   language_intro: 'Image + intro text about the language itself.',
   newsletter_signup: 'Email signup card. Visitors join your newsletter list.',
+  team_roster: 'Cards for every tutor on your team. Hides itself on a solo account.',
+  programs_showcase: 'Curated programs from your module catalog — pick by slug.',
+  booking_cta: 'Big "book a lesson" panel pointing into the scheduling flow.',
 };
 
 // Which sections take editable content vs. derive everything from APIs.
@@ -70,6 +82,20 @@ export const SECTION_HAS_EDITOR = {
   cta_band: true,
   language_intro: true,
   newsletter_signup: false, // copy comes from the tutor's newsletter prefs
+  team_roster: true,
+  programs_showcase: true,
+  booking_cta: true,
+};
+
+// Schools-only blocks. Surfaced in the section picker for Business
+// subscribers (and on the editor it appears with a "(schools)" label).
+// Backend doesn't gate the section_type itself — a downgraded school
+// keeps rendering anything they configured. This is a soft picker-side
+// hint so the menu stays clean for solo tutors.
+export const SECTION_IS_SCHOOLS = {
+  team_roster: true,
+  programs_showcase: true,
+  booking_cta: true,
 };
 
 export const ALL_SECTION_TYPES = Object.keys(SECTION_COMPONENTS);

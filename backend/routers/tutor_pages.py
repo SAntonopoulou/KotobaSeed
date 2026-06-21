@@ -25,7 +25,7 @@ from sqlmodel import Session, select
 
 from ..database import get_session
 from ..deps import CurrentUser
-from ..models import Tutor, TutorPageSection, TutorPageSectionType, User
+from ..models import Tutor, TutorPageSection, TutorPageSectionType, TutorTeam, User
 from ..tenancy import CurrentTutor
 
 log = logging.getLogger(__name__)
@@ -185,6 +185,67 @@ def reset_page_sections(
     for row in existing:
         session.delete(row)
     session.commit()
+
+
+# --- Public team roster -----------------------------------------------
+# Backing data for the TEAM_ROSTER section. Resolves the current tenant
+# (tutor subdomain or custom domain) to its TutorTeam (if the tutor
+# belongs to one) and returns a public-shape roster — name, slug, bio,
+# headline, photo — so the renderer can drop in tutor cards without
+# leaking team-management fields (invite tokens, emails, billing).
+
+
+class PublicTeamMember(BaseModel):
+    full_name: str
+    tutor_slug: str
+    bio: str | None = None
+    headline: str | None = None
+    photo_url: str | None = None
+    is_owner: bool = False
+
+
+class PublicTeamRead(BaseModel):
+    team_name: str
+    members: list[PublicTeamMember] = Field(default_factory=list)
+
+
+@router.get("/tutor/public-team", response_model=PublicTeamRead | None)
+def read_public_team(
+    tutor: CurrentTutor,
+    session: Annotated[Session, Depends(get_session)],
+) -> PublicTeamRead | None:
+    """Public — anyone visiting the tenant subdomain gets the roster.
+
+    Returns null when the tenant tutor is not on a team — the renderer
+    treats null as "hide the section" rather than rendering an empty
+    state on a solo tutor's site.
+    """
+    if tutor.team_id is None:
+        return None
+    team = session.get(TutorTeam, tutor.team_id)
+    if team is None:
+        return None
+    member_rows = session.exec(
+        select(Tutor).where(Tutor.team_id == team.id)
+    ).all()
+    members: list[PublicTeamMember] = []
+    for member in member_rows:
+        u = session.get(User, member.user_id)
+        if u is None or not u.is_active or u.deleted_at is not None:
+            continue
+        members.append(
+            PublicTeamMember(
+                full_name=u.full_name or member.tutor_slug,
+                tutor_slug=member.tutor_slug,
+                bio=u.bio,
+                headline=getattr(u, "headline", None),
+                photo_url=u.photo_url,
+                is_owner=u.id == team.owner_user_id,
+            )
+        )
+    # Owner first, then alphabetic — schools want the principal at top.
+    members.sort(key=lambda m: (not m.is_owner, m.full_name.lower()))
+    return PublicTeamRead(team_name=team.name, members=members)
 
 
 # --- Page image upload ------------------------------------------------
