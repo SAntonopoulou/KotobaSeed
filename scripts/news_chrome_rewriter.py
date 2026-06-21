@@ -188,19 +188,22 @@ HEAD_INJECT_TAIL = (
     '<style>'
     # BR's base stylesheet emits an unscoped `footer { padding:2.5rem 0;
     # margin-top:6rem; border-top:…; background:var(--bg-warm); }` rule
-    # that matches our chrome <footer> and doubles its spacing.
-    # Neutralise it. Same defensive reset for the body-level nav and
-    # the mount-root <div> we put the chrome inside.
-    '#kb-navbar-root,#kb-footer-root{display:block;}'
-    'body>footer,#kb-footer-root>footer{padding:0;margin:0;background:transparent;border:0;}'
-    'body>nav,#kb-navbar-root>nav{margin:0;background:transparent;border:0;}'
+    # that matches our chrome <footer>. Tailwind classes on the chrome
+    # already win on `background` (.bg-white) and on `margin-top` (.mt-auto),
+    # but Tailwind doesn't set padding on the outer <footer> (the chrome
+    # template applies py-10 to the inner div), so BR's padding survives.
+    # Override ONLY padding, and use a descendant selector because
+    # Footer.jsx wraps the footer in an extra <div> when it renders via
+    # dangerouslySetInnerHTML. Don't touch background or border — that
+    # would beat Tailwind on specificity and make the chrome invisible.
+    '#kb-footer-root footer{padding:0;margin-top:0;}'
     # BR's `html { font-family: var(--font) }` (Inter) gets inherited by
     # article content. Use the same `font-sans` stack the apex SPA does,
-    # so article text and chrome both pick up Quicksand once apex CSS loads.
+    # so article text and chrome both pick up Quicksand.
     'body{font-family:Quicksand,Inter,ui-sans-serif,system-ui,-apple-system,'
     'BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;}'
-    # Mobile-drawer toggle wiring (the burger sets `kb-mob-open` on <html>),
-    # still used by the no-JS signed-out fallback before React hydrates.
+    # Mobile-drawer toggle wiring for the no-JS signed-out fallback.
+    # Once React mounts, the real Navbar component drives its own state.
     '.kb-mobile-drawer{display:none;}'
     '.kb-mob-open .kb-mobile-drawer{display:block;}'
     '@media(min-width:1024px){.kb-mob-open .kb-mobile-drawer{display:none;}}'
