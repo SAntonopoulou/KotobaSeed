@@ -12,12 +12,14 @@ public site renderer can call it without auth.
 
 from __future__ import annotations
 
+import io
 import json
 import logging
+import secrets
 from datetime import UTC, datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 
@@ -183,3 +185,91 @@ def reset_page_sections(
     for row in existing:
         session.delete(row)
     session.commit()
+
+
+# --- Page image upload ------------------------------------------------
+# The rich-text editor + future image-block fields call this to host
+# user-uploaded images on R2 and embed them by URL. Modeled on the avatar
+# pipeline (Pillow decode → EXIF strip → resize → WebP → R2) so corrupt
+# / over-sized / privacy-leaking inputs never make it through.
+
+PAGE_IMAGE_MAX_BYTES = 10 * 1024 * 1024  # 10 MB hard cap
+PAGE_IMAGE_MAX_LONG_EDGE = 1800           # px — large enough for hero bg
+PAGE_IMAGE_ACCEPTED_MIME = {
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/heic",
+    "image/heif",
+}
+
+
+class PageImageResponse(BaseModel):
+    url: str
+
+
+@router.post("/tutor/page-images", response_model=PageImageResponse)
+async def upload_page_image(
+    current: CurrentUser,
+    tutor: CurrentTutor,
+    session: Annotated[Session, Depends(get_session)],
+    file: UploadFile = File(...),
+) -> PageImageResponse:
+    """Owner + Pro only — upload an image for use in the page builder.
+
+    Returns a public R2 URL the rich-text editor can drop straight into an
+    `<img>` tag. Per-tenant key prefix means a janitor can sweep a tenant's
+    orphaned images on account closure later without rewriting bucket
+    structure.
+    """
+    _require_owner(tutor, current)
+    _require_pro(current)
+
+    from ..services import storage
+
+    if not storage.is_configured():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="File uploads aren't available on this deployment yet.",
+        )
+
+    if file.content_type not in PAGE_IMAGE_ACCEPTED_MIME:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Please upload a JPEG, PNG, WebP, or HEIC image.",
+        )
+
+    raw = await file.read(PAGE_IMAGE_MAX_BYTES + 1)
+    if len(raw) > PAGE_IMAGE_MAX_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"Image is too large — keep it under {PAGE_IMAGE_MAX_BYTES // (1024 * 1024)} MB.",
+        )
+
+    try:
+        from PIL import Image, ImageOps, UnidentifiedImageError
+
+        img = Image.open(io.BytesIO(raw))
+        img = ImageOps.exif_transpose(img)
+        img = img.convert("RGB")
+        # Shrink only if the long edge exceeds the cap — keeps aspect.
+        if max(img.size) > PAGE_IMAGE_MAX_LONG_EDGE:
+            img.thumbnail(
+                (PAGE_IMAGE_MAX_LONG_EDGE, PAGE_IMAGE_MAX_LONG_EDGE),
+                Image.Resampling.LANCZOS,
+            )
+        buf = io.BytesIO()
+        img.save(buf, format="WEBP", quality=85, method=6)
+        body = buf.getvalue()
+    except (UnidentifiedImageError, OSError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Could not read that image. Try a different file.",
+        ) from None
+
+    suffix = secrets.token_hex(4)
+    key = f"tutor-pages/{tutor.id}/{suffix}.webp"
+    public_url = storage.put_object(
+        key=key, body=body, content_type="image/webp"
+    )
+    return PageImageResponse(url=public_url)

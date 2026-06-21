@@ -1,8 +1,11 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
+import Image from '@tiptap/extension-image';
+import client from '../../api/client';
+import { getErrorMessage } from '../../utils/errors';
 
 // Rich text input for the page builder's prose-heavy fields (hero deck,
 // about body, FAQ answers, CTA copy). Renders TipTap with a minimal,
@@ -31,6 +34,10 @@ const RichTextInput = ({
   placeholder = 'Write something…',
   minHeight = '8rem',
 }) => {
+  const fileInputRef = useRef(null);
+  const [uploadError, setUploadError] = useState('');
+  const [uploading, setUploading] = useState(false);
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -44,6 +51,15 @@ const RichTextInput = ({
         HTMLAttributes: {
           rel: 'noopener noreferrer',
           target: '_blank',
+        },
+      }),
+      Image.configure({
+        inline: false,
+        // Pillow strips EXIF at upload time, so we don't need to gate
+        // on referrerpolicy here. Keep src + alt + width so a future
+        // alt-text dialog has a place to land.
+        HTMLAttributes: {
+          class: 'rounded-md max-w-full h-auto',
         },
       }),
       Placeholder.configure({
@@ -65,6 +81,36 @@ const RichTextInput = ({
       },
     },
   });
+
+  const pickImage = () => {
+    setUploadError('');
+    fileInputRef.current?.click();
+  };
+
+  const uploadImage = async (event) => {
+    const file = event.target?.files?.[0];
+    // Reset the input so picking the same file twice still fires.
+    if (event.target) event.target.value = '';
+    if (!file || !editor) return;
+    setUploadError('');
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await client.post('/tutor/page-images', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      const url = res?.data?.url;
+      if (!url) throw new Error('Upload returned no URL.');
+      editor.chain().focus().setImage({ src: url, alt: file.name }).run();
+    } catch (err) {
+      setUploadError(
+        getErrorMessage(err, "Couldn't upload that image. Try again?"),
+      );
+    } finally {
+      setUploading(false);
+    }
+  };
 
   // External value changes (e.g. switching sections, resetting to default)
   // need to flow into the editor without triggering an extra onUpdate.
@@ -158,6 +204,13 @@ const RichTextInput = ({
             active={editor.isActive('link')}
             onClick={openLink}
           />
+          <ToolbarButton
+            label={uploading ? '…' : 'Image'}
+            title="Upload an image"
+            active={false}
+            disabled={uploading}
+            onClick={pickImage}
+          />
           <ToolbarSep />
           <ToolbarButton
             label="↺"
@@ -178,6 +231,16 @@ const RichTextInput = ({
           <EditorContent editor={editor} />
         </div>
       </div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+        className="hidden"
+        onChange={uploadImage}
+      />
+      {uploadError && (
+        <p className="text-xs text-red-600 mt-1">{uploadError}</p>
+      )}
     </div>
   );
 };
@@ -194,8 +257,9 @@ const ToolbarButton = ({
     type="button"
     title={title}
     onMouseDown={(e) => {
-      // Prevent the editor losing focus when clicking the toolbar.
-      e.preventDefault();
+      // Prevent the editor losing focus when clicking the toolbar — but
+      // not for the image picker, which needs to open the file dialog.
+      if (title !== 'Upload an image') e.preventDefault();
     }}
     onClick={onClick}
     disabled={disabled}
