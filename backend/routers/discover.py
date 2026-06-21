@@ -118,6 +118,12 @@ def list_discover(
                 Article.is_published == True,  # noqa: E712
                 Article.visibility == "public",
                 Article.deleted_at.is_(None),
+                # Match marketplace's account-quality bar so transient
+                # demo-trial accounts (created per /try visit, never
+                # verified) don't surface their seeded "Greek alphabet
+                # boot camp" modules + articles as 16 duplicate rows.
+                User.is_active == True,  # noqa: E712
+                User.email_verified_at != None,  # noqa: E711
             )
             .order_by(Article.published_at.desc())
             .limit(offset + limit + 1)
@@ -154,7 +160,11 @@ def list_discover(
             select(LessonModule, Tutor, User)
             .join(Tutor, Tutor.id == LessonModule.tutor_id)
             .join(User, User.id == Tutor.user_id)
-            .where(LessonModule.is_published == True)  # noqa: E712
+            .where(
+                LessonModule.is_published == True,  # noqa: E712
+                User.is_active == True,  # noqa: E712
+                User.email_verified_at != None,  # noqa: E711
+            )
             .order_by(LessonModule.published_at.desc())
             .limit(offset + limit + 1)
         )
@@ -192,7 +202,12 @@ def list_discover(
     # Tutor leans on the User row for identity-bearing fields.
     all_langs: set[str] = set()
     lang_stmt = exclude_cross_env_users(
-        select(User.languages).join(Tutor, Tutor.user_id == User.id)
+        select(User.languages)
+        .join(Tutor, Tutor.user_id == User.id)
+        .where(
+            User.is_active == True,  # noqa: E712
+            User.email_verified_at != None,  # noqa: E711
+        )
     )
     lang_rows = session.exec(lang_stmt).all()
     for raw in lang_rows:

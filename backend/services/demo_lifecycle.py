@@ -137,6 +137,12 @@ def _seed_tutor(session: Session, user: User) -> None:
     }
 
     # Tutor row. Slug is random so concurrent demo entries don't collide.
+    # `list_in_marketplace=False` keeps the per-visit demo trial tutor out
+    # of the marketplace/discover surfaces — previously this used
+    # `marketplace_listing_enabled=False` which is NOT a Tutor field, so
+    # the kwarg was silently dropped and the model's default (True) kicked
+    # in, leading to demo-trial tutors and their seeded modules surfacing
+    # as duplicates on the demo site.
     tutor = Tutor(
         user_id=user.id,
         tutor_slug=f"demo-{_slug_token()}",
@@ -145,7 +151,7 @@ def _seed_tutor(session: Session, user: User) -> None:
         languages_taught=bp["languages_taught"],
         theme=bp["theme"],
         account_status=TutorAccountStatus.ACTIVE,
-        marketplace_listing_enabled=False,
+        list_in_marketplace=False,
         cancellation_cutoff_hours=24,
     )
     session.add(tutor)
