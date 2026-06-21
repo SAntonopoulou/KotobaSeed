@@ -694,14 +694,17 @@
   counter-reset: kb-section;
 }
 
+/* Dense magazine table-of-contents row: numeral | name + deck | count.
+   Tight vertical rhythm so the section reads as an editorial index,
+   not a stacked list of cards. */
 .explore-card.explore-card {
   counter-increment: kb-section;
   position: relative;
   display: grid;
-  grid-template-columns: 4rem 1fr auto;
+  grid-template-columns: 3rem minmax(0, 1fr) auto;
   align-items: baseline;
-  gap: 2rem;
-  padding: 2.25rem 0;
+  gap: 1.5rem;
+  padding: 1.1rem 0;
   border-top: 1px solid var(--kb-border);
   background: transparent;
   border-radius: 0;
@@ -710,20 +713,24 @@
   color: var(--kb-text);
   overflow: visible;
   isolation: auto;
-  transition: opacity 0.18s ease;
+  transition: background 0.15s ease;
 }
 
 .explore-grid.explore-grid > a:last-child {
   border-bottom: 1px solid var(--kb-border);
 }
 
-/* Roman numeral counter — much more magazine. */
+.explore-card.explore-card:hover {
+  background: rgb(var(--kotoba-primary-rgb, 22 86 29) / 0.025);
+}
+
+/* Roman numeral counter — tight, in line with the row's baseline. */
 .explore-card.explore-card::before {
   content: counter(kb-section, upper-roman) '.';
   font-family: 'Fraunces', 'Lora', Georgia, serif;
   font-style: italic;
   font-weight: 400;
-  font-size: 2rem;
+  font-size: 1.125rem;
   color: var(--kb-honey);
   letter-spacing: -0.01em;
   align-self: baseline;
@@ -735,6 +742,7 @@
   border-radius: 0;
   filter: none;
   display: block;
+  line-height: 1.4;
 }
 
 .explore-card.explore-card::after { display: none; }
@@ -755,25 +763,33 @@
   display: none !important;
 }
 
-/* Section name + deck stack as second column. */
+/* Section name + deck inline in the second column. */
 .explore-name.explore-name {
   font-family: 'Fraunces', 'Lora', Georgia, serif;
   font-weight: 600;
-  font-size: clamp(1.625rem, 2.4vw, 2rem);
-  letter-spacing: -0.02em;
+  font-size: 1.125rem;
+  letter-spacing: -0.01em;
   color: var(--kb-text);
-  display: block;
+  display: inline;
   transition: color 0.18s ease;
 }
 
+/* Italic deck — rendered inline, separated from the name by an em
+   dash so each row reads like a single editorial line. */
 .explore-blurb.explore-blurb {
   font-family: 'Fraunces', 'Lora', Georgia, serif;
   font-style: italic;
   font-size: 1rem;
   color: var(--kb-text-soft);
-  line-height: 1.45;
-  display: block;
-  margin: 0.4rem 0 0;
+  line-height: 1.4;
+  display: inline;
+  margin: 0;
+}
+
+.explore-blurb.explore-blurb::before {
+  content: ' — ';
+  color: var(--kb-text-mute);
+  font-style: normal;
 }
 
 /* "N entries →" meta in the third column. */
@@ -805,15 +821,17 @@
 
 @media (max-width: 720px) {
   .explore-card.explore-card {
-    grid-template-columns: 3rem 1fr;
-    gap: 1.25rem;
-    padding: 1.75rem 0;
+    grid-template-columns: 2.5rem 1fr;
+    gap: 1rem;
+    padding: 0.9rem 0;
   }
+  .explore-name.explore-name,
+  .explore-blurb.explore-blurb { display: inline; }
   .explore-count.explore-count {
-    grid-column: 1 / -1;
+    grid-column: 2 / -1;
     text-align: left;
-    padding-left: 4.25rem;
-    margin-top: 0.5rem;
+    padding-left: 0;
+    margin-top: 0.25rem;
   }
 }
 
