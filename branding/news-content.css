@@ -66,7 +66,7 @@ body {
 
 main {
   flex: 1;
-  background: var(--kb-bg);
+  background: rgb(var(--kotoba-background-rgb, 244 241 233));
   padding: 1.5rem 0 3rem;
 }
 
