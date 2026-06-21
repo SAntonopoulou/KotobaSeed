@@ -193,19 +193,20 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
-      # BeeRanked-synced blog/SEO content. The agent below writes here;
-      # Caddy serves it read-only at /news on the apex (see Caddyfile).
-      - beeranked_content:/srv/beeranked-content:ro
+      # /news content. Caddy serves the rewritten output (BR chrome stripped,
+      # apex chrome injected) — NOT the raw agent output. The rewriter
+      # sidecar below populates this volume.
+      - beeranked_out:/srv/beeranked-out:ro
       # Stable branding assets — Caddy serves these at kotobaseed.net/branding/*
-      # so static integrations (e.g. BeeRanked plugin slots) can reference
-      # them without depending on the Vite-hashed /assets/Logo-<hash>.png URL
-      # that changes on every frontend rebuild.
+      # so the /news rewriter and any other static integration can point at
+      # a URL that doesn't change on every frontend rebuild.
       - ./branding:/srv/branding:ro
 
   # BeeRanked agent. Outbound-only — pulls published blog/SEO content
-  # from studio.beeranked.online and writes static HTML into the shared
-  # `beeranked_content` volume. Nothing inbound; Caddy serves the files.
-  # Configured by BEERANKED_KEY in .env (connector key from the MCP).
+  # from studio.beeranked.online and writes static HTML into the
+  # `beeranked_content` volume. Nothing inbound. The rewriter sidecar
+  # below transforms those files into `beeranked_out`, which is what
+  # Caddy actually serves at /news/*. Configured by BEERANKED_KEY in .env.
   beeranked-agent:
     image: beeranked/agent:latest
     restart: unless-stopped
@@ -217,6 +218,28 @@ services:
     volumes:
       - beeranked_content:/out
 
+  # /news chrome rewriter. Reads the BR-agent's raw HTML out of
+  # `beeranked_content`, surgically removes BR's default header + footer,
+  # injects the apex chrome from the single-source-of-truth template,
+  # and writes the result into `beeranked_out` for Caddy to serve.
+  # See scripts/news_chrome_rewriter.py for the transformation spec.
+  news-chrome-rewriter:
+    image: python:3.12-alpine
+    restart: unless-stopped
+    depends_on:
+      - beeranked-agent
+    volumes:
+      - beeranked_content:/in:ro
+      - beeranked_out:/out
+      - ./scripts/news_chrome_rewriter.py:/app/rewriter.py:ro
+      - ./frontend/src/components/apex_chrome.signed_out.html:/app/chrome.html:ro
+    command: >
+      python -u /app/rewriter.py
+      --in /in
+      --out /out
+      --chrome /app/chrome.html
+      --interval 5
+
 volumes:
   postgres_data:
   redis_data:
@@ -224,3 +247,4 @@ volumes:
   caddy_data:
   caddy_config:
   beeranked_content:
+  beeranked_out:

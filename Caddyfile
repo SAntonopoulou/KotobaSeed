@@ -79,19 +79,20 @@ api.{$PLATFORM_APEX} {
         file_server
     }
 
-    # /news/* on the APEX ONLY (never on tutor subdomains). BeeRanked's
-    # outbound-only agent syncs static blog + SEO content into the
-    # shared `beeranked_content` volume; Caddy serves it directly so
-    # the section lives as a subfolder of the root domain (best SEO
-    # authority). Path is stripped before disk lookup because the agent
-    # bakes URLs as `/news/...` but stores files flat under CONTENT_DIR.
+    # /news/* on the APEX ONLY (never on tutor subdomains). The BeeRanked
+    # agent writes raw HTML to `beeranked_content`; the rewriter sidecar
+    # strips BR's default chrome and injects the apex header/footer into
+    # `beeranked_out`. Caddy serves that rewritten output so every page
+    # under /news wears the real apex chrome with no BR markup at all.
+    # Path is stripped before disk lookup because the agent bakes URLs
+    # as `/news/...` but stores files flat under CONTENT_DIR.
     @apex_news {
         host {$PLATFORM_APEX}
         path /news /news/*
     }
     handle @apex_news {
         uri strip_prefix /news
-        root * /srv/beeranked-content
+        root * /srv/beeranked-out
         try_files {path} {path}/index.html
         file_server
     }

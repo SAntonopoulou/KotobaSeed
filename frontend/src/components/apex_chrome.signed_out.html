@@ -1,26 +1,30 @@
 <!--
   SINGLE SOURCE OF TRUTH for the apex signed-out chrome.
 
-  This file is consumed by THREE places:
-    1. frontend/src/components/Navbar.jsx — renders this when !user via
-       dangerouslySetInnerHTML, then overlays signed-in widgets when user
-       is present
-    2. frontend/src/components/Footer.jsx — renders this footer always
-    3. The BeeRanked /news plugin — `scripts/sync_news_chrome.sh` reads
-       this file, splits on the <nav>…</nav> / <footer>…</footer> blocks
-       and POSTs them to the BeeRanked MCP as banner / footer slots
+  Consumed by THREE places:
+    1. frontend/src/components/Navbar.jsx — renders this <nav> via
+       dangerouslySetInnerHTML when !user; falls through to the
+       React signed-in path when user is present
+    2. frontend/src/components/Footer.jsx — renders this <footer>
+       on every page
+    3. scripts/news_chrome_rewriter.py — runs as a sidecar on prod
+       (see docker-compose.yml :: news-chrome-rewriter). It reads
+       the raw HTML the BeeRanked agent writes, surgically removes
+       BR's own <nav class="site-nav"> + <footer> wrapper, and
+       injects the <nav> and <footer> blocks below into every
+       /news/* page on disk. Caddy then serves the rewritten files.
 
-  Edit ONCE; run sync_news_chrome.sh + a frontend rebuild to land the
-  change everywhere.
+  This is NOT pushed to BeeRanked as a plugin. The plugin path was
+  retired because BR's slots embed our chrome INSIDE their wrappers,
+  which can't be fully removed without server-side post-processing.
 
-  Links use absolute https://kotobaseed.net/* URLs so they work
-  identically from the apex (where a relative href would also resolve
-  fine) and from /news/* (where a relative href would break — e.g.
-  href="/news" on /news/ becomes /news/news).
+  Edit ONCE; a frontend rebuild lands the SPA changes, the rewriter
+  picks up the template-mtime change on its next 5-second tick.
 
-  The /news link is the exception: it uses href="/news" deliberately
-  because we always want to land at the apex /news section, never
-  cause a /news/news loop.
+  Links use absolute https://kotobaseed.net/* URLs so they resolve
+  identically from the apex (where a relative href would also work)
+  and from /news/* (where a relative href would break — e.g.
+  href="news" on /news/ becomes /news/news).
 -->
 
 <!-- ==== NAVBAR ============================================================ -->
