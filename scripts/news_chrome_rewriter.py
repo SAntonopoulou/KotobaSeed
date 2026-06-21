@@ -182,15 +182,43 @@ def apex_head_changed_at() -> float:
     return _apex_head_changed_at
 
 
+# Content stylesheet path inside the sidecar (bind-mounted from
+# `branding/news-content.css` in the repo). The URL we link to is
+# stable, but we append `?v=<mtime>` so Cloudflare's edge cache
+# busts the moment we edit the file — no manual purge needed.
+CONTENT_CSS_PATH = Path('/app/news-content.css')
+_content_css_last_mtime: float = -1.0
+_content_css_changed_at: float = 0.0
+
+
+def _refresh_content_css() -> None:
+    """Bump the change-at timestamp to NOW when the css file mtime advances."""
+    global _content_css_last_mtime, _content_css_changed_at
+    try:
+        mtime = CONTENT_CSS_PATH.stat().st_mtime
+    except OSError:
+        return
+    if mtime != _content_css_last_mtime:
+        _content_css_last_mtime = mtime
+        _content_css_changed_at = time.time()
+
+
+def content_css_link() -> str:
+    _refresh_content_css()
+    mtime = int(_content_css_last_mtime) if _content_css_last_mtime > 0 else 0
+    return (
+        f'<link rel="stylesheet" href="/branding/news-content.css?v={mtime}">'
+    )
+
+
+def content_css_changed_at() -> float:
+    _refresh_content_css()
+    return _content_css_changed_at
+
+
 # Static-only injection: BR-base resets + mobile-drawer wiring. Anything
 # styling-related comes from the apex CSS bundle linked above.
 HEAD_INJECT_TAIL = (
-    # Content stylesheet that skins BR's hero / spotlight / explore /
-    # prose components in Kotobaseed colours + fonts. Maintained in
-    # `branding/news-content.css`; bind-mounted on Caddy and served at
-    # this stable URL. Loads AFTER the apex CSS bundle so its CSS
-    # variables (--kotoba-*-rgb) are already defined.
-    '<link rel="stylesheet" href="/branding/news-content.css">'
     '<style>'
     # BR's base stylesheet emits an unscoped `footer { padding:2.5rem 0;
     # margin-top:6rem; border-top:…; background:var(--bg-warm); }` rule
@@ -268,10 +296,15 @@ def transform(html: str, nav_html: str, footer_html: str) -> str:
     # 2. Strip every `<div class="plugin-slot …">…</div>` (and contents).
     html = strip_plugin_slots(html)
     # 3. Replace any prior <head> injection (or add one). The injection
-    #    is: the apex SPA's <head> tags (CSS bundle, fonts, modulepreloads,
-    #    module entry) + a tiny tail with BR-base resets + drawer wiring.
+    #    is: the apex SPA's <head> tags + the news-content stylesheet
+    #    (with cache-busting ?v=<mtime>) + a tiny tail with BR-base
+    #    resets and drawer wiring.
     head_block = (
-        CHROME_MARKER_START + get_apex_head() + HEAD_INJECT_TAIL + CHROME_MARKER_END
+        CHROME_MARKER_START
+        + get_apex_head()
+        + content_css_link()
+        + HEAD_INJECT_TAIL
+        + CHROME_MARKER_END
     )
     if RE_EXISTING_INJECT.search(html):
         html = RE_EXISTING_INJECT.sub(head_block, html, count=1)
@@ -412,9 +445,13 @@ def main() -> int:
                 )
 
             # Warm the apex-head cache before the file walk so the change
-            # detector and the transform get a consistent value.
+            # detector and the transform get a consistent value. Take
+            # the max of apex-head-change-time and content-css mtime so
+            # editing news-content.css also triggers a re-process.
             get_apex_head()
-            apex_changed_at = apex_head_changed_at()
+            change_time = max(
+                apex_head_changed_at(), content_css_changed_at()
+            )
 
             if args.input.exists():
                 written, removed = sync_once(
@@ -423,7 +460,7 @@ def main() -> int:
                     nav_html,
                     footer_html,
                     chrome_mtime,
-                    apex_changed_at,
+                    change_time,
                 )
                 if written or removed:
                     print(

@@ -233,6 +233,10 @@ services:
       - beeranked_out:/out
       - ./scripts/news_chrome_rewriter.py:/app/rewriter.py:ro
       - ./frontend/src/components/apex_chrome.signed_out.html:/app/chrome.html:ro
+      # Bind-mounted so the rewriter can stat the file's mtime and
+      # append `?v=<mtime>` to the stylesheet URL it injects, busting
+      # Cloudflare's edge cache the moment we edit the file.
+      - ./branding/news-content.css:/app/news-content.css:ro
     command: >
       python -u /app/rewriter.py
       --in /in

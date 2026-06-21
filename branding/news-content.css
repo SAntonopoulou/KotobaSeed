@@ -388,13 +388,234 @@ main {
   box-shadow: var(--kb-shadow-soft);
 }
 
+/* --- Article header (single blog post) ------------------------------ */
+
+/* BR emits the article header with inline `style=""` attributes, so the
+   font-size/weight/colour properties need !important to win. Everything
+   else (alignment, family, padding) BR doesn't touch, so plain rules
+   are fine. */
+
+/* The breadcrumb nav above the article — center + soft typography. */
+.container > nav:first-of-type {
+  justify-content: center !important;
+  text-align: center !important;
+  margin-bottom: 2.5rem !important;
+  font-family: 'Quicksand', sans-serif;
+  font-size: 0.8125rem !important;
+  letter-spacing: 0.01em;
+}
+
+.container > nav:first-of-type a {
+  color: var(--kb-primary) !important;
+  text-decoration: none;
+  transition: opacity 0.15s;
+}
+
+.container > nav:first-of-type a:hover {
+  opacity: 0.75;
+}
+
+.container > nav:first-of-type span {
+  color: var(--kb-text-mute) !important;
+}
+
+/* Center the article header block + give it a max width that
+   matches the prose column. */
+article > header {
+  text-align: center;
+  max-width: 38rem;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  margin-bottom: 3rem !important;
+  padding-bottom: 1.75rem;
+  border-bottom: 1px solid var(--kb-border);
+}
+
+/* The "Article" eyebrow — convert from a block to a pill. */
+article > header > div:first-child {
+  display: inline-block;
+  padding: 0.35rem 0.9rem !important;
+  border-radius: 9999px;
+  background: var(--kb-primary-soft);
+  color: var(--kb-primary) !important;
+  font-family: 'Quicksand', sans-serif !important;
+  font-size: 0.6875rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.1em !important;
+  text-transform: uppercase !important;
+  margin-bottom: 1.25rem !important;
+}
+
+/* The article title — Fraunces serif, calmer weight. */
+article > header > h1 {
+  font-family: 'Fraunces', 'Lora', Georgia, serif !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.02em !important;
+  font-size: clamp(2.25rem, 4.5vw, 3rem) !important;
+  line-height: 1.15 !important;
+  color: var(--kb-text) !important;
+  margin: 0 0 0.875rem !important;
+}
+
+/* The publish date. */
+article > header > p {
+  font-family: 'Quicksand', sans-serif !important;
+  font-size: 0.875rem !important;
+  font-weight: 500 !important;
+  color: var(--kb-text-mute) !important;
+  letter-spacing: 0.02em;
+  margin: 0 !important;
+}
+
+/* Article wrapper + prose can stay nicely centered. */
+article {
+  max-width: 38rem;
+  margin: 0 auto;
+}
+
+/* The "← Back to Blog" link below the article. */
+.container > div:last-child {
+  max-width: 38rem;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  text-align: center;
+}
+
+.container > div:last-child > a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: 'Quicksand', sans-serif !important;
+  font-size: 0.9375rem !important;
+  font-weight: 600 !important;
+  color: var(--kb-primary) !important;
+  text-decoration: none;
+  transition: opacity 0.15s;
+}
+
+.container > div:last-child > a:hover {
+  opacity: 0.75;
+}
+
 /* --- Listing pages (blog index entries) ------------------------------ */
+
+/* BR's listing intro: <div><h1>Blog</h1><p>1 post</p></div>. Center it. */
+.container-wide > div:first-child {
+  max-width: 100% !important;
+  text-align: center;
+  margin-left: auto;
+  margin-right: auto;
+  margin-bottom: 3rem !important;
+}
+
+.container-wide > div:first-child > h1 {
+  font-family: 'Fraunces', 'Lora', Georgia, serif !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.02em !important;
+  font-size: clamp(2.25rem, 4.5vw, 3rem) !important;
+  color: var(--kb-text) !important;
+  margin-bottom: 0.5rem !important;
+}
+
+.container-wide > div:first-child > p {
+  font-family: 'Quicksand', sans-serif !important;
+  font-size: 1.0625rem !important;
+  color: var(--kb-text-soft) !important;
+}
+
+/* Entry cards (each post in the listing). */
+.entry-card.entry-card {
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem 1.5rem;
+  border-radius: var(--kb-radius);
+  background: #fff;
+  box-shadow: var(--kb-shadow-soft);
+  border-left: 3px solid var(--c, var(--kb-honey));
+  text-decoration: none;
+  color: inherit;
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+              box-shadow 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.entry-card.entry-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--kb-shadow-soft-lg);
+}
+
+.entry-kicker.entry-kicker {
+  font-family: 'Quicksand', sans-serif;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--kb-primary);
+  margin-bottom: 0.35rem;
+}
 
 .entry-title.entry-title {
   font-family: 'Fraunces', 'Lora', Georgia, serif;
   font-weight: 600;
+  font-size: 1.25rem;
   letter-spacing: -0.015em;
   color: var(--kb-text);
+  margin-bottom: 0.35rem;
+}
+
+.entry-meta.entry-meta {
+  font-family: 'Quicksand', sans-serif;
+  font-size: 0.875rem;
+  color: var(--kb-text-mute);
+}
+
+.entry-arrow.entry-arrow {
+  font-size: 1.5rem;
+  font-weight: 400;
+  color: var(--kb-primary);
+  margin-left: 1.5rem;
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.entry-card.entry-card:hover .entry-arrow.entry-arrow {
+  transform: translateX(3px);
+}
+
+/* --- Navbar mount input styling (defensive) --------------------------- */
+
+/* The React Navbar's search input gets its visual identity from
+   Tailwind classes (bg-white, rounded-md, border-kotoba-text/20, …)
+   that are compiled into the apex CSS bundle, so it should look the
+   same as on the apex. Belt-and-suspenders here: make sure BR's
+   global resets don't leak through and that the input has clean
+   focus + placeholder behaviour. Scoped to the navbar mount so we
+   never touch BR's content forms. */
+
+#kb-navbar-root form {
+  display: flex;
+}
+
+#kb-navbar-root input[type='search'],
+#kb-navbar-root input[type='text'] {
+  font-family: 'Quicksand', 'Inter', sans-serif;
+  line-height: 1.4;
+  height: 2.25rem;
+  color: var(--kb-text);
+  background: #fff;
+}
+
+#kb-navbar-root input[type='search']::placeholder,
+#kb-navbar-root input[type='text']::placeholder {
+  font-family: 'Quicksand', 'Inter', sans-serif;
+  color: var(--kb-text-mute);
+  opacity: 1;
+}
+
+#kb-navbar-root input[type='search']:focus,
+#kb-navbar-root input[type='text']:focus {
+  outline: none;
+  border-color: var(--kb-primary);
+  box-shadow: 0 0 0 3px rgb(var(--kotoba-primary-rgb, 22 86 29) / 0.12);
 }
 
 /* --- Animation -------------------------------------------------------- */
