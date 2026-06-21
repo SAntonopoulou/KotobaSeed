@@ -220,24 +220,13 @@ def content_css_changed_at() -> float:
 # styling-related comes from the apex CSS bundle linked above.
 HEAD_INJECT_TAIL = (
     '<style>'
-    # BR's base stylesheet emits an unscoped `footer { padding:2.5rem 0;
-    # margin-top:6rem; border-top:…; background:var(--bg-warm); }` rule
-    # that matches our chrome <footer>. Tailwind classes on the chrome
-    # already win on `background` (.bg-white) and on `margin-top` (.mt-auto),
-    # but Tailwind doesn't set padding on the outer <footer> (the chrome
-    # template applies py-10 to the inner div), so BR's padding survives.
-    # Override ONLY padding, and use a descendant selector because
-    # Footer.jsx wraps the footer in an extra <div> when it renders via
-    # dangerouslySetInnerHTML. Don't touch background or border — that
-    # would beat Tailwind on specificity and make the chrome invisible.
-    '#kb-footer-root footer{padding:0;margin-top:0;}'
-    # BR's `html { font-family: var(--font) }` (Inter) gets inherited by
-    # article content. Use the same `font-sans` stack the apex SPA does,
-    # so article text and chrome both pick up Quicksand.
-    'body{font-family:Quicksand,Inter,ui-sans-serif,system-ui,-apple-system,'
-    'BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;}'
     # Mobile-drawer toggle wiring for the no-JS signed-out fallback.
     # Once React mounts, the real Navbar component drives its own state.
+    # This is the ONLY chrome-related rule we inject — every other style
+    # for the React Navbar / Footer comes from the apex CSS bundle's
+    # Tailwind classes so it renders identically to the apex SPA. Any
+    # /news-only override here would by definition make /news look
+    # different from the apex.
     '.kb-mobile-drawer{display:none;}'
     '.kb-mob-open .kb-mobile-drawer{display:block;}'
     '@media(min-width:1024px){.kb-mob-open .kb-mobile-drawer{display:none;}}'
@@ -359,14 +348,17 @@ def transform(html: str, nav_html: str, footer_html: str) -> str:
     html = re.sub(
         r'<footer class="bg-white border-t[\s\S]*?</footer>', '', html
     )
-    # 5. Inject the navbar mount root immediately after <body…>. The
-    #    static signed-out chrome inside it is a no-JS / crawler
-    #    fallback — once main.jsx picks up #kb-navbar-root, ReactDOM
-    #    replaces it with the real Navbar (signed-in or out, with full
-    #    auth-aware widgets).
+    # 5. Inject empty navbar + footer mount roots. We deliberately do
+    #    NOT pre-fill with a static signed-out fallback. The fallback
+    #    matches the signed-out chrome, so a signed-in user saw a
+    #    visible flash from signed-out to signed-in when React mounted
+    #    on top of it. Empty mount roots = the React Navbar / Footer
+    #    is the only thing rendered, identical to the apex SPA path.
+    #    The trade-off is ~100ms of blank chrome on first paint —
+    #    accepted to keep the perceived rendering coherent.
     nav_block = (
         BODY_MARKER_NAV_START
-        + '<div id="kb-navbar-root">' + nav_html + '</div>'
+        + '<div id="kb-navbar-root"></div>'
         + BODY_MARKER_NAV_END
     )
     html = re.sub(
@@ -375,10 +367,9 @@ def transform(html: str, nav_html: str, footer_html: str) -> str:
         html,
         count=1,
     )
-    # 6. Inject the footer mount root immediately before </body>.
     footer_block = (
         BODY_MARKER_FOOTER_START
-        + '<div id="kb-footer-root">' + footer_html + '</div>'
+        + '<div id="kb-footer-root"></div>'
         + BODY_MARKER_FOOTER_END
     )
     html = html.replace('</body>', footer_block + '</body>', 1)

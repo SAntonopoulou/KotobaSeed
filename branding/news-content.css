@@ -633,79 +633,20 @@ article {
   transform: translateX(3px);
 }
 
-/* --- Navbar mount input styling (BR override) ------------------------ */
+/* --- Navbar mount: let Tailwind drive ---------------------------------
 
-/* BR's renderer ships these global rules in its inline <style> block:
-     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-     :focus-visible {
-       outline: 2px solid var(--brand-mid);
-       outline-offset: 2px;
-       border-radius: 4px;
-     }
-     html { font-family: var(--font); }   // var(--font) = Inter
-   The :focus-visible rule paints a 2px sage outline 2px outside any
-   focusable element — including the search input. The universal
-   reset clobbers padding/margin (Tailwind's class selectors win, but
-   only on properties that are explicitly set). We force the input
-   here to match the apex exactly, regardless of BR's resets. The
-   #kb-navbar-root prefix scopes the override so BR's article-body
-   forms (if any get added later) are untouched. */
+   The React Navbar + Footer mount via news_chrome_mount.jsx and bring
+   their own Tailwind classes (pl-9, py-1.5, rounded-md, border-kotoba-
+   text/20, focus:ring-1, etc.) — exactly the same ones rendered on the
+   apex SPA. Since the rewriter now strips every BR stylesheet, nothing
+   leaks through and Tailwind's compiled rules in apex.css are the
+   single source of truth for these elements. We do NOT add any
+   defensive overrides here — any !important on input padding /
+   border-radius / height would make the /news search bar look
+   different from the apex, which is the opposite of what we want.
 
-#kb-navbar-root form {
-  display: flex;
-}
-
-#kb-navbar-root input[type='search'],
-#kb-navbar-root input[type='text'] {
-  font-family: 'Quicksand', 'Inter', sans-serif !important;
-  font-size: 0.875rem !important;
-  line-height: 1.4 !important;
-  color: var(--kb-text) !important;
-  background-color: #fff !important;
-  border: 1px solid rgb(var(--kotoba-text-rgb, 43 70 60) / 0.2) !important;
-  border-radius: 0.5rem !important;
-  padding: 0.5rem 0.75rem 0.5rem 2.25rem !important;
-  height: 2.25rem !important;
-  margin: 0 !important;
-  -webkit-appearance: none !important;
-  appearance: none !important;
-}
-
-#kb-navbar-root input[type='search']::placeholder,
-#kb-navbar-root input[type='text']::placeholder {
-  font-family: 'Quicksand', 'Inter', sans-serif !important;
-  color: rgb(var(--kotoba-text-rgb, 43 70 60) / 0.5) !important;
-  opacity: 1;
-}
-
-/* Webkit search input has a built-in clear button + magnifier; hide so
-   the visual stays clean and matches the apex. */
-#kb-navbar-root input[type='search']::-webkit-search-decoration,
-#kb-navbar-root input[type='search']::-webkit-search-cancel-button,
-#kb-navbar-root input[type='search']::-webkit-search-results-button,
-#kb-navbar-root input[type='search']::-webkit-search-results-decoration {
-  -webkit-appearance: none;
-  appearance: none;
-}
-
-#kb-navbar-root input[type='search']:focus,
-#kb-navbar-root input[type='text']:focus,
-#kb-navbar-root input[type='search']:focus-visible,
-#kb-navbar-root input[type='text']:focus-visible {
-  outline: none !important;
-  outline-offset: 0 !important;
-  border-color: rgb(var(--kotoba-primary-rgb, 22 86 29)) !important;
-  box-shadow: 0 0 0 3px rgb(var(--kotoba-primary-rgb, 22 86 29) / 0.15) !important;
-}
-
-/* Defensive: neutralize BR's :focus-visible everywhere inside the
-   chrome mount so its sage outline ring never bleeds through onto
-   our links/buttons/dropdown summaries. */
-#kb-navbar-root :focus-visible,
-#kb-footer-root :focus-visible {
-  outline: none !important;
-  outline-offset: 0 !important;
-}
+   If a future BR upgrade reintroduces an interfering global rule,
+   patch the strip in the rewriter rather than restyling here. */
 
 /* --- Animation -------------------------------------------------------- */
 
