@@ -584,15 +584,33 @@ def _create_lesson_modules(
     session: Session, tutors: list[Tutor], students: list[User]
 ) -> None:
     """Each tutor on PRO billing gets 2 published modules. Half get a
-    handful of student purchases so the modules surface shows revenue."""
+    handful of student purchases so the modules surface shows revenue.
+
+    Module titles are partitioned across tutors — the template pool is
+    shuffled once at the top of the function, then dealt out in
+    consecutive pairs so two tutors never get the same title in the
+    same seed run. The pool is sized 2N for N PRO tutors so we never
+    have to recycle within a run."""
     import json
-    template = [
+    from itertools import islice
+    template_pool = [
         ("Greek alphabet boot camp", "Five sessions, fully written + audio.", 1500),
         ("JLPT N3 grammar drills", "20 question sets with answer keys.", 2500),
         ("Spanish subjunctive mastery", "Pattern-by-pattern walkthrough.", 1800),
         ("English vowels you've never heard", "Listening + repetition drills.", 1200),
         ("German cases finally", "Four hours of explanation + practice.", 2200),
+        ("Korean honorifics, decoded", "Which form to use when, with examples.", 2000),
+        ("French liaison in the wild", "Drills + listening for natural speech.", 1400),
+        ("Italian past tenses, no panic", "Every tense, what it does, when to use it.", 1800),
+        ("Russian motion verbs unlocked", "Why идти vs ходить trips everyone up.", 2200),
+        ("Mandarin tone pairs that trip you up", "Targeted drills for the harder pairs.", 1500),
+        ("Portuguese conjugation shortcuts", "Patterns that cover 80% of speech.", 1700),
+        ("Arabic root families in practice", "Recognise + reuse the same root system.", 2400),
     ]
+    # Shuffle once per run so successive seeds don't hand out the same
+    # titles, then deal pairs in order across tutors.
+    shuffled = RNG.sample(template_pool, len(template_pool))
+    title_iter = iter(shuffled)
     for tutor in tutors:
         if tutor.plan != TutorPlan.PRO:
             continue
@@ -606,7 +624,15 @@ def _create_lesson_modules(
             # Tutor has fewer articles than module slots want — skip
             # rather than seed a half-broken module.
             continue
-        for idx, (title, summary, price) in enumerate(RNG.sample(template, 2)):
+        picks = list(islice(title_iter, 2))
+        if len(picks) < 2:
+            # More PRO tutors than the pool can cover uniquely — reshuffle
+            # and start over. We accept SOME cross-tutor collisions here
+            # rather than skip a tutor's modules entirely.
+            shuffled = RNG.sample(template_pool, len(template_pool))
+            title_iter = iter(shuffled)
+            picks = list(islice(title_iter, 2))
+        for idx, (title, summary, price) in enumerate(picks):
             # Two-item modules: first item is a free preview, second is
             # gated behind the purchase. Showcases the gate working on
             # both sides for prospects on demo.kotobaseed.net.
