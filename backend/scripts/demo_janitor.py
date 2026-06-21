@@ -40,25 +40,24 @@ log = logging.getLogger(__name__)
 RETENTION_DAYS = 30
 
 
-def _purge_fk_children(
-    session: Session, parent_table: str, parent_id: int
-) -> None:
-    """Delete every row in any table that has a FOREIGN KEY referencing
-    `parent_table.id == parent_id`. Discovers the children at runtime
-    from information_schema so the helper survives schema growth — when
-    we add a new `tutor_*` table that FKs to Tutor (or `*_user_id` to
-    User), no manual list edit is needed.
+def _table_has_id_column(session: Session, table: str) -> bool:
+    return (
+        session.execute(
+            text(
+                "SELECT 1 FROM information_schema.columns "
+                "WHERE table_name = :tbl AND column_name = 'id' LIMIT 1"
+            ),
+            {"tbl": table},
+        ).first()
+        is not None
+    )
 
-    Child tables may have FKs between THEMSELVES (e.g. pledge → project,
-    module_purchase → lesson_module), so a single pass may hit
-    constraint errors. We use savepoints to roll back ONLY the failing
-    DELETE and retry until either everything succeeds or a pass makes
-    no progress.
 
-    Postgres-only (uses the standard information_schema views).
-    """
-    from sqlalchemy.exc import IntegrityError
-
+def _fk_children(
+    session: Session, parent_table: str
+) -> list[tuple[str, str]]:
+    """Return [(child_table, fk_column), …] for every FK pointing at
+    `parent_table.id`."""
     rows = session.execute(
         text(
             """
@@ -77,41 +76,55 @@ def _purge_fk_children(
         ),
         {"parent": parent_table},
     ).all()
+    return [(t, c) for t, c in rows]
 
-    remaining = list(rows)
-    # Bound the retries so a genuinely impossible FK doesn't loop forever.
-    for _ in range(len(remaining) + 1):
-        if not remaining:
-            return
-        next_round: list = []
-        progress = False
-        for table, column in remaining:
-            sp = session.begin_nested()
-            try:
-                # Parameter binding doesn't work for identifiers, so
-                # build the SQL with f-string — values come ONLY from
-                # information_schema (not user input).
+
+def _purge_fk_children(
+    session: Session,
+    parent_table: str,
+    parent_id: int,
+    visited: set[tuple[str, int]] | None = None,
+) -> None:
+    """Recursively delete every row that references `parent_table.id ==
+    parent_id`, AND every row that references those rows, all the way
+    down the FK graph. Discovers the graph at runtime via
+    information_schema so the helper survives schema growth (a new
+    `tutor_*` FK to Tutor or `*_user_id` to User needs no code edit).
+
+    Cycle protection via the `visited` set: each (table, id) pair is
+    processed at most once per top-level call.
+
+    Postgres-only (information_schema). Sqlite test fixtures will
+    exception out; callers handle the failure.
+    """
+    visited = visited if visited is not None else set()
+    if (parent_table, parent_id) in visited:
+        return
+    visited.add((parent_table, parent_id))
+
+    for child_table, fk_column in _fk_children(session, parent_table):
+        # Recurse into grandchildren BEFORE deleting the child rows —
+        # otherwise the child delete fails on the grandchild FK (e.g.
+        # `article_rating.article_id` blocks `DELETE FROM article`).
+        if _table_has_id_column(session, child_table):
+            child_ids = (
                 session.execute(
-                    text(f'DELETE FROM "{table}" WHERE "{column}" = :pid'),
+                    text(
+                        f'SELECT id FROM "{child_table}" '
+                        f'WHERE "{fk_column}" = :pid'
+                    ),
                     {"pid": parent_id},
                 )
-                sp.commit()
-                progress = True
-            except IntegrityError:
-                sp.rollback()
-                next_round.append((table, column))
-        remaining = next_round
-        if not progress:
-            break
+                .scalars()
+                .all()
+            )
+            for cid in child_ids:
+                _purge_fk_children(session, child_table, cid, visited)
 
-    if remaining:
-        log.warning(
-            "demo janitor: %d child tables of %s.id=%s could not be "
-            "purged after exhaustive retry: %s",
-            len(remaining),
-            parent_table,
-            parent_id,
-            [t for t, _ in remaining],
+        # Now safe to delete the child rows themselves.
+        session.execute(
+            text(f'DELETE FROM "{child_table}" WHERE "{fk_column}" = :pid'),
+            {"pid": parent_id},
         )
 
 
