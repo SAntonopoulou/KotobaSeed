@@ -375,31 +375,43 @@ def transform(html: str, nav_html: str, footer_html: str) -> str:
     html = re.sub(
         r'<footer class="bg-white border-t[\s\S]*?</footer>', '', html
     )
-    # 5. Inject empty navbar + footer mount roots. We deliberately do
-    #    NOT pre-fill with a static signed-out fallback. The fallback
-    #    matches the signed-out chrome, so a signed-in user saw a
-    #    visible flash from signed-out to signed-in when React mounted
-    #    on top of it. Empty mount roots = the React Navbar / Footer
-    #    is the only thing rendered, identical to the apex SPA path.
-    #    The trade-off is ~100ms of blank chrome on first paint —
-    #    accepted to keep the perceived rendering coherent.
-    nav_block = (
+    # 5. Wrap the body in the same ApexShell structure the apex SPA
+    #    renders (see App.jsx :: ApexShell):
+    #
+    #        <div class="min-h-screen bg-kotoba-background/60 flex flex-col">
+    #          <div id="kb-navbar-root"></div>      <!-- where <Navbar /> lives -->
+    #          <div class="flex-grow">
+    #            [BR static content]
+    #          </div>
+    #          <div id="kb-footer-root"></div>      <!-- where <Footer /> lives -->
+    #        </div>
+    #
+    #    This puts the React-mounted Navbar/Footer in the SAME parent
+    #    DOM context as on the apex — same min-h-screen, same
+    #    bg-kotoba-background/60, same flex flex-col, same `flex-grow`
+    #    content area. The chrome no longer renders in isolation and
+    #    inherits the same layout / background as the rest of the site.
+    shell_open = (
         BODY_MARKER_NAV_START
+        + '<div class="min-h-screen bg-kotoba-background/60 flex flex-col">'
         + '<div id="kb-navbar-root"></div>'
+        + '<div class="flex-grow">'
         + BODY_MARKER_NAV_END
     )
     html = re.sub(
         r'(<body[^>]*>)',
-        lambda m: m.group(1) + nav_block,
+        lambda m: m.group(1) + shell_open,
         html,
         count=1,
     )
-    footer_block = (
+    shell_close = (
         BODY_MARKER_FOOTER_START
+        + '</div>'  # close .flex-grow
         + '<div id="kb-footer-root"></div>'
+        + '</div>'  # close .min-h-screen wrapper
         + BODY_MARKER_FOOTER_END
     )
-    html = html.replace('</body>', footer_block + '</body>', 1)
+    html = html.replace('</body>', shell_close + '</body>', 1)
     return html
 
 
