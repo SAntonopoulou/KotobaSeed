@@ -26,6 +26,10 @@ from sqlmodel import Session, select
 from ..config import settings
 from ..database import get_session
 from ..models import LessonPack, Tutor, TutorAccountStatus, User
+from ..services.demo_isolation import (
+    exclude_cross_env_users,
+    is_user_visible_in_env,
+)
 
 router = APIRouter(prefix="/marketplace", tags=["marketplace"])
 
@@ -89,14 +93,19 @@ def list_marketplace_tutors(
     tutors who offer a free trial. Tutors with no headline price set are
     still returned unless max_price_cents is given.
     """
-    tutors = list(
-        session.exec(
-            select(Tutor).where(
-                Tutor.account_status == TutorAccountStatus.ACTIVE,
-                Tutor.list_in_marketplace == True,  # noqa: E712
-            )
-        ).all()
+    # Foundational demo/real split — production hides demo accounts'
+    # tutors, staging hides real accounts' tutors. Without this filter
+    # the marketplace listing would mix the two pools.
+    tutor_stmt = (
+        select(Tutor)
+        .join(User, User.id == Tutor.user_id)
+        .where(
+            Tutor.account_status == TutorAccountStatus.ACTIVE,
+            Tutor.list_in_marketplace == True,  # noqa: E712
+        )
     )
+    tutor_stmt = exclude_cross_env_users(tutor_stmt)
+    tutors = list(session.exec(tutor_stmt).all())
     if not tutors:
         return []
 
@@ -166,7 +175,7 @@ def list_marketplace_languages(
     insensitive dedup; preserves the spelling of the first occurrence."""
     seen_lower: set[str] = set()
     languages: list[str] = []
-    rows = session.exec(
+    lang_stmt = (
         select(User.languages)
         .join(Tutor, Tutor.user_id == User.id)
         .where(
@@ -176,7 +185,9 @@ def list_marketplace_languages(
             User.email_verified_at != None,  # noqa: E711
             User.languages != None,  # noqa: E711
         )
-    ).all()
+    )
+    lang_stmt = exclude_cross_env_users(lang_stmt)
+    rows = session.exec(lang_stmt).all()
     for raw in rows:
         if not raw:
             continue

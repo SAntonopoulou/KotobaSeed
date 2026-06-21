@@ -27,6 +27,7 @@ from sqlmodel import Session, select
 
 from ..database import get_session
 from ..models import Article, LessonModule, Tutor, User
+from ..services.demo_isolation import exclude_cross_env_users
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/discover", tags=["discover"])
@@ -109,7 +110,7 @@ def list_discover(
     items: list[DiscoverItem] = []
 
     if kind in ("all", "article"):
-        rows = session.exec(
+        article_stmt = (
             select(Article, Tutor, User)
             .join(Tutor, Tutor.id == Article.tutor_id)
             .join(User, User.id == Tutor.user_id)
@@ -120,7 +121,12 @@ def list_discover(
             )
             .order_by(Article.published_at.desc())
             .limit(offset + limit + 1)
-        ).all()
+        )
+        # Foundational demo/real split: production hides demo-account
+        # content, staging hides real-account content. See
+        # services/demo_isolation.py for the full contract.
+        article_stmt = exclude_cross_env_users(article_stmt)
+        rows = session.exec(article_stmt).all()
         for art, tut, _user in rows:
             tutor_lang = _primary_language(_user)
             if language and (not tutor_lang or language.lower() not in tutor_lang.lower()):
@@ -144,14 +150,16 @@ def list_discover(
             )
 
     if kind in ("all", "module"):
-        rows = session.exec(
+        module_stmt = (
             select(LessonModule, Tutor, User)
             .join(Tutor, Tutor.id == LessonModule.tutor_id)
             .join(User, User.id == Tutor.user_id)
             .where(LessonModule.is_published == True)  # noqa: E712
             .order_by(LessonModule.published_at.desc())
             .limit(offset + limit + 1)
-        ).all()
+        )
+        module_stmt = exclude_cross_env_users(module_stmt)
+        rows = session.exec(module_stmt).all()
         for mod, tut, _user in rows:
             tutor_lang = _primary_language(_user)
             if language and (not tutor_lang or language.lower() not in tutor_lang.lower()):
@@ -183,9 +191,10 @@ def list_discover(
     # list on the discovery page. We pull from User.languages because
     # Tutor leans on the User row for identity-bearing fields.
     all_langs: set[str] = set()
-    lang_rows = session.exec(
+    lang_stmt = exclude_cross_env_users(
         select(User.languages).join(Tutor, Tutor.user_id == User.id)
-    ).all()
+    )
+    lang_rows = session.exec(lang_stmt).all()
     for raw in lang_rows:
         for lang in _languages_taught(raw):
             all_langs.add(lang)
