@@ -18,27 +18,35 @@
 
 import { resolveDraftArticleEditRoute } from './tourResolvers';
 
+// Tutor tour — anchored on the three pain points that drive conversion:
+//   1. "I'm tired of juggling 3 tools" → calendar + payments + content in one
+//      place
+//   2. "I want students who actually engage" → curriculum + homework +
+//      analytics
+//   3. "I want my own brand" → custom site + custom domain + custom theme
+// Each stop opens with the pain it solves so the demo prospect hears their
+// own complaint reflected back at them, then sees the platform answering it.
 export const tutorTour = [
   {
     id: 'tutor-welcome',
     route: '/dashboard',
     targetSelector: null,
-    title: "I'm Soba.",
-    body: "I'll show you around in under a minute. Click Skip any time — nothing here is permanent until you set a password.",
+    title: "Most tutors juggle a calendar, a payments app, a content tool, and a chat thread.",
+    body: "I'll show you how Kotobaseed collapses all of that into one dashboard — in about a minute. Skip any time; nothing's permanent until you choose a plan.",
   },
   {
-    id: 'tutor-sidebar',
+    id: 'tutor-schedule',
     route: '/dashboard',
     targetSelector: '[data-tour="dashboard-sidebar"]',
-    title: 'This is your dashboard.',
-    body: 'Bookings, lessons, content, your site, your money — all here. Try clicking a section.',
+    title: 'Your week, already booked.',
+    body: 'We pre-filled seven upcoming lessons across three students so you can see what a real Kotobaseed dashboard feels like. Calendar, bookings, and payments are wired into the same row — no copy-pasting student names between tools.',
   },
   {
-    id: 'tutor-content',
+    id: 'tutor-engagement',
     route: '/dashboard',
     targetSelector: '[data-tour="dashboard-section-content"]',
-    title: 'Content lives here.',
-    body: 'Articles, modules, your subscription, newsletters. We pre-filled an article you can try editing in a sec.',
+    title: 'Engaged students, not just attended ones.',
+    body: "Lesson plans live next to bookings. Homework auto-assigns when you mark a lesson complete. Modules link to your articles so paid students unlock the material that takes them past your free tier.",
     action: { kind: 'click-target' },
   },
   {
@@ -46,30 +54,30 @@ export const tutorTour = [
     route: resolveDraftArticleEditRoute,
     targetSelector: '[data-tour="article-title-input"]',
     title: 'Try editing the title.',
-    body: "We pre-filled a draft for you. Tweak the title — nothing's published until you hit publish.",
+    body: "We pre-filled a draft for you. Tweak the title to make it yours — nothing publishes until you hit publish, and the editor is the same one your finished articles render through.",
     interactive: true,
   },
   {
     id: 'tutor-site',
     route: '/dashboard',
     targetSelector: '[data-tour="dashboard-section-site"]',
-    title: 'Your public site.',
-    body: 'This is what students see at yourname.kotobaseed.net. You can pick a theme, edit your profile, build the page.',
+    title: 'Your brand, your site.',
+    body: "Every student lands at yourname.kotobaseed.net (or your own .com — we provision the cert). Pick a theme, build the page from blocks, hide what doesn't fit. Schools build the same site, only with their team and programmes instead of one tutor's bio.",
   },
   {
     id: 'tutor-money',
     route: '/dashboard',
     targetSelector: '[data-tour="dashboard-section-money"]',
-    title: 'Money flows through Stripe.',
-    body: 'Connect Stripe when you set a password — until then, no payments touch anything real.',
+    title: 'Stripe Connect — you keep the relationship.',
+    body: "Lessons + modules + premium homework all settle to your own Stripe account. We take a flat platform fee; the rest goes straight to your bank. Connect when you choose a plan; until then nothing real moves.",
     badge: 'Pro',
   },
   {
     id: 'tutor-finale',
     route: '/dashboard',
     targetSelector: null,
-    title: "Ready when you are.",
-    body: "Hit Choose a plan at the top whenever you want to keep what you've made. Your seeded examples get cleaned up; your edits stay.",
+    title: "Make this yours.",
+    body: "Everything you've edited stays when you convert; the seeded examples get cleaned up. Hit Choose a plan up top whenever you're ready.",
   },
 ];
 
