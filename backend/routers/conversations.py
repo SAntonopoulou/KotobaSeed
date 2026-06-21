@@ -36,6 +36,14 @@ _report_limit = rate_limit("report", limit=10, window_seconds=3600)
 # as the direct-DM limit so a single account can't spam every tutor on
 # the board.
 _open_marketplace_limit = rate_limit("open_marketplace", limit=10, window_seconds=3600)
+# Offer + offer-state transitions: a script could otherwise hammer
+# accept/reject toggles or fire offers across every open conversation.
+# Generous enough that a working tutor never sees it (30/hour is roughly
+# one every two minutes); low enough that abuse stalls.
+_offer_limit = rate_limit("offer", limit=30, window_seconds=3600)
+# Demo-video request + URL updates. Even rarer than offers — the cap is
+# defence against a script that flips state in a loop.
+_demo_video_limit = rate_limit("demo_video", limit=30, window_seconds=3600)
 from ..models import (  # noqa: E402 — rate_limit set up above this block
     Conversation,
     ConversationReport,
@@ -1108,7 +1116,7 @@ def is_user_blocked(
 async def make_offer(
     conversation_id: int,
     offer_in: OfferCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(_offer_limit),
     session: Session = Depends(get_session),
 ):
     conversation = session.get(Conversation, conversation_id)
@@ -1190,7 +1198,7 @@ async def make_offer(
 @router.post("/messages/{message_id}/accept-offer", response_model=Project)
 async def accept_offer(
     message_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(_offer_limit),
     session: Session = Depends(get_session),
 ):
     offer_message = session.get(Message, message_id)
@@ -1303,7 +1311,7 @@ async def accept_offer(
 @router.post("/messages/{message_id}/reject-offer")
 async def reject_offer(
     message_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(_offer_limit),
     session: Session = Depends(get_session),
 ):
     offer_message = session.get(Message, message_id)
@@ -1593,7 +1601,7 @@ def close_conversation(
 @router.post("/{conversation_id}/request-demo-video", response_model=MessageRead)
 async def request_demo_video(
     conversation_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(_demo_video_limit),
     session: Session = Depends(get_session),
 ):
     conversation = session.get(Conversation, conversation_id)
@@ -1658,7 +1666,7 @@ async def request_demo_video(
 async def update_demo_video_url(
     conversation_id: int,
     demo_video_in: DemoVideoUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(_demo_video_limit),
     session: Session = Depends(get_session),
 ):
     conversation = session.get(Conversation, conversation_id)
