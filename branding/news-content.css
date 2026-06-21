@@ -56,8 +56,19 @@
   padding: 0;
 }
 
-/* BR uses these for content layout; restore the widths now that BR's
-   .container rules are stripped. */
+/* Magazine page background — pure off-white inside the BR content area
+   so the editorial layout reads as a printed publication, not a SaaS
+   landing. The apex shell's `bg-kotoba-background/60` cream stays
+   visible at the top/bottom edges and behind the chrome. */
+.br-app {
+  background: #fdfdfb;
+}
+
+.min-h-screen {
+  background: rgb(var(--kotoba-background-rgb, 244 241 233));
+}
+
+/* BR's content widths — used for body wrappers below. */
 .br-app .container {
   max-width: 720px;
   margin: 0 auto;
@@ -67,63 +78,32 @@
 }
 
 .br-app .container-wide {
-  max-width: 1080px;
+  max-width: 1200px;
   margin: 0 auto;
-  padding: 0 1.5rem;
+  padding: 0 2rem;
   font-family: 'Quicksand', 'Inter', ui-sans-serif, system-ui, sans-serif;
   color: var(--kb-text);
 }
 
-/* --- Hero (index page) ----------------------------------------------- */
+/* --- MASTHEAD (uses BR's .hero element) ----------------------------- */
 
+/* Editorial masthead. Wordmark up top, then a thin rule, then the deck
+   line + the issue meta. No card, no shadow, no rounded box — just
+   typography on white, the way a magazine cover treats it. */
 .hero.hero {
   position: relative;
-  padding: 6rem 2rem 5rem;
-  margin: 2rem auto 4rem;
-  max-width: 1080px;
-  border-radius: var(--kb-radius-xl);
-  background: #fff;
-  box-shadow: var(--kb-shadow-soft-lg);
-  overflow: hidden;
-  isolation: isolate;
-  animation: kb-fade-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+  max-width: 1100px;
+  margin: 4rem auto 0;
+  padding: 0 2rem;
+  text-align: left;
 }
 
-/* Decorative aurora — two soft sage + honey washes that catch the
-   light without competing with the wordmark. They sit behind the
-   content (z-index 0) because the hero is `isolation:isolate`. */
-.hero.hero::before,
 .hero.hero::after {
   content: '';
-  position: absolute;
-  pointer-events: none;
-  z-index: 0;
+  display: block;
+  margin: 3rem 0 0;
+  border-bottom: 1px solid var(--kb-text);
 }
-
-.hero.hero::before {
-  inset: -30% -10% auto -10%;
-  height: 70%;
-  background: radial-gradient(
-    60% 80% at 30% 40%,
-    rgb(var(--kotoba-primary-rgb, 22 86 29) / 0.10),
-    transparent 70%
-  );
-  filter: blur(40px);
-}
-
-.hero.hero::after {
-  inset: auto -10% -25% auto;
-  width: 60%;
-  height: 60%;
-  background: radial-gradient(
-    60% 80% at 70% 60%,
-    rgb(214 164 47 / 0.16),
-    transparent 70%
-  );
-  filter: blur(50px);
-}
-
-.hero.hero > * { position: relative; z-index: 1; }
 
 /* The Kotobaseed logo emitted in the hero by BR. Pin its height so it
    reads as a visual mark, not an oversized banner image. */
@@ -135,9 +115,9 @@
 }
 
 .hero-inner.hero-inner {
-  max-width: 720px;
-  margin: 0 auto;
-  text-align: center;
+  max-width: 100%;
+  margin: 0;
+  text-align: left;
 }
 
 /* Hero badge: text-only wordmark, no pill, no logo. The Kotobaseed
@@ -149,12 +129,31 @@
 }
 
 .hero-badge.hero-badge {
-  display: inline-block;
+  display: flex !important;
+  align-items: baseline !important;
+  justify-content: space-between !important;
+  gap: 1rem !important;
   padding: 0 !important;
   background: transparent !important;
   border-radius: 0 !important;
   text-transform: none !important;
-  margin-bottom: 1.5rem !important;
+  margin: 0 0 0.5rem !important;
+  position: relative;
+}
+
+/* Magazine masthead descriptor (italic Fraunces, very small) — sits
+   to the right of the wordmark on the masthead row. */
+.hero-badge.hero-badge::after {
+  content: 'A magazine on language learning, independent teaching, and the small craft of getting fluent.';
+  display: block;
+  flex: 1;
+  max-width: 22rem;
+  font-family: 'Fraunces', 'Lora', Georgia, serif;
+  font-style: italic;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  color: var(--kb-text-soft);
+  text-align: right;
 }
 
 /* The BR-emitted <span>Kotobaseed</span> inside .hero-badge is split
@@ -168,10 +167,11 @@
 .hero-badge.hero-badge > span.kb-wordmark {
   font-family: 'Fraunces', 'Lora', Georgia, serif !important;
   font-weight: 700 !important;
-  font-size: clamp(1.75rem, 3.5vw, 2.5rem) !important;
-  letter-spacing: -0.02em !important;
+  font-size: clamp(2rem, 4vw, 2.75rem) !important;
+  letter-spacing: -0.025em !important;
   line-height: 1 !important;
   display: inline-block;
+  flex-shrink: 0;
 }
 
 .kb-wordmark-kotoba {
@@ -182,399 +182,430 @@
   color: var(--kb-honey);
 }
 
+/* Hero-title becomes the magazine "Vol." / issue line + the cover deck
+   beneath it. Two lines of typography, no CTA pill. */
 .hero-title.hero-title {
   font-family: 'Fraunces', 'Lora', Georgia, serif;
-  font-weight: 600;
-  font-size: clamp(2.75rem, 5.5vw, 4.25rem);
-  line-height: 1.05;
-  letter-spacing: -0.025em;
+  font-weight: 400;
+  font-style: italic;
+  font-size: clamp(1.25rem, 1.8vw, 1.625rem);
+  line-height: 1.25;
+  letter-spacing: 0;
   color: var(--kb-text);
-  margin-bottom: 1.25rem;
+  margin: 1.75rem 0 0;
+  max-width: 36rem;
 }
 
 .hero-sub.hero-sub {
   font-family: 'Quicksand', sans-serif;
-  font-size: clamp(1.0625rem, 1.4vw, 1.25rem);
-  font-weight: 500;
-  line-height: 1.5;
-  color: var(--kb-text-soft);
-  max-width: 38rem;
-  margin: 0 auto 2.25rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--kb-text-mute);
+  margin: 0.85rem 0 0;
 }
 
-.hero-actions.hero-actions {
-  display: flex;
-  justify-content: center;
-  gap: 0.85rem;
-  flex-wrap: wrap;
-  margin-bottom: 2.5rem;
-}
+/* Drop the inline CTA from the masthead — magazines don't ask you to
+   "Explore all content"; you scroll. */
+.hero-actions.hero-actions { display: none !important; }
 
-/* --- Primary CTA button (used in .hero-actions + elsewhere) --------- */
+/* --- Primary CTA button — editorial text link (no pill) -------------- */
 
 .br-app .btn-primary {
   display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.85rem 1.5rem;
-  border-radius: 9999px;
-  background: rgb(var(--kotoba-primary-rgb, 22 86 29));
-  color: #fff !important;
+  align-items: baseline;
+  gap: 0.45rem;
+  padding: 0;
+  background: transparent;
+  color: var(--kb-text) !important;
   font-family: 'Quicksand', sans-serif;
-  font-size: 0.9375rem;
+  font-size: 0.6875rem;
   font-weight: 700;
-  letter-spacing: 0.01em;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
   text-decoration: none !important;
-  box-shadow:
-    0 1px 2px rgba(22, 86, 29, 0.08),
-    0 8px 24px rgba(22, 86, 29, 0.18);
-  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1),
-              box-shadow 0.2s cubic-bezier(0.22, 1, 0.36, 1),
-              background 0.18s ease;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  position: relative;
+  transition: color 0.18s ease;
 }
 
-.br-app .btn-primary:hover {
-  background: rgb(var(--kotoba-primary-rgb, 22 86 29) / 0.92);
-  transform: translateY(-1px);
-  box-shadow:
-    0 2px 4px rgba(22, 86, 29, 0.10),
-    0 14px 36px rgba(22, 86, 29, 0.22);
+.br-app .btn-primary::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -3px;
+  height: 1px;
+  background: var(--kb-text);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
+
+.br-app .btn-primary:hover::after { transform: scaleX(1); }
 
 .br-app .btn-primary > span[aria-hidden] {
-  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .br-app .btn-primary:hover > span[aria-hidden] {
-  transform: translateX(3px);
+  transform: translateX(2px);
 }
 
-/* --- Topic chips under the hero ------------------------------------- */
+/* --- Section navigation row (BR ships this as `.chips`) ------------ */
+
+/* Editorial top-of-issue nav. Section names in small caps, separated
+   by hairline dots, no emoji, no count pill. The per-type colours BR
+   sets via `--c` are deliberately ignored — uniform sage accent only. */
 
 .chips.chips {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
-  gap: 0.6rem;
+  align-items: center;
+  gap: 0;
+  margin: 2rem 0 0;
+  padding-bottom: 2.5rem;
+  border-bottom: 1px solid var(--kb-border);
 }
 
 .br-app .chip {
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
-  padding: 0.55rem 0.95rem;
-  border-radius: 9999px;
-  background: #fff;
-  border: 1px solid var(--kb-border);
+  gap: 0.4rem;
+  padding: 0.35rem 1rem 0.35rem 0;
+  margin-right: 1rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   font-family: 'Quicksand', sans-serif;
-  font-size: 0.875rem;
-  font-weight: 600;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
   color: var(--kb-text) !important;
   text-decoration: none !important;
-  box-shadow: 0 1px 2px rgba(64, 60, 50, 0.04);
-  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1),
-              border-color 0.18s ease,
-              box-shadow 0.18s ease;
-  position: relative;
-}
-
-.br-app .chip::before {
-  content: '';
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-radius: 9999px;
-  background: var(--c, var(--kb-honey));
-  flex-shrink: 0;
+  box-shadow: none;
+  transition: color 0.15s;
 }
 
 .br-app .chip:hover {
-  transform: translateY(-1px);
-  border-color: var(--c, var(--kb-honey));
-  box-shadow: var(--kb-shadow-soft);
+  color: rgb(var(--kotoba-primary-rgb, 22 86 29)) !important;
 }
 
-.br-app .chip > span[aria-hidden] {
-  font-size: 1rem;
-}
+/* Hide BR's per-chip emoji and override its `--c` dot. */
+.br-app .chip > span[aria-hidden] { display: none; }
+.br-app .chip::before { display: none; }
 
+/* Count badge: render as inline superscript "n", no pill. */
 .br-app .chip em {
   font-style: normal;
-  font-size: 0.6875rem;
-  font-weight: 700;
+  font-family: 'Fraunces', 'Lora', Georgia, serif;
+  font-weight: 600;
+  font-size: 0.625rem;
+  letter-spacing: 0;
+  vertical-align: super;
   color: var(--kb-text-mute);
-  background: var(--kb-bg);
-  padding: 0.1rem 0.45rem;
-  border-radius: 9999px;
-  margin-left: 0.15rem;
+  background: transparent;
+  padding: 0;
+  margin-left: 0.2rem;
 }
 
 /* --- Spotlight (featured post on index) ------------------------------ */
 
+/* --- COVER STORY (BR ships this as `.spotlight`) ------------------- */
+
+/* Magazine cover treatment: huge serif headline on white, no card,
+   no shadow, no per-type accent colour. The date sits as a small caps
+   line below the byline. Hover behaviour is a subtle underline on the
+   title, nothing else. */
 .spotlight.spotlight {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 2rem;
+  display: block;
   position: relative;
-  max-width: 1080px;
-  margin: 0 auto 4rem;
-  padding: 2.5rem 2.75rem;
-  border-radius: var(--kb-radius-xl);
-  background:
-    linear-gradient(
-      135deg,
-      #ffffff 0%,
-      #fffefb 100%
-    );
-  box-shadow: var(--kb-shadow-soft);
+  max-width: 1100px;
+  margin: 4.5rem auto 5rem;
+  padding: 0 2rem;
+  background: transparent;
+  box-shadow: none;
   text-decoration: none;
   color: inherit;
-  overflow: hidden;
-  isolation: isolate;
-  transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1),
-              box-shadow 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+  border: 0;
+  overflow: visible;
+  isolation: auto;
+  animation: kb-fade-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+  transition: none;
 }
 
-/* Soft accent rail on the left + a glow that follows hover. The `--c`
-   custom prop is set inline by BR per content type (--c:#f59e0b blog,
-   #14b8a6 docs, #8b5cf6 wiki) so each spotlight gets a different
-   accent without us managing colour rules. */
-.spotlight.spotlight::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 4px;
-  background: var(--c, var(--kb-honey));
-  border-radius: var(--kb-radius-xl) 0 0 var(--kb-radius-xl);
-}
-
+.spotlight.spotlight::before,
 .spotlight.spotlight::after {
-  content: '';
-  position: absolute;
-  inset: -50% auto auto -10%;
-  width: 70%;
-  height: 200%;
-  background: radial-gradient(
-    closest-side,
-    rgb(var(--kotoba-primary-rgb, 22 86 29) / 0.05),
-    transparent 70%
-  );
-  z-index: -1;
-  opacity: 0;
-  transition: opacity 0.35s ease;
+  display: none;
 }
 
 .spotlight.spotlight:hover {
-  transform: translateY(-3px);
-  box-shadow: var(--kb-shadow-soft-lg);
-}
-
-.spotlight.spotlight:hover::after {
-  opacity: 1;
+  transform: none;
+  box-shadow: none;
 }
 
 .spotlight-body.spotlight-body {
-  flex: 1;
-  min-width: 0;
+  max-width: 880px;
 }
 
+/* "FEATURED" / "LATEST · BLOG" kicker — small caps, uppercase, sage. */
 .spotlight-eyebrow.spotlight-eyebrow {
   display: inline-block;
   font-family: 'Quicksand', sans-serif;
   font-size: 0.6875rem;
   font-weight: 700;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: var(--c, var(--kb-primary));
-  margin-bottom: 0.85rem;
+  color: rgb(var(--kotoba-primary-rgb, 22 86 29));
+  margin: 0 0 1.5rem;
 }
 
+/* The cover headline. Huge Fraunces, tight tracking, dark teal on
+   white. This is the centrepiece of the page. */
 .spotlight-title.spotlight-title {
   font-family: 'Fraunces', 'Lora', Georgia, serif;
   font-weight: 600;
-  font-size: clamp(1.5rem, 2.5vw, 2rem);
-  line-height: 1.2;
-  letter-spacing: -0.02em;
+  font-size: clamp(2.5rem, 6vw, 4.75rem);
+  line-height: 1;
+  letter-spacing: -0.03em;
   color: var(--kb-text);
-  margin: 0 0 1rem;
+  margin: 0 0 1.5rem;
+  max-width: 18ch;
 }
 
+/* "Continue reading →" — a single editorial link, underlined on hover. */
 .spotlight-cta.spotlight-cta {
   display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
+  align-items: baseline;
+  gap: 0.45rem;
   font-family: 'Quicksand', sans-serif;
   font-size: 0.9375rem;
-  font-weight: 600;
-  color: var(--kb-primary);
-  transition: gap 0.18s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.spotlight.spotlight:hover .spotlight-cta.spotlight-cta {
-  gap: 0.65rem;
-}
-
-.spotlight-date.spotlight-date {
-  flex-shrink: 0;
-  align-self: center;
-  font-family: 'Quicksand', sans-serif;
-  font-size: 0.75rem;
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--kb-text-mute);
-  padding: 0.4rem 0.85rem;
-  border-radius: 9999px;
-  background: var(--kb-bg);
+  color: var(--kb-text);
+  position: relative;
 }
 
-@media (max-width: 720px) {
-  .spotlight.spotlight {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 1.25rem;
-    padding: 2rem 1.75rem;
-  }
-  .spotlight-date.spotlight-date {
-    align-self: flex-start;
-  }
+.spotlight-cta.spotlight-cta::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -3px;
+  height: 1px;
+  background: var(--kb-text);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.spotlight.spotlight:hover .spotlight-cta.spotlight-cta::after {
+  transform: scaleX(1);
+}
+
+/* Date in italic Fraunces above the eyebrow, like a magazine
+   contributor line. */
+.spotlight-date.spotlight-date {
+  display: block;
+  font-family: 'Fraunces', 'Lora', Georgia, serif;
+  font-style: italic;
+  font-size: 0.875rem;
+  font-weight: 400;
+  color: var(--kb-text-mute);
+  margin: 0 0 0.5rem;
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  letter-spacing: 0;
+  text-transform: none;
+  align-self: auto;
 }
 
 /* --- Section heading ("Explore everything" etc.) --------------------- */
 
+/* --- EDITORIAL SECTION HEADER (BR ships as `.section-head`) -------- */
+
 .section-head.section-head {
-  max-width: 1080px;
-  margin: 0 auto 2rem;
-  padding: 0 0.5rem;
-  text-align: center;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2rem;
+  max-width: 1100px;
+  margin: 0 auto 3rem;
+  padding: 0 2rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid var(--kb-text);
+  text-align: left;
 }
 
 .section-head.section-head h2 {
   font-family: 'Fraunces', 'Lora', Georgia, serif;
-  font-weight: 600;
-  font-size: clamp(1.75rem, 3vw, 2.5rem);
-  letter-spacing: -0.02em;
+  font-weight: 400;
+  font-style: italic;
+  font-size: clamp(1.625rem, 2.4vw, 2.125rem);
+  letter-spacing: -0.01em;
   color: var(--kb-text);
-  margin: 0 0 0.4rem;
+  margin: 0;
 }
 
 .section-head.section-head p {
   font-family: 'Quicksand', sans-serif;
-  font-size: 1rem;
-  font-weight: 500;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
   color: var(--kb-text-mute);
   margin: 0;
+  flex-shrink: 0;
 }
 
 /* --- Explore grid (category tiles) ----------------------------------- */
 
+/* --- EDITORIAL TOPIC SECTIONS (BR ships as `.block` + `.explore-*`) */
+
+/* Numbered editorial list of sections. Each topic gets a Roman / arabic
+   counter, a Fraunces section title, italic deck, and a small caps
+   meta. No cards, no shadows, no emoji, no per-type accent. Just type. */
+
 .br-app .block.block {
-  max-width: 1080px;
-  margin: 2rem auto 3rem;
-  padding: 0 1.5rem;
+  max-width: 1100px;
+  margin: 0 auto 5rem;
+  padding: 0 2rem;
 }
 
 .explore-grid.explore-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 1.25rem;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  counter-reset: kb-section;
 }
 
 .explore-card.explore-card {
+  counter-increment: kb-section;
   position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-  padding: 2rem 1.75rem;
-  border-radius: var(--kb-radius-lg);
-  background: #fff;
-  box-shadow: var(--kb-shadow-soft);
+  display: grid;
+  grid-template-columns: 4rem 1fr auto;
+  align-items: baseline;
+  gap: 2rem;
+  padding: 2.25rem 0;
+  border-top: 1px solid var(--kb-border);
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
   text-decoration: none;
-  color: inherit;
-  overflow: hidden;
-  isolation: isolate;
-  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1),
-              box-shadow 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+  color: var(--kb-text);
+  overflow: visible;
+  isolation: auto;
+  transition: opacity 0.18s ease;
+}
+
+.explore-grid.explore-grid > a:last-child {
+  border-bottom: 1px solid var(--kb-border);
 }
 
 .explore-card.explore-card::before {
-  content: '';
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 4px;
-  background: var(--c, var(--kb-honey));
+  content: counter(kb-section, decimal-leading-zero);
+  font-family: 'Fraunces', 'Lora', Georgia, serif;
+  font-style: italic;
+  font-weight: 400;
+  font-size: 1.75rem;
+  color: var(--kb-text-mute);
+  letter-spacing: -0.01em;
+  align-self: baseline;
+  background: transparent;
+  position: static;
+  inset: auto;
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  filter: none;
+  display: block;
 }
 
-/* Soft tint wash that fades in on hover, tinted with the per-type
-   custom prop. */
-.explore-card.explore-card::after {
-  content: '';
-  position: absolute;
-  inset: -50% -10% auto -10%;
-  height: 100%;
-  background: radial-gradient(
-    60% 80% at 50% 0%,
-    var(--c, var(--kb-honey)),
-    transparent 70%
-  );
-  opacity: 0;
-  z-index: -1;
-  transition: opacity 0.3s ease;
-  filter: blur(40px);
-}
+.explore-card.explore-card::after { display: none; }
 
 .explore-card.explore-card:hover {
-  transform: translateY(-3px);
-  box-shadow: var(--kb-shadow-soft-lg);
+  transform: none;
+  box-shadow: none;
 }
 
-.explore-card.explore-card:hover::after { opacity: 0.18; }
+.explore-card.explore-card:hover .explore-name.explore-name {
+  color: rgb(var(--kotoba-primary-rgb, 22 86 29));
+}
 
+.explore-card.explore-card:hover::before { color: var(--kb-text); }
+
+/* Kill the emoji icon BR ships. */
 .explore-icon.explore-icon {
-  font-size: 1.75rem;
-  line-height: 1;
-  margin-bottom: 0.5rem;
+  display: none !important;
 }
 
+/* Section name + deck stack as second column. */
 .explore-name.explore-name {
   font-family: 'Fraunces', 'Lora', Georgia, serif;
   font-weight: 600;
-  font-size: 1.25rem;
-  letter-spacing: -0.015em;
+  font-size: clamp(1.625rem, 2.4vw, 2rem);
+  letter-spacing: -0.02em;
   color: var(--kb-text);
+  display: block;
+  transition: color 0.18s ease;
 }
 
 .explore-blurb.explore-blurb {
-  font-family: 'Quicksand', sans-serif;
-  font-size: 0.9375rem;
+  font-family: 'Fraunces', 'Lora', Georgia, serif;
+  font-style: italic;
+  font-size: 1rem;
   color: var(--kb-text-soft);
-  line-height: 1.5;
+  line-height: 1.45;
+  display: block;
+  margin: 0.4rem 0 0;
 }
 
+/* "N entries →" meta in the third column. */
 .explore-count.explore-count {
-  margin-top: 0.75rem;
-  padding-top: 0.85rem;
-  border-top: 1px solid var(--kb-border);
   font-family: 'Quicksand', sans-serif;
-  font-size: 0.8125rem;
-  font-weight: 600;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
   color: var(--kb-text-mute);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  align-self: baseline;
+  text-align: right;
 }
 
 .explore-count.explore-count > span {
-  color: var(--c, var(--kb-primary));
-  font-size: 1.05rem;
+  color: var(--kb-text-mute);
+  font-size: 0.6875rem;
+  margin-left: 0.4rem;
   transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .explore-card.explore-card:hover .explore-count.explore-count > span {
-  transform: translateX(3px);
+  transform: translateX(2px);
+  color: rgb(var(--kotoba-primary-rgb, 22 86 29));
+}
+
+@media (max-width: 720px) {
+  .explore-card.explore-card {
+    grid-template-columns: 3rem 1fr;
+    gap: 1.25rem;
+    padding: 1.75rem 0;
+  }
+  .explore-count.explore-count {
+    grid-column: 1 / -1;
+    text-align: left;
+    padding-left: 4.25rem;
+    margin-top: 0.5rem;
+  }
 }
 
 /* --- Article body (.prose) ------------------------------------------- */
@@ -1578,139 +1609,141 @@ article {
   color: var(--kb-text);
 }
 
-/* --- Marketing CTA (injected by rewriter on every /news page) ------ */
+/* --- Editorial colophon CTA (injected on every /news page) ---------- */
+
+/* Reads like the back-page subscriber prompt in a print magazine.
+   Hairline border top + bottom, generous whitespace, italic deck, two
+   editorial links separated by a hairline middle rule. */
 
 .kb-cta {
   position: relative;
-  margin: 5rem auto 4rem;
-  padding: 0 1.5rem;
-  max-width: 1080px;
+  margin: 6rem auto 5rem;
+  padding: 0 2rem;
+  max-width: 1100px;
 }
 
 .kb-cta-inner {
   position: relative;
-  padding: 4.5rem 3rem;
-  border-radius: var(--kb-radius-xl);
-  background:
-    radial-gradient(
-      120% 80% at 20% 0%,
-      rgb(var(--kotoba-primary-rgb, 22 86 29) / 0.92),
-      rgb(var(--kotoba-primary-rgb, 22 86 29)) 70%
-    );
-  color: #fff;
+  padding: 4rem 0 4rem;
+  background: transparent;
+  border-top: 1px solid var(--kb-text);
+  border-bottom: 1px solid var(--kb-text);
+  color: var(--kb-text);
   text-align: center;
-  overflow: hidden;
-  isolation: isolate;
-  box-shadow:
-    0 1px 2px rgba(22, 86, 29, 0.10),
-    0 24px 64px rgba(22, 86, 29, 0.25);
+  overflow: visible;
+  isolation: auto;
+  box-shadow: none;
+  border-radius: 0;
 }
 
-/* Decorative honey wash in the corner. */
-.kb-cta-inner::before {
-  content: '';
-  position: absolute;
-  inset: -20% -20% auto auto;
-  width: 60%;
-  height: 80%;
-  background: radial-gradient(
-    closest-side,
-    rgb(214 164 47 / 0.35),
-    transparent 70%
-  );
-  filter: blur(40px);
-  z-index: -1;
-}
+.kb-cta-inner::before { display: none; }
 
 .kb-cta-eyebrow {
   display: inline-block;
   font-family: 'Quicksand', sans-serif;
   font-size: 0.6875rem;
   font-weight: 700;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.22em;
   text-transform: uppercase;
-  color: rgb(214 164 47);
-  margin-bottom: 1.25rem;
+  color: rgb(var(--kotoba-primary-rgb, 22 86 29));
+  margin-bottom: 1.5rem;
 }
 
 .kb-cta-title {
   font-family: 'Fraunces', 'Lora', Georgia, serif;
-  font-weight: 600;
-  font-size: clamp(1.875rem, 3.5vw, 2.75rem);
+  font-weight: 400;
+  font-style: italic;
+  font-size: clamp(1.75rem, 3vw, 2.5rem);
   line-height: 1.15;
-  letter-spacing: -0.02em;
-  color: #fff;
-  margin: 0 0 1.25rem;
+  letter-spacing: -0.015em;
+  color: var(--kb-text);
+  margin: 0 auto 1.5rem;
+  max-width: 32rem;
 }
 
+.kb-cta-title br { display: none; }
+
 .kb-cta-sub {
-  font-family: 'Quicksand', sans-serif;
+  font-family: 'Fraunces', 'Lora', Georgia, serif;
+  font-style: italic;
   font-size: 1.0625rem;
   line-height: 1.55;
-  color: rgb(255 255 255 / 0.85);
-  max-width: 36rem;
-  margin: 0 auto 2.25rem;
+  color: var(--kb-text-soft);
+  max-width: 32rem;
+  margin: 0 auto 2.5rem;
 }
 
 .kb-cta-actions {
-  display: flex;
-  justify-content: center;
-  gap: 0.85rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
   flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* Editorial text links with the magazine underline-reveal treatment. */
+.kb-cta-primary,
+.kb-cta-secondary {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  padding: 0.4rem 1.25rem;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  font-family: 'Quicksand', sans-serif;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  text-decoration: none !important;
+  box-shadow: none;
+  position: relative;
 }
 
 .kb-cta-primary {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.95rem 1.75rem;
-  border-radius: 9999px;
-  background: #fff;
-  color: rgb(var(--kotoba-primary-rgb, 22 86 29)) !important;
-  font-family: 'Quicksand', sans-serif;
-  font-size: 0.9375rem;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-  text-decoration: none !important;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08), 0 8px 24px rgba(0, 0, 0, 0.12);
-  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1),
-              box-shadow 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+  color: var(--kb-text) !important;
+  border-right: 1px solid var(--kb-border);
 }
 
-.kb-cta-primary:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.10), 0 14px 36px rgba(0, 0, 0, 0.18);
+.kb-cta-secondary {
+  color: var(--kb-text) !important;
+}
+
+.kb-cta-primary::after,
+.kb-cta-secondary::after {
+  content: '';
+  position: absolute;
+  left: 1.25rem;
+  right: 1.25rem;
+  bottom: 0.1rem;
+  height: 1px;
+  background: var(--kb-text);
+  transform: scaleX(0);
+  transform-origin: center;
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.kb-cta-primary:hover::after,
+.kb-cta-secondary:hover::after { transform: scaleX(1); }
+
+.kb-cta-primary:hover,
+.kb-cta-secondary:hover {
+  color: rgb(var(--kotoba-primary-rgb, 22 86 29)) !important;
+  background: transparent;
+  transform: none;
+  box-shadow: none;
 }
 
 .kb-cta-primary > span[aria-hidden] {
   transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.kb-cta-primary:hover > span[aria-hidden] { transform: translateX(3px); }
+.kb-cta-primary:hover > span[aria-hidden] { transform: translateX(2px); }
 
-.kb-cta-secondary {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.95rem 1.5rem;
-  border-radius: 9999px;
-  background: transparent;
-  color: #fff !important;
-  font-family: 'Quicksand', sans-serif;
-  font-size: 0.9375rem;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  text-decoration: none !important;
-  border: 1.5px solid rgb(255 255 255 / 0.35);
-  transition: background 0.18s ease, border-color 0.18s ease;
-}
-
-.kb-cta-secondary:hover {
-  background: rgb(255 255 255 / 0.08);
-  border-color: rgb(255 255 255 / 0.6);
-}
-
-@media (max-width: 720px) {
-  .kb-cta-inner { padding: 3rem 1.75rem; }
+@media (max-width: 540px) {
+  .kb-cta-actions { flex-direction: column; gap: 0.5rem; }
+  .kb-cta-primary { border-right: 0; }
 }
 
 /* --- Animation -------------------------------------------------------- */
