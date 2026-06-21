@@ -432,7 +432,7 @@ def _seed_tutor(session: Session, user: User) -> None:
     # retention check (created_at < cutoff) doesn't pull them until they
     # age into the soft-deleted pool via the parent's wipe.
     student_users: list[User] = []
-    for idx, st in enumerate(bp["students"]):
+    for st in bp["students"]:
         stu = User(
             email=f"{st['email_local']}-{tutor.tutor_slug}@demo.kotobaseed.local",
             full_name=st["name"],
@@ -486,7 +486,7 @@ def _seed_tutor(session: Session, user: User) -> None:
     # Spread purchases across students with a round-robin so the
     # dashboard's per-student revenue chart is non-trivial.
     purchase_rows: list[ModulePurchase] = []
-    for mb_blueprint, mod_row in zip(bp["modules"], mod_rows):
+    for mb_blueprint, mod_row in zip(bp["modules"], mod_rows, strict=True):
         n = int(mb_blueprint.get("n_purchases", 0))
         for buy_idx in range(n):
             buyer = student_users[buy_idx % len(student_users)]

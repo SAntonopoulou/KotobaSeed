@@ -26,10 +26,7 @@ from sqlmodel import Session, select
 from ..config import settings
 from ..database import get_session
 from ..models import LessonPack, Tutor, TutorAccountStatus, User
-from ..services.demo_isolation import (
-    exclude_cross_env_users,
-    is_user_visible_in_env,
-)
+from ..services.demo_isolation import exclude_cross_env_users
 
 router = APIRouter(prefix="/marketplace", tags=["marketplace"])
 

@@ -28,7 +28,6 @@ from ..models import (
     Article,
     LessonModule,
     LessonPack,
-    Pledge,
     Project,
     Tutor,
     User,
