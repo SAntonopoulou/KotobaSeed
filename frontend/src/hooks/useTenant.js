@@ -15,6 +15,15 @@ const APEX_HOSTS = new Set([
   '127.0.0.1',
 ]);
 
+// Reserved leading segments that should be treated as env-level apexes
+// rather than tutor slugs. The same build runs on prod
+// (kotobaseed.net) and demo (demo.kotobaseed.net); without this set,
+// the demo build would resolve its own host as slug='demo' and the
+// tutorSiteUrl helper would point demo's tutor links at the prod
+// subdomain (akiko.kotobaseed.net) instead of staying on demo
+// (akiko.demo.kotobaseed.net). Add 'staging' if/when we split that out.
+const ENV_APEX_SEGMENTS = new Set(['demo', 'staging']);
+
 const APEX_SUFFIX = `.${PLATFORM_APEX}`;
 const DEV_SUFFIX = '.localhost';
 
@@ -41,9 +50,17 @@ export function getTenant() {
 
   for (const suffix of [APEX_SUFFIX, DEV_SUFFIX]) {
     if (host.endsWith(suffix)) {
-      const slug = host.slice(0, -suffix.length);
-      if (!slug || slug.includes('.')) return { kind: 'apex' };
-      if (RESERVED.has(slug)) return { kind: 'apex' };
+      const sub = host.slice(0, -suffix.length);
+      if (!sub) return { kind: 'apex' };
+      const segs = sub.split('.');
+      // demo.kotobaseed.net (a single env-apex segment) → apex of that env.
+      if (segs.length === 1 && ENV_APEX_SEGMENTS.has(segs[0])) {
+        return { kind: 'apex' };
+      }
+      // akiko.demo.kotobaseed.net → tutor 'akiko' inside the demo env.
+      // akiko.kotobaseed.net → tutor 'akiko' on prod.
+      const slug = segs[0];
+      if (!slug || RESERVED.has(slug)) return { kind: 'apex' };
       return { kind: 'tutor', slug };
     }
   }
@@ -59,10 +76,22 @@ export function useTenant() {
 
 function _apex() {
   if (typeof window === 'undefined') return PLATFORM_APEX;
-  let apex = window.location.hostname;
-  if (apex.endsWith('.localhost')) apex = 'localhost';
-  if (apex.endsWith(`.${PLATFORM_APEX}`)) apex = PLATFORM_APEX;
-  return apex;
+  const host = window.location.hostname;
+  if (host.endsWith('.localhost')) return 'localhost';
+  if (host === PLATFORM_APEX) return PLATFORM_APEX;
+  if (!host.endsWith(`.${PLATFORM_APEX}`)) return host; // custom domain
+
+  // host is `<sub>.kotobaseed.net`; figure out which segments belong to
+  // the env apex (everything after the leading tutor slug, if any).
+  const sub = host.slice(0, -(PLATFORM_APEX.length + 1));
+  const segs = sub.split('.');
+  // demo.kotobaseed.net: one segment, recognised env apex → stay here.
+  if (segs.length === 1 && ENV_APEX_SEGMENTS.has(segs[0])) return host;
+  // akiko.kotobaseed.net: one segment, regular tutor → strip to apex.
+  if (segs.length === 1) return PLATFORM_APEX;
+  // akiko.demo.kotobaseed.net: strip the leading tutor slug; remaining
+  // segments + apex are the env-level apex (demo.kotobaseed.net).
+  return `${segs.slice(1).join('.')}.${PLATFORM_APEX}`;
 }
 
 function _portPart() {
