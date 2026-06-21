@@ -41,14 +41,20 @@
 
 /* --- Page baseline ---------------------------------------------------- */
 
-/* The rewriter now wraps the body in the same ApexShell wrapper
-   the apex SPA uses ( <div class="min-h-screen bg-kotoba-background/60
-   flex flex-col"> with #kb-navbar-root, a .flex-grow content area,
-   and #kb-footer-root ), so Tailwind's `min-h-screen flex flex-col`
-   on that wrapper covers the sticky-footer layout. We intentionally
-   do NOT add any body / main / a / :focus-visible globals here —
-   anything global on /news that the apex doesn't ship would make
-   the React Navbar / Footer render differently from the apex. */
+/* BR's renderer expects an aggressive universal reset to be in effect
+   ( `* { margin: 0; padding: 0 }` ) — when we strip BR's <style>
+   blocks, that reset goes with them, and elements BR emits inherit
+   browser-default spacing that BR didn't budget for. Restate the
+   reset here. Tailwind's class selectors (`.px-4`, `.py-2`, etc.)
+   still win on the individual padding/margin properties they set,
+   so the React Navbar/Footer's Tailwind-controlled spacing is
+   untouched; this only sweeps away the browser defaults that would
+   otherwise pad lists, paragraphs, and the BR menus. */
+
+*, ::before, ::after {
+  margin: 0;
+  padding: 0;
+}
 
 /* BR uses these for content layout; restore the widths now that BR's
    .container rules are stripped. */
