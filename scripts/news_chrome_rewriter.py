@@ -185,6 +185,12 @@ def apex_head_changed_at() -> float:
 # Static-only injection: BR-base resets + mobile-drawer wiring. Anything
 # styling-related comes from the apex CSS bundle linked above.
 HEAD_INJECT_TAIL = (
+    # Content stylesheet that skins BR's hero / spotlight / explore /
+    # prose components in Kotobaseed colours + fonts. Maintained in
+    # `branding/news-content.css`; bind-mounted on Caddy and served at
+    # this stable URL. Loads AFTER the apex CSS bundle so its CSS
+    # variables (--kotoba-*-rgb) are already defined.
+    '<link rel="stylesheet" href="/branding/news-content.css">'
     '<style>'
     # BR's base stylesheet emits an unscoped `footer { padding:2.5rem 0;
     # margin-top:6rem; border-top:…; background:var(--bg-warm); }` rule
@@ -245,10 +251,20 @@ RE_EXISTING_FOOTER_MOUNT = re.compile(
 )
 
 
+RE_BR_FAVICON = re.compile(
+    r'<link\b[^>]*\brel="(?:icon|shortcut icon|apple-touch-icon)"[^>]*>',
+    re.IGNORECASE,
+)
+
+
 def transform(html: str, nav_html: str, footer_html: str) -> str:
     # 1. Strip BR's default chrome from the body.
     html = RE_SITE_NAV.sub('', html)
     html = RE_SITE_FOOTER.sub('', html)
+    # 1b. Strip BR's <link rel="icon" …> — the apex SPA's <head>
+    #     (extracted by get_apex_head) brings the kotobaseed favicon.svg.
+    #     Two competing icon links is just noise; we want the apex's.
+    html = RE_BR_FAVICON.sub('', html)
     # 2. Strip every `<div class="plugin-slot …">…</div>` (and contents).
     html = strip_plugin_slots(html)
     # 3. Replace any prior <head> injection (or add one). The injection

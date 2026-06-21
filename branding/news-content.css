@@ -1,0 +1,426 @@
+/* /news content stylesheet — Kotobaseed design tokens applied to the
+   BeeRanked-rendered components.
+
+   Loaded by `scripts/news_chrome_rewriter.py` as
+       <link rel="stylesheet" href="/branding/news-content.css">
+   right after the apex SPA's CSS bundle, so the kotoba-* CSS variables
+   defined there are in scope here (rgb(var(--kotoba-primary-rgb))
+   etc.). Caddy serves this file from the `branding/` bind mount.
+
+   Selector strategy: BeeRanked uses Astro and scopes every component's
+   CSS via `[data-astro-cid-<hash>]`. That hash changes per BR build, so
+   we can't target it. Instead we double up class selectors (e.g.
+   `.hero.hero` instead of `.hero`) to match BR's two-token specificity
+   without depending on the hash. Equal-specificity ties go to the later
+   stylesheet, and this one loads AFTER BR's inlined `<style>`, so we
+   win.
+
+   Edit this file freely; the rewriter sidecar bind-mounts it from the
+   repo and Caddy serves it live with no rebuild. */
+
+:root {
+  /* Aliases so the rest of the file reads cleanly. These resolve to
+     whatever the apex theme is (default = sage). */
+  --kb-primary: rgb(var(--kotoba-primary-rgb, 22 86 29));
+  --kb-primary-soft: rgb(var(--kotoba-primary-rgb, 22 86 29) / 0.08);
+  --kb-bg: rgb(var(--kotoba-background-rgb, 244 241 233));
+  --kb-bg-warm: rgb(252 250 244);
+  --kb-text: rgb(var(--kotoba-text-rgb, 43 70 60));
+  --kb-text-soft: rgb(var(--kotoba-text-rgb, 43 70 60) / 0.7);
+  --kb-text-mute: rgb(var(--kotoba-text-rgb, 43 70 60) / 0.55);
+  --kb-border: rgb(var(--kotoba-text-rgb, 43 70 60) / 0.1);
+  --kb-honey: #d6a42f;
+  --kb-shadow-soft: 0 1px 2px rgba(64, 60, 50, 0.04),
+                    0 8px 24px rgba(64, 60, 50, 0.06);
+  --kb-shadow-soft-lg: 0 4px 8px rgba(64, 60, 50, 0.05),
+                       0 18px 40px rgba(64, 60, 50, 0.10);
+  --kb-radius: 1rem;
+  --kb-radius-lg: 1.5rem;
+  --kb-radius-xl: 2rem;
+}
+
+/* --- Page baseline ---------------------------------------------------- */
+
+main {
+  background: var(--kb-bg);
+}
+
+/* Match the apex content-width feel — BR's .container is 720px which
+   feels narrow next to our boutique cards; nudge .container-wide up to
+   1080px (matches apex max-w-7xl-ish reading column). */
+.container.container,
+.container-wide.container-wide {
+  font-family: 'Quicksand', 'Inter', ui-sans-serif, system-ui, sans-serif;
+  color: var(--kb-text);
+}
+
+/* --- Hero (index page) ----------------------------------------------- */
+
+.hero.hero {
+  position: relative;
+  padding: 4rem 1.5rem 3rem;
+  margin: 1rem auto 2.5rem;
+  max-width: 1080px;
+  border-radius: var(--kb-radius-xl);
+  background:
+    radial-gradient(60% 80% at 20% 0%,
+      rgb(var(--kotoba-primary-rgb, 22 86 29) / 0.08), transparent 60%),
+    linear-gradient(180deg, var(--kb-bg-warm), var(--kb-bg));
+  box-shadow: var(--kb-shadow-soft);
+  overflow: hidden;
+  animation: kb-fade-up 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.hero-inner.hero-inner {
+  max-width: 720px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.hero-badge.hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.85rem;
+  border-radius: 9999px;
+  background: var(--kb-primary-soft);
+  color: var(--kb-primary);
+  font-family: 'Quicksand', sans-serif;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  margin-bottom: 1.25rem;
+}
+
+.hero-title.hero-title {
+  font-family: 'Fraunces', 'Lora', Georgia, serif;
+  font-weight: 600;
+  font-size: clamp(2.25rem, 4.5vw, 3.5rem);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--kb-text);
+  margin-bottom: 1rem;
+}
+
+.hero-sub.hero-sub {
+  font-family: 'Quicksand', sans-serif;
+  font-size: 1.125rem;
+  line-height: 1.55;
+  color: var(--kb-text-soft);
+  max-width: 36rem;
+  margin: 0 auto 1.75rem;
+}
+
+.hero-actions.hero-actions {
+  display: flex;
+  justify-content: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+/* --- Spotlight (featured post on index) ------------------------------ */
+
+.spotlight.spotlight {
+  display: block;
+  position: relative;
+  max-width: 1080px;
+  margin: 0 auto 3rem;
+  padding: 2rem;
+  border-radius: var(--kb-radius-lg);
+  background: #fff;
+  box-shadow: var(--kb-shadow-soft);
+  text-decoration: none;
+  color: inherit;
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1),
+              box-shadow 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+  border-left: 3px solid var(--kb-honey);
+}
+
+.spotlight.spotlight:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--kb-shadow-soft-lg);
+}
+
+.spotlight-eyebrow.spotlight-eyebrow {
+  display: inline-block;
+  font-family: 'Quicksand', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--kb-primary);
+  margin-bottom: 0.5rem;
+}
+
+.spotlight-title.spotlight-title {
+  font-family: 'Fraunces', 'Lora', Georgia, serif;
+  font-weight: 600;
+  font-size: 1.5rem;
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  color: var(--kb-text);
+  margin: 0 0 0.5rem;
+}
+
+.spotlight-cta.spotlight-cta {
+  font-family: 'Quicksand', sans-serif;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--kb-primary);
+}
+
+.spotlight-date.spotlight-date {
+  display: block;
+  margin-top: 0.5rem;
+  font-family: 'Quicksand', sans-serif;
+  font-size: 0.8125rem;
+  color: var(--kb-text-mute);
+}
+
+/* --- Section heading ("Explore everything" etc.) --------------------- */
+
+.section-head.section-head {
+  max-width: 1080px;
+  margin: 0 auto 1.5rem;
+  padding: 0 0.5rem;
+}
+
+.section-head.section-head h2 {
+  font-family: 'Fraunces', 'Lora', Georgia, serif;
+  font-weight: 600;
+  font-size: 1.875rem;
+  letter-spacing: -0.015em;
+  color: var(--kb-text);
+  margin: 0;
+}
+
+.section-head.section-head p {
+  font-family: 'Quicksand', sans-serif;
+  font-size: 0.9375rem;
+  color: var(--kb-text-mute);
+  margin: 0.25rem 0 0;
+}
+
+/* --- Explore grid (category tiles) ----------------------------------- */
+
+.block.block {
+  max-width: 1080px;
+  margin: 2rem auto 3rem;
+  padding: 0 1.5rem;
+}
+
+.explore-grid.explore-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.explore-card.explore-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1.5rem 1.25rem;
+  border-radius: var(--kb-radius);
+  background: #fff;
+  box-shadow: var(--kb-shadow-soft);
+  border-top: 3px solid var(--c, var(--kb-honey));
+  text-decoration: none;
+  color: inherit;
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+              box-shadow 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.explore-card.explore-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--kb-shadow-soft-lg);
+}
+
+.explore-icon.explore-icon {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.explore-name.explore-name {
+  font-family: 'Fraunces', 'Lora', Georgia, serif;
+  font-weight: 600;
+  font-size: 1.125rem;
+  color: var(--kb-text);
+}
+
+.explore-blurb.explore-blurb {
+  font-family: 'Quicksand', sans-serif;
+  font-size: 0.9375rem;
+  color: var(--kb-text-soft);
+  line-height: 1.45;
+}
+
+.explore-count.explore-count {
+  margin-top: auto;
+  font-family: 'Quicksand', sans-serif;
+  font-size: 0.8125rem;
+  color: var(--kb-text-mute);
+}
+
+/* --- Article body (.prose) ------------------------------------------- */
+
+.prose.prose {
+  font-family: 'Quicksand', 'Inter', sans-serif;
+  font-size: 1.0625rem;
+  line-height: 1.7;
+  color: var(--kb-text);
+  max-width: 38rem;
+  margin: 0 auto;
+}
+
+.prose.prose h1 {
+  font-family: 'Fraunces', 'Lora', Georgia, serif;
+  font-weight: 600;
+  font-size: clamp(2rem, 4vw, 2.75rem);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  margin: 0 0 1rem;
+}
+
+.prose.prose h2 {
+  font-family: 'Fraunces', 'Lora', Georgia, serif;
+  font-weight: 600;
+  font-size: 1.625rem;
+  letter-spacing: -0.015em;
+  margin: 2.5rem 0 0.75rem;
+  color: var(--kb-text);
+}
+
+.prose.prose h3 {
+  font-family: 'Fraunces', 'Lora', Georgia, serif;
+  font-weight: 600;
+  font-size: 1.25rem;
+  margin: 2rem 0 0.5rem;
+  color: var(--kb-text);
+}
+
+.prose.prose p {
+  margin: 0 0 1.25rem;
+}
+
+.prose.prose a {
+  color: var(--kb-primary);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  text-decoration-color: rgb(var(--kotoba-primary-rgb, 22 86 29) / 0.35);
+  transition: text-decoration-color 0.15s;
+}
+
+.prose.prose a:hover {
+  text-decoration-color: var(--kb-primary);
+}
+
+.prose.prose strong {
+  color: var(--kb-text);
+  font-weight: 700;
+}
+
+.prose.prose em {
+  color: var(--kb-text-soft);
+}
+
+.prose.prose ul,
+.prose.prose ol {
+  margin: 0 0 1.25rem 1.25rem;
+  padding-left: 0.5rem;
+}
+
+.prose.prose li {
+  margin: 0 0 0.5rem;
+}
+
+.prose.prose li::marker {
+  color: var(--kb-honey);
+}
+
+.prose.prose blockquote {
+  margin: 1.5rem 0;
+  padding: 0.5rem 0 0.5rem 1.25rem;
+  border-left: 3px solid var(--kb-honey);
+  color: var(--kb-text-soft);
+  font-family: 'Fraunces', 'Lora', Georgia, serif;
+  font-style: italic;
+  font-size: 1.125rem;
+}
+
+.prose.prose code {
+  font-family: 'SF Mono', ui-monospace, 'Cascadia Code', monospace;
+  font-size: 0.9em;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  background: var(--kb-primary-soft);
+  color: var(--kb-primary);
+}
+
+.prose.prose pre {
+  margin: 1.25rem 0;
+  padding: 1rem 1.25rem;
+  border-radius: var(--kb-radius);
+  background: #1c1a16;
+  color: #f4f1e9;
+  overflow-x: auto;
+  font-size: 0.875rem;
+  line-height: 1.55;
+}
+
+.prose.prose pre code {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+}
+
+.prose.prose hr {
+  border: 0;
+  border-top: 1px solid var(--kb-border);
+  margin: 2.5rem auto;
+  max-width: 8rem;
+}
+
+.prose.prose img {
+  border-radius: var(--kb-radius);
+  margin: 1.5rem 0;
+  box-shadow: var(--kb-shadow-soft);
+}
+
+/* --- Listing pages (blog index entries) ------------------------------ */
+
+.entry-title.entry-title {
+  font-family: 'Fraunces', 'Lora', Georgia, serif;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--kb-text);
+}
+
+/* --- Animation -------------------------------------------------------- */
+
+@keyframes kb-fade-up {
+  0% { opacity: 0; transform: translateY(8px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+/* Subtle entrance for major content blocks. */
+.spotlight.spotlight,
+.block.block,
+.prose.prose {
+  animation: kb-fade-up 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.spotlight.spotlight { animation-delay: 0.05s; }
+.block.block { animation-delay: 0.1s; }
+
+/* --- Accessibility ---------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .hero.hero,
+  .spotlight.spotlight,
+  .block.block,
+  .prose.prose {
+    animation: none;
+  }
+}
