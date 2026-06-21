@@ -1987,6 +1987,60 @@ article {
   color: var(--kb-text);
 }
 
+/* --- Changelog (current BR markup: inline-styled <section id="v-vN-N-N">)
+   ----------------------------------------------------------------------
+   BR's renderer changed shape from the original .changelog-* classes
+   above. The current output puts every release into
+   `<section id="v-vMAJOR-MINOR-PATCH">` inside a flex column wrapper.
+   These rules target the live markup so the changelog matches the rest
+   of the magazine, AND reverse the list so the most recent version is
+   at the top. */
+
+/* Reverse the order — newest at top, oldest at bottom. */
+.br-app main div:has(> section[id^="v-v"]),
+.br-app div[style*="flex-direction: column"]:has(> section[id^="v-v"]) {
+  flex-direction: column-reverse !important;
+}
+
+/* Each release becomes a soft-modern card on the cream page. */
+.br-app section[id^="v-v"] {
+  background: #ffffff;
+  border: 1px solid var(--kb-border);
+  border-radius: 24px;
+  box-shadow: 0 10px 30px -12px rgba(43, 70, 60, 0.12);
+  padding: 1.75rem 2rem !important;
+}
+
+/* The version heading inside each section — big Fraunces, brand green. */
+.br-app section[id^="v-v"] h2 {
+  font-family: 'Fraunces', 'Lora', Georgia, serif !important;
+  font-weight: 700 !important;
+  font-size: 1.625rem !important;
+  letter-spacing: -0.02em !important;
+  color: var(--kb-primary) !important;
+}
+
+/* The release title (BR ships as a sibling <span>). */
+.br-app section[id^="v-v"] > div > span {
+  font-family: 'Quicksand', sans-serif !important;
+  color: var(--kb-text) !important;
+}
+
+/* Date — italic Fraunces, muted. */
+.br-app section[id^="v-v"] time {
+  font-family: 'Fraunces', 'Lora', Georgia, serif !important;
+  font-style: italic !important;
+  color: var(--kb-text-mute) !important;
+}
+
+/* Body paragraph inside the section reads as editorial prose. */
+.br-app section[id^="v-v"] p {
+  font-family: 'Quicksand', sans-serif !important;
+  font-size: 1rem !important;
+  line-height: 1.7 !important;
+  color: var(--kb-text) !important;
+}
+
 /* --- Editorial colophon CTA (injected on every /news page) ---------- */
 
 /* Reads like the back-page subscriber prompt in a print magazine.
