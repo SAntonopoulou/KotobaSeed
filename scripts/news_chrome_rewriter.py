@@ -283,6 +283,42 @@ RE_BR_FAVICON = re.compile(
     r'<link\b[^>]*\brel="(?:icon|shortcut icon|apple-touch-icon)"[^>]*>',
     re.IGNORECASE,
 )
+# Every <style>…</style> block. We strip all of them from the BR head
+# and let our own stylesheet (news-content.css) + the apex CSS bundle
+# be the sole sources of styling. None of BR's resets, Astro-scoped
+# component styles, or :focus-visible rules should reach the page.
+RE_STYLE_BLOCK = re.compile(
+    r'<style\b[^>]*>.*?</style>', re.DOTALL | re.IGNORECASE,
+)
+# Every <link rel="stylesheet" …>. We strip these from BR's head too
+# so the only CSS that loads is the set we explicitly inject (apex
+# bundle + Google Fonts + news-content.css).
+RE_STYLESHEET_LINK = re.compile(
+    r'<link\b[^>]*\brel="stylesheet"[^>]*/?\s*>',
+    re.IGNORECASE,
+)
+RE_HEAD_BLOCK = re.compile(
+    r'(<head\b[^>]*>)(.*?)(</head>)',
+    re.DOTALL | re.IGNORECASE,
+)
+
+
+def strip_br_styles_in_head(html: str) -> str:
+    """Remove all <style> blocks and stylesheet <link>s from <head>.
+
+    Only touches content inside <head> so BR's body-level inline
+    `style=""` attributes and any in-body <style> tags are untouched
+    (we override those with !important rules in news-content.css).
+    Run AFTER stripping the existing marker block so we don't nuke
+    our own <style> tag along with BR's.
+    """
+    def _scrub(m: re.Match) -> str:
+        head = m.group(2)
+        head = RE_STYLE_BLOCK.sub('', head)
+        head = RE_STYLESHEET_LINK.sub('', head)
+        return m.group(1) + head + m.group(3)
+
+    return RE_HEAD_BLOCK.sub(_scrub, html, count=1)
 
 
 def transform(html: str, nav_html: str, footer_html: str) -> str:
@@ -295,10 +331,15 @@ def transform(html: str, nav_html: str, footer_html: str) -> str:
     html = RE_BR_FAVICON.sub('', html)
     # 2. Strip every `<div class="plugin-slot …">…</div>` (and contents).
     html = strip_plugin_slots(html)
-    # 3. Replace any prior <head> injection (or add one). The injection
-    #    is: the apex SPA's <head> tags + the news-content stylesheet
-    #    (with cache-busting ?v=<mtime>) + a tiny tail with BR-base
-    #    resets and drawer wiring.
+    # 3. Strip the prior marker block (so our own <style> doesn't get
+    #    eaten in the next step), then strip every BR <style> block
+    #    and BR <link rel="stylesheet"> from <head>. After this, the
+    #    only CSS the page loads is what we inject below: the apex CSS
+    #    bundle, the Google Fonts stylesheet, news-content.css, and our
+    #    tiny inline <style> tail. No BR resets, no Astro-scoped rules,
+    #    no :focus-visible outline — nothing.
+    html = RE_EXISTING_INJECT.sub('', html, count=1)
+    html = strip_br_styles_in_head(html)
     head_block = (
         CHROME_MARKER_START
         + get_apex_head()
@@ -306,10 +347,7 @@ def transform(html: str, nav_html: str, footer_html: str) -> str:
         + HEAD_INJECT_TAIL
         + CHROME_MARKER_END
     )
-    if RE_EXISTING_INJECT.search(html):
-        html = RE_EXISTING_INJECT.sub(head_block, html, count=1)
-    else:
-        html = html.replace('</head>', head_block + '</head>', 1)
+    html = html.replace('</head>', head_block + '</head>', 1)
     # 4. Strip any prior chrome mount block (re-runs).
     html = RE_EXISTING_NAV_MOUNT.sub('', html)
     html = RE_EXISTING_FOOTER_MOUNT.sub('', html)

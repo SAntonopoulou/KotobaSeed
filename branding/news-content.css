@@ -41,15 +41,67 @@
 
 /* --- Page baseline ---------------------------------------------------- */
 
-main {
-  background: var(--kb-bg);
+/* BR's universal reset and body styles are now stripped by the
+   rewriter, so we restate the layout primitives BR used to provide:
+   flex column body for the sticky-footer feel, main fills, sensible
+   defaults for links. apex.css's Tailwind preflight covers
+   box-sizing + most resets. */
+
+html, body {
+  background: rgb(var(--kotoba-background-rgb, 244 241 233));
+  color: rgb(var(--kotoba-text-rgb, 43 70 60));
 }
 
-/* Match the apex content-width feel — BR's .container is 720px which
-   feels narrow next to our boutique cards; nudge .container-wide up to
-   1080px (matches apex max-w-7xl-ish reading column). */
-.container.container,
-.container-wide.container-wide {
+body {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  font-family: 'Quicksand', 'Inter', ui-sans-serif, system-ui,
+               -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica,
+               Arial, sans-serif;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+main {
+  flex: 1;
+  background: var(--kb-bg);
+  padding: 1.5rem 0 3rem;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Kotobaseed-tinted keyboard focus indicator — subtle ring instead of
+   a default browser outline. */
+:focus-visible {
+  outline: 2px solid rgb(var(--kotoba-primary-rgb, 22 86 29));
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+::selection {
+  background: rgb(var(--kotoba-primary-rgb, 22 86 29) / 0.18);
+  color: rgb(var(--kotoba-text-rgb, 43 70 60));
+}
+
+/* BR uses these for content layout; restore the widths now that BR's
+   .container rules are stripped. */
+.container {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+  font-family: 'Quicksand', 'Inter', ui-sans-serif, system-ui, sans-serif;
+  color: var(--kb-text);
+}
+
+.container-wide {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 0 1.5rem;
   font-family: 'Quicksand', 'Inter', ui-sans-serif, system-ui, sans-serif;
   color: var(--kb-text);
 }
@@ -581,15 +633,23 @@ article {
   transform: translateX(3px);
 }
 
-/* --- Navbar mount input styling (defensive) --------------------------- */
+/* --- Navbar mount input styling (BR override) ------------------------ */
 
-/* The React Navbar's search input gets its visual identity from
-   Tailwind classes (bg-white, rounded-md, border-kotoba-text/20, …)
-   that are compiled into the apex CSS bundle, so it should look the
-   same as on the apex. Belt-and-suspenders here: make sure BR's
-   global resets don't leak through and that the input has clean
-   focus + placeholder behaviour. Scoped to the navbar mount so we
-   never touch BR's content forms. */
+/* BR's renderer ships these global rules in its inline <style> block:
+     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+     :focus-visible {
+       outline: 2px solid var(--brand-mid);
+       outline-offset: 2px;
+       border-radius: 4px;
+     }
+     html { font-family: var(--font); }   // var(--font) = Inter
+   The :focus-visible rule paints a 2px sage outline 2px outside any
+   focusable element — including the search input. The universal
+   reset clobbers padding/margin (Tailwind's class selectors win, but
+   only on properties that are explicitly set). We force the input
+   here to match the apex exactly, regardless of BR's resets. The
+   #kb-navbar-root prefix scopes the override so BR's article-body
+   forms (if any get added later) are untouched. */
 
 #kb-navbar-root form {
   display: flex;
@@ -597,25 +657,54 @@ article {
 
 #kb-navbar-root input[type='search'],
 #kb-navbar-root input[type='text'] {
-  font-family: 'Quicksand', 'Inter', sans-serif;
-  line-height: 1.4;
-  height: 2.25rem;
-  color: var(--kb-text);
-  background: #fff;
+  font-family: 'Quicksand', 'Inter', sans-serif !important;
+  font-size: 0.875rem !important;
+  line-height: 1.4 !important;
+  color: var(--kb-text) !important;
+  background-color: #fff !important;
+  border: 1px solid rgb(var(--kotoba-text-rgb, 43 70 60) / 0.2) !important;
+  border-radius: 0.5rem !important;
+  padding: 0.5rem 0.75rem 0.5rem 2.25rem !important;
+  height: 2.25rem !important;
+  margin: 0 !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
 }
 
 #kb-navbar-root input[type='search']::placeholder,
 #kb-navbar-root input[type='text']::placeholder {
-  font-family: 'Quicksand', 'Inter', sans-serif;
-  color: var(--kb-text-mute);
+  font-family: 'Quicksand', 'Inter', sans-serif !important;
+  color: rgb(var(--kotoba-text-rgb, 43 70 60) / 0.5) !important;
   opacity: 1;
 }
 
+/* Webkit search input has a built-in clear button + magnifier; hide so
+   the visual stays clean and matches the apex. */
+#kb-navbar-root input[type='search']::-webkit-search-decoration,
+#kb-navbar-root input[type='search']::-webkit-search-cancel-button,
+#kb-navbar-root input[type='search']::-webkit-search-results-button,
+#kb-navbar-root input[type='search']::-webkit-search-results-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
 #kb-navbar-root input[type='search']:focus,
-#kb-navbar-root input[type='text']:focus {
-  outline: none;
-  border-color: var(--kb-primary);
-  box-shadow: 0 0 0 3px rgb(var(--kotoba-primary-rgb, 22 86 29) / 0.12);
+#kb-navbar-root input[type='text']:focus,
+#kb-navbar-root input[type='search']:focus-visible,
+#kb-navbar-root input[type='text']:focus-visible {
+  outline: none !important;
+  outline-offset: 0 !important;
+  border-color: rgb(var(--kotoba-primary-rgb, 22 86 29)) !important;
+  box-shadow: 0 0 0 3px rgb(var(--kotoba-primary-rgb, 22 86 29) / 0.15) !important;
+}
+
+/* Defensive: neutralize BR's :focus-visible everywhere inside the
+   chrome mount so its sage outline ring never bleeds through onto
+   our links/buttons/dropdown summaries. */
+#kb-navbar-root :focus-visible,
+#kb-footer-root :focus-visible {
+  outline: none !important;
+  outline-offset: 0 !important;
 }
 
 /* --- Animation -------------------------------------------------------- */
