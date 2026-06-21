@@ -53,10 +53,12 @@ const AboutLongFormDropcap = ({ content = {}, tutor, firstName, trial, onBook })
   };
 
   return (
-    <section id="about" className="d-section">
-      <div className="d-about">
-        <span className="d-eyebrow">{getValue(content, 'eyebrow')}</span>
-        <div className="d-about-photo" style={{ marginTop: 24 }}>
+    <section id="about" className="d-section d-section-about">
+      <div className="d-about d-about-asym">
+        <div className="d-about-header">
+          <span className="d-eyebrow">{getValue(content, 'eyebrow')}</span>
+        </div>
+        <div className="d-about-photo">
           {imgFailed ? (
             <div className="d-hero-photo-fallback" style={{ fontSize: 72 }}>
               {fn.charAt(0)}
@@ -75,8 +77,8 @@ const AboutLongFormDropcap = ({ content = {}, tutor, firstName, trial, onBook })
               {para}
             </p>
           ))}
+          <p className="d-about-signoff">{signoff}</p>
         </div>
-        <p className="d-about-signoff">{signoff}</p>
         <div className="d-about-cta">
           <a href="#pricing" onClick={onCta} className="d-btn d-btn-primary d-btn-lg">
             {getValue(content, 'cta_label')}

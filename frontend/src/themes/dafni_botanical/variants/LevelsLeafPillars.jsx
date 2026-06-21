@@ -107,23 +107,63 @@ const LevelsLeafPillars = ({ content = {} }) => {
             </p>
           )}
         </div>
-        <div className="d-levels-stack">
-          {levels.map((l, i) => (
-            <article className="d-level" key={l.name || i}>
-              <div className="d-level-leaf">{LEAVES[i % LEAVES.length]}</div>
-              <div>
-                <h3>{l.name}</h3>
-                {l.desc && <p className="d-level-desc">{l.desc}</p>}
-                {Array.isArray(l.items) && l.items.length > 0 && (
-                  <ul>
-                    {l.items.map((it) => (
-                      <li key={it}>{it}</li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </article>
-          ))}
+        <div className="d-levels-stage">
+          <svg
+            className="d-levels-branch d-levels-branch-left"
+            viewBox="0 0 320 240"
+            fill="none"
+            aria-hidden="true"
+          >
+            <path
+              d="M10 220 C 60 200, 120 168, 180 120 C 230 80, 270 50, 310 20"
+              stroke="currentColor"
+              strokeWidth="1.4"
+              strokeLinecap="round"
+            />
+            <path d="M120 168 C 105 152, 92 138, 78 132" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+            <path d="M180 120 C 168 100, 155 86, 138 78" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+            <path d="M230 86 C 222 70, 214 56, 200 48" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+            <ellipse cx="90" cy="142" rx="8" ry="14" stroke="currentColor" strokeWidth="1.2" transform="rotate(-30 90 142)" />
+            <ellipse cx="150" cy="88" rx="8" ry="14" stroke="currentColor" strokeWidth="1.2" transform="rotate(-40 150 88)" />
+            <ellipse cx="212" cy="58" rx="8" ry="14" stroke="currentColor" strokeWidth="1.2" transform="rotate(-50 212 58)" />
+          </svg>
+          <svg
+            className="d-levels-branch d-levels-branch-right"
+            viewBox="0 0 320 240"
+            fill="none"
+            aria-hidden="true"
+          >
+            <path
+              d="M310 220 C 260 200, 200 168, 140 120 C 90 80, 50 50, 10 20"
+              stroke="currentColor"
+              strokeWidth="1.4"
+              strokeLinecap="round"
+            />
+            <path d="M200 168 C 215 152, 228 138, 242 132" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+            <path d="M140 120 C 152 100, 165 86, 182 78" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+            <path d="M90 86 C 98 70, 106 56, 120 48" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+            <ellipse cx="230" cy="142" rx="8" ry="14" stroke="currentColor" strokeWidth="1.2" transform="rotate(30 230 142)" />
+            <ellipse cx="170" cy="88" rx="8" ry="14" stroke="currentColor" strokeWidth="1.2" transform="rotate(40 170 88)" />
+            <ellipse cx="108" cy="58" rx="8" ry="14" stroke="currentColor" strokeWidth="1.2" transform="rotate(50 108 58)" />
+          </svg>
+          <div className="d-levels-stack">
+            {levels.map((l, i) => (
+              <article className="d-level" key={l.name || i}>
+                <div className="d-level-leaf">{LEAVES[i % LEAVES.length]}</div>
+                <div>
+                  <h3>{l.name}</h3>
+                  {l.desc && <p className="d-level-desc">{l.desc}</p>}
+                  {Array.isArray(l.items) && l.items.length > 0 && (
+                    <ul>
+                      {l.items.map((it) => (
+                        <li key={it}>{it}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </article>
+            ))}
+          </div>
         </div>
       </div>
     </section>

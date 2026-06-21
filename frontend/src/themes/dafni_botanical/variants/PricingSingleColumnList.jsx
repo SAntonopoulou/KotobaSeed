@@ -129,7 +129,7 @@ const PricingSingleColumnList = ({
   if (!title) return null;
 
   return (
-    <section id="pricing" className="d-section-sand">
+    <section id="pricing" className="d-section d-section-pricing">
       <div className="d-wrap">
         <div style={{ textAlign: 'center', marginBottom: 24, maxWidth: 600, margin: '0 auto 24px' }}>
           <span className="d-eyebrow">{getValue(content, 'eyebrow')}</span>
