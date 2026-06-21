@@ -106,15 +106,65 @@ HEAD_INJECT = (
     '<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">'
     '<link rel="stylesheet" href="/branding/apex.css">'
     '<style>'
+    # Body baseline matches the apex (warm cream bg, deep teal text, Inter).
     'body{font-family:"Inter",ui-sans-serif,system-ui,-apple-system,'
     'BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;'
     'background:rgb(244 241 233);color:rgb(43 70 60);'
     'margin:0;padding:0;}'
-    'main{padding-bottom:2rem;}'
+    # BR's base stylesheet has bare `footer { padding:2.5rem 0; margin-top:6rem;
+    # border-top:…; background:var(--bg-warm); }` which double-styles OUR
+    # injected footer. Neutralise it specifically for the body-level chrome we
+    # add — internal `<footer>` tags inside articles are unaffected.
+    'body>footer{padding:0;margin:0;background:transparent;border:0;}'
+    # Same defensive reset for the body-level nav we inject.
+    'body>nav{margin:0;background:transparent;border:0;}'
     '.kb-mobile-drawer{display:none;}'
     '.kb-mob-open .kb-mobile-drawer{display:block;}'
     '@media(min-width:1024px){.kb-mob-open .kb-mobile-drawer{display:none;}}'
     '</style>'
+    # Auth-aware chrome. /news is static HTML, so the signed-out nav is
+    # baked in. After DOM is ready, ask /api/users/me with cookies; if it
+    # returns 200, swap the Log in / Get started buttons for a Dashboard
+    # link plus an initial-avatar pointing at the apex profile.
+    '<script>'
+    'document.addEventListener("DOMContentLoaded",function(){'
+      'fetch("/api/users/me",{credentials:"include"})'
+      '.then(function(r){return r.ok?r.json():null;})'
+      '.then(function(u){'
+        'if(!u)return;'
+        'var nav=document.querySelector("body>nav");if(!nav)return;'
+        'var initial=String(u.name||u.email||"?").charAt(0).toUpperCase();'
+        'var right=nav.querySelector(".lg\\\\:flex.lg\\\\:items-center.lg\\\\:gap-4");'
+        'if(right){'
+          'while(right.firstChild)right.removeChild(right.firstChild);'
+          'var dash=document.createElement("a");'
+          'dash.href="https://kotobaseed.net/dashboard";'
+          'dash.className="text-kotoba-text/70 hover:text-kotoba-text px-3 py-2 text-sm font-medium";'
+          'dash.textContent="Dashboard";'
+          'right.appendChild(dash);'
+          'var av=document.createElement("a");'
+          'av.href="https://kotobaseed.net/dashboard";'
+          'av.title=u.name||u.email||"";'
+          'av.className="flex items-center justify-center w-9 h-9 rounded-full bg-kotoba-primary text-white text-sm font-semibold";'
+          'av.textContent=initial;'
+          'right.appendChild(av);'
+        '}'
+        'var drawer=nav.querySelector(".kb-mobile-drawer");'
+        'if(drawer){'
+          'Array.prototype.slice.call(drawer.querySelectorAll("a")).forEach(function(a){'
+            'var h=a.getAttribute("href")||"";'
+            'if(h.indexOf("/login")>-1||h.indexOf("/register")>-1)a.remove();'
+          '});'
+          'var dm=document.createElement("a");'
+          'dm.href="https://kotobaseed.net/dashboard";'
+          'dm.className="block px-2 py-2 rounded text-base font-semibold text-kotoba-primary hover:bg-kotoba-primary/5";'
+          'dm.textContent="Dashboard";'
+          'drawer.appendChild(dm);'
+        '}'
+      '})'
+      '.catch(function(){});'
+    '});'
+    '</script>'
 )
 
 CHROME_MARKER = '<!--kb-chrome-->'
