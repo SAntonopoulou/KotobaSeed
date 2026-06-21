@@ -42,6 +42,54 @@ const TutorHome = () => {
   const [error, setError] = useState('');
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
+  // Preview mode — the dashboard's PageBuilder loads this site in an
+  // iframe with `?preview=1` and posts draft section state on every
+  // edit. We replace the fetched sections with the posted draft so the
+  // tutor sees unsaved changes immediately. Strict origin gating: only
+  // accept messages whose origin shares the apex domain.
+  const isPreviewMode =
+    typeof window !== 'undefined' &&
+    new URLSearchParams(window.location.search).has('preview');
+
+  useEffect(() => {
+    if (!isPreviewMode) return undefined;
+    const apex = window.location.host
+      .split('.')
+      .slice(-2)
+      .join('.');
+    const onMessage = (event) => {
+      try {
+        const originHost = new URL(event.origin).host;
+        if (
+          !originHost.endsWith(apex) &&
+          originHost !== apex
+        ) {
+          return;
+        }
+      } catch {
+        return;
+      }
+      const data = event.data;
+      if (!data || data.type !== 'koto:preview:sections') return;
+      if (!Array.isArray(data.sections)) return;
+      // Strip client-only `_uid` if present.
+      const cleaned = data.sections.map((s) => {
+        const { _uid, ...rest } = s || {};
+        return rest;
+      });
+      setSections(cleaned);
+    };
+    // Ready handshake so the parent stops queuing.
+    try {
+      window.parent.postMessage(
+        { type: 'koto:preview:ready' },
+        '*',
+      );
+    } catch { /* ignore — embed not allowed */ }
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [isPreviewMode]);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {

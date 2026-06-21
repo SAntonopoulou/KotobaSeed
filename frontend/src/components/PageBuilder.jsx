@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   DndContext,
   PointerSensor,
@@ -83,14 +83,77 @@ const PageBuilder = () => {
     setDirty(true);
   };
 
+  // Public site URL — used by the "View live site" button. Returns null
+  // until tutor data loads. Always absolute so the iframe and the new-tab
+  // button can share it.
   const previewUrl = useMemo(() => {
     if (typeof window === 'undefined') return null;
     if (!tutorSlug) return null;
     const host = window.location.host;
-    if (host.startsWith(`${tutorSlug}.`)) return '/';
-    const apex = host.replace(/^[^.]+\./, '');
+    const apex = host.startsWith(`${tutorSlug}.`)
+      ? host.replace(/^[^.]+\./, '')
+      : host;
     return `${window.location.protocol}//${tutorSlug}.${apex}/`;
   }, [tutorSlug]);
+
+  // The iframe-friendly variant — same URL with ?preview=1 so the
+  // mounted TutorHome listens for postMessage and renders draft state
+  // instead of fetched DB state.
+  const previewIframeUrl = previewUrl ? `${previewUrl}?preview=1` : null;
+
+  // Split-pane preview wiring. Iframe + handshake + debounced post on
+  // section edits. Tutors on lg+ get the iframe right-side by default;
+  // a toggle hides it (for narrow editor sessions on a 13" laptop) and
+  // mobile hides it unconditionally.
+  const iframeRef = useRef(null);
+  const iframeReadyRef = useRef(false);
+  const postTimerRef = useRef(null);
+  const [showPreview, setShowPreview] = useState(true);
+
+  useEffect(() => {
+    const onMessage = (event) => {
+      if (event?.data?.type === 'koto:preview:ready') {
+        iframeReadyRef.current = true;
+        // Flush the current state on first ready.
+        postPreview();
+      }
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const postPreview = () => {
+    const iframe = iframeRef.current;
+    if (!iframe || !iframe.contentWindow || !previewUrl) return;
+    if (!iframeReadyRef.current) return;
+    try {
+      iframe.contentWindow.postMessage(
+        {
+          type: 'koto:preview:sections',
+          sections: sections.map((s) => ({
+            section_type: s.section_type,
+            is_visible: s.is_visible !== false,
+            content: s.content || {},
+          })),
+        },
+        new URL(previewUrl).origin,
+      );
+    } catch {
+      /* iframe may have torn down — ignore */
+    }
+  };
+
+  // Debounce posts so dragging a slider doesn't fire 60 times a second.
+  useEffect(() => {
+    if (!previewIframeUrl) return undefined;
+    if (postTimerRef.current) clearTimeout(postTimerRef.current);
+    postTimerRef.current = setTimeout(postPreview, 200);
+    return () => {
+      if (postTimerRef.current) clearTimeout(postTimerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sections, previewIframeUrl]);
 
   const load = async () => {
     setLoading(true);
@@ -257,6 +320,16 @@ const PageBuilder = () => {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {previewIframeUrl && (
+            <button
+              type="button"
+              onClick={() => setShowPreview((v) => !v)}
+              className="hidden lg:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-kotoba-text/15 text-kotoba-text/70 text-sm font-medium hover:bg-kotoba-background/80"
+              title={showPreview ? 'Hide the live preview pane' : 'Show the live preview pane'}
+            >
+              {showPreview ? 'Hide preview' : 'Show preview'}
+            </button>
+          )}
           {previewUrl && (
             <a
               href={previewUrl}
@@ -294,37 +367,46 @@ const PageBuilder = () => {
         </div>
       )}
 
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragEnd={onDragEnd}
+      <div
+        className={
+          showPreview && previewIframeUrl
+            ? 'lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] lg:gap-6 space-y-4 lg:space-y-0'
+            : 'space-y-4'
+        }
       >
-        <SortableContext
-          items={sections.map((s) => s._uid)}
-          strategy={verticalListSortingStrategy}
-        >
-          <ul className="divide-y divide-kotoba-text/10 border border-kotoba-text/10 rounded-md">
-            {sections.map((section, idx) => (
-              <SortableSectionRow
-                key={section._uid}
-                section={section}
-                idx={idx}
-                editingIndex={editingIndex}
-                setEditingIndex={setEditingIndex}
-                toggleVisible={toggleVisible}
-                remove={remove}
-                updateContent={updateContent}
-                resolveVariantSchema={resolveVariantSchema}
-              />
-            ))}
-            {sections.length === 0 && (
-              <li className="px-3 py-3 text-sm text-kotoba-text/60">
-                No sections — your site will be blank. Add one below.
-              </li>
-            )}
-          </ul>
-        </SortableContext>
-      </DndContext>
+        {/* Left pane — editor */}
+        <div className="space-y-4">
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={onDragEnd}
+          >
+            <SortableContext
+              items={sections.map((s) => s._uid)}
+              strategy={verticalListSortingStrategy}
+            >
+              <ul className="divide-y divide-kotoba-text/10 border border-kotoba-text/10 rounded-md">
+                {sections.map((section, idx) => (
+                  <SortableSectionRow
+                    key={section._uid}
+                    section={section}
+                    idx={idx}
+                    editingIndex={editingIndex}
+                    setEditingIndex={setEditingIndex}
+                    toggleVisible={toggleVisible}
+                    remove={remove}
+                    updateContent={updateContent}
+                    resolveVariantSchema={resolveVariantSchema}
+                  />
+                ))}
+                {sections.length === 0 && (
+                  <li className="px-3 py-3 text-sm text-kotoba-text/60">
+                    No sections — your site will be blank. Add one below.
+                  </li>
+                )}
+              </ul>
+            </SortableContext>
+          </DndContext>
 
       <div className="relative">
         <button
@@ -373,6 +455,36 @@ const PageBuilder = () => {
             {saving ? 'Saving…' : 'Save layout'}
           </button>
         </div>
+      </div>
+        </div>
+        {/* Right pane — live preview iframe. The mounted TutorHome
+            reads `?preview=1` and listens for `koto:preview:sections`
+            postMessage events from this PageBuilder. Sticky so the
+            preview stays visible while the editor list scrolls. */}
+        {showPreview && previewIframeUrl && (
+          <div className="hidden lg:flex flex-col h-[78vh] sticky top-4 self-start border border-kotoba-text/10 rounded-md overflow-hidden bg-kotoba-background/30">
+            <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-kotoba-text/10 bg-white text-xs flex-shrink-0">
+              <span className="text-kotoba-text/60">
+                Live preview · updates as you edit
+              </span>
+              <a
+                href={previewUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-kotoba-primary hover:underline"
+                title="Open in a new tab"
+              >
+                Open ↗
+              </a>
+            </div>
+            <iframe
+              ref={iframeRef}
+              src={previewIframeUrl}
+              className="w-full flex-grow bg-white"
+              title="Live site preview"
+            />
+          </div>
+        )}
       </div>
     </section>
   );
