@@ -29,15 +29,20 @@ from ..models import (
     ArticleComment,
     ArticleRating,
     ArticleVisibility,
+    Booking,
+    BookingStatus,
     Cohort,
     CohortSeat,
+    HomeworkTemplate,
     LessonModule,
     LessonPack,
+    ModulePurchase,
     Pledge,
     PledgeStatus,
     Project,
     ProjectStatus,
     TeacherFollower,
+    Testimonial,
     Tutor,
     TutorAccountStatus,
     User,
@@ -58,24 +63,68 @@ TUTOR_SEED_BLUEPRINT = {
     "languages_taught": "Greek, English",
     "timezone": "UTC",
     "theme": "sage",
-    "published_article": {
-        "title": "Three idioms that make your Greek sound native",
-        "summary": "Snippets you'll hear in any Athens café.",
-        "body_markdown": (
-            "# Three idioms that make your Greek sound native\n\n"
-            "Native speakers slip these in without thinking. Memorise the literal "
-            "meaning first, then the context. This is *your* article — edit it.\n\n"
-            "## 1. *Πιάνει το νόημα*\n"
-            "Literally \"catches the meaning\". Means \"gets it\". Used when "
-            "someone finally clicks with an idea.\n\n"
-            "## 2. *Δεν παίζεσαι*\n"
-            "Literally \"you can't be played\". Means \"you're unstoppable\". "
-            "Compliment after someone pulls off something impressive.\n\n"
-            "## 3. *Πάμε γερά*\n"
-            "Literally \"let's go strongly\". Means \"let's hit it\". A "
-            "rallying cry before a meeting, a meal, a road trip."
-        ),
-    },
+    # Three published articles + one draft, so the dashboard's content tab
+    # already shows volume rather than a single starter post.
+    "published_articles": [
+        {
+            "title": "Three idioms that make your Greek sound native",
+            "summary": "Snippets you'll hear in any Athens café.",
+            "days_ago": 3,
+            "body_markdown": (
+                "# Three idioms that make your Greek sound native\n\n"
+                "Native speakers slip these in without thinking. Memorise the literal "
+                "meaning first, then the context. This is *your* article — edit it.\n\n"
+                "## 1. *Πιάνει το νόημα*\n"
+                "Literally \"catches the meaning\". Means \"gets it\". Used when "
+                "someone finally clicks with an idea.\n\n"
+                "## 2. *Δεν παίζεσαι*\n"
+                "Literally \"you can't be played\". Means \"you're unstoppable\". "
+                "Compliment after someone pulls off something impressive.\n\n"
+                "## 3. *Πάμε γερά*\n"
+                "Literally \"let's go strongly\". Means \"let's hit it\". A "
+                "rallying cry before a meeting, a meal, a road trip."
+            ),
+        },
+        {
+            "title": "Stop translating in your head — start hearing in Greek",
+            "summary": "The shadowing drill I use with every new student.",
+            "days_ago": 11,
+            "body_markdown": (
+                "# Stop translating in your head — start hearing in Greek\n\n"
+                "Most students get stuck because they're decoding word-by-word. "
+                "Here's the 12-minute shadowing drill that fixes that — works for "
+                "any level past A1.\n\n"
+                "## What you need\n"
+                "- A short clip (60-90s) of natural Greek\n"
+                "- A quiet room\n"
+                "- Three repetitions, no more\n\n"
+                "## The drill\n"
+                "1. Listen once, eyes closed, don't try to understand. Just absorb the rhythm.\n"
+                "2. Listen again, this time mouthing along — half a beat behind.\n"
+                "3. Speak it out loud at full volume on the third pass.\n\n"
+                "Twelve minutes a day. Two weeks. You'll feel it."
+            ),
+        },
+        {
+            "title": "How I teach the Greek alphabet in 90 minutes",
+            "summary": "Letter-by-letter pairing with English sounds. Free to copy.",
+            "days_ago": 21,
+            "body_markdown": (
+                "# How I teach the Greek alphabet in 90 minutes\n\n"
+                "I used to spend three lessons on the alphabet. Now I do it in one "
+                "90-minute session. The trick: pair every Greek letter with a "
+                "specific English-word sound so the student is *remembering*, not "
+                "memorising.\n\n"
+                "## The session structure\n"
+                "- Minutes 0-15 — vowels only, with mirror work\n"
+                "- Minutes 15-45 — the easy consonants (β γ δ ζ θ κ λ μ ν π ρ σ τ φ χ)\n"
+                "- Minutes 45-65 — the trap consonants (ξ ψ ς)\n"
+                "- Minutes 65-90 — read three lines of café signage\n\n"
+                "By the end they can read their first menu. That's the moment "
+                "they keep coming back."
+            ),
+        },
+    ],
     "draft_article": {
         "title": "Why your verb endings keep eating themselves",
         "summary": "A draft you can edit during the tour.",
@@ -85,19 +134,126 @@ TUTOR_SEED_BLUEPRINT = {
             "tweak the title in a moment. Nothing goes live yet."
         ),
     },
-    "module": {
-        "title": "Greek alphabet boot camp",
-        "summary": "Five sessions, fully written.",
-        "description": "Self-paced — yours forever after purchase.",
-        "price_cents": 1500,
-    },
-    "lesson_pack": {
-        "name": "Single conversation lesson",
-        "num_lessons": 1,
-        "duration_minutes": 60,
-        "price_cents": 2500,
-        "currency": "eur",
-        "description": "A 60-minute conversation lesson. Free 15-minute trial first.",
+    # Two modules with different price points so the dashboard shows
+    # revenue across both a £15 entry-level pack and a £45 deep-dive.
+    "modules": [
+        {
+            "title": "Greek alphabet boot camp",
+            "summary": "Five sessions, fully written + audio.",
+            "description": "Self-paced — yours forever after purchase.",
+            "price_cents": 1500,
+            "days_ago": 35,
+            "n_purchases": 8,
+        },
+        {
+            "title": "Idioms unlocked — sound like a local in 4 weeks",
+            "summary": "30 idioms, audio drills, end-of-week recap calls.",
+            "description": "Four-week guided programme. Includes group review calls.",
+            "price_cents": 4500,
+            "days_ago": 14,
+            "n_purchases": 6,
+        },
+    ],
+    # Two lesson packs — a trial + a paid single. Most demo tutors sell the
+    # single; the trial conversion data is what gets shown in onboarding.
+    "lesson_packs": [
+        {
+            "name": "15-minute trial",
+            "num_lessons": 1,
+            "duration_minutes": 15,
+            "price_cents": 0,
+            "currency": "eur",
+            "description": "Free intro. See if we click.",
+        },
+        {
+            "name": "Single conversation lesson",
+            "num_lessons": 1,
+            "duration_minutes": 60,
+            "price_cents": 2500,
+            "currency": "eur",
+            "description": "A 60-minute conversation lesson. Free 15-minute trial first.",
+        },
+    ],
+    # Three demo students — appear in the schedule + lesson plans + testimonials.
+    # First names + last-initial keeps them recognisable without feeling fake.
+    "students": [
+        {
+            "name": "Marina K.",
+            "email_local": "marina-k",
+            "level": "B1",
+            "note": "Heritage speaker, wants to read modern Greek novels.",
+        },
+        {
+            "name": "Daniel R.",
+            "email_local": "daniel-r",
+            "level": "A2",
+            "note": "Moving to Athens in September for work. Conversational focus.",
+        },
+        {
+            "name": "Hannah W.",
+            "email_local": "hannah-w",
+            "level": "A1",
+            "note": "Started two months ago. Loves the alphabet boot camp.",
+        },
+    ],
+    # 7 bookings spread across the coming two weeks so the dashboard
+    # "Upcoming lessons" widget fills up. Days/hours are RELATIVE to now
+    # at seed time so they always look upcoming, never historical.
+    "bookings": [
+        {"student_idx": 0, "days_ahead": 1, "hour": 17, "pack_idx": 1},
+        {"student_idx": 1, "days_ahead": 1, "hour": 19, "pack_idx": 1},
+        {"student_idx": 2, "days_ahead": 2, "hour": 16, "pack_idx": 1},
+        {"student_idx": 0, "days_ahead": 4, "hour": 17, "pack_idx": 1},
+        {"student_idx": 1, "days_ahead": 5, "hour": 19, "pack_idx": 1},
+        {"student_idx": 2, "days_ahead": 8, "hour": 16, "pack_idx": 1},
+        {"student_idx": 0, "days_ahead": 11, "hour": 17, "pack_idx": 1},
+    ],
+    # Testimonials shown on the public site — social proof out of the gate.
+    "testimonials": [
+        {
+            "student_name": "Marina K.",
+            "body": (
+                "Six months in and I can finally read my grandmother's letters. "
+                "Lessons are calm and structured, never a wall of grammar."
+            ),
+            "stars": 5,
+            "display_order": 1,
+        },
+        {
+            "student_name": "Daniel R.",
+            "body": (
+                "I've had three Greek tutors before. This is the first time the "
+                "lessons feel built around my actual goals."
+            ),
+            "stars": 5,
+            "display_order": 2,
+        },
+        {
+            "student_name": "Hannah W.",
+            "body": (
+                "Best money I've spent on language learning. The homework "
+                "templates make practising between lessons painless."
+            ),
+            "stars": 5,
+            "display_order": 3,
+        },
+    ],
+    # One reusable homework template — the kind they'd use after every
+    # lesson. Auto-assigned so the demo dashboard's homework tab is alive.
+    "homework_template": {
+        "title": "Five sentences using today's idioms",
+        "description": "Write five short sentences that use the idioms we covered. Audio reply welcome.",
+        "questions": [
+            {
+                "type": "free_text",
+                "prompt": "Write five sentences using the idioms from today's lesson. They can be silly — just make them feel natural.",
+            },
+            {
+                "type": "free_text",
+                "prompt": "Which idiom felt hardest to use? Why?",
+            },
+        ],
+        "auto_assign_on_lesson_complete": True,
     },
 }
 
@@ -127,22 +283,35 @@ def seed_workspace(session: Session, user: User) -> None:
 
 
 def _seed_tutor(session: Session, user: User) -> None:
-    """Tutor seed — 1 Tutor row + 2 articles + 1 module + 1 lesson pack."""
+    """Tutor seed — a richer pre-built sandbox so a prospect lands on a
+    dashboard that already feels like a real tutor's business.
+
+    Creates: 1 Tutor + 3 published articles + 1 draft + 2 modules + 2
+    lesson packs + 3 demo students + 7 upcoming bookings + 1 homework
+    template + 3 testimonials + ~14 mock module purchases (revenue).
+    All IDs are tracked in the seed manifest so the janitor's recursive
+    FK cascade catches everything; mock-student User rows are explicitly
+    listed so wipe_workspace can drop them.
+    """
     bp = TUTOR_SEED_BLUEPRINT
     seeded: dict[str, list[int]] = {
         "tutor_id": [],
         "articles": [],
         "modules": [],
         "lesson_packs": [],
+        "student_user_ids": [],
+        "bookings": [],
+        "module_purchases": [],
+        "homework_templates": [],
+        "testimonials": [],
     }
+    now = datetime.now(UTC)
 
-    # Tutor row. Slug is random so concurrent demo entries don't collide.
-    # `list_in_marketplace=False` keeps the per-visit demo trial tutor out
-    # of the marketplace/discover surfaces — previously this used
-    # `marketplace_listing_enabled=False` which is NOT a Tutor field, so
-    # the kwarg was silently dropped and the model's default (True) kicked
-    # in, leading to demo-trial tutors and their seeded modules surfacing
-    # as duplicates on the demo site.
+    # --- Tutor row -----------------------------------------------------
+    # Slug is random so concurrent demo entries don't collide.
+    # `list_in_marketplace=False` keeps the per-visit demo trial tutor
+    # out of the marketplace/discover surfaces; the demo's own dashboard
+    # shows everything regardless of this flag.
     tutor = Tutor(
         user_id=user.id,
         tutor_slug=f"demo-{_slug_token()}",
@@ -168,23 +337,24 @@ def _seed_tutor(session: Session, user: User) -> None:
         user.languages = bp["languages_taught"]
     session.add(user)
 
-    # Published article
-    now = datetime.now(UTC)
-    pub = bp["published_article"]
-    pub_row = Article(
-        tutor_id=tutor.id,
-        author_user_id=user.id,
-        slug=f"three-idioms-{_slug_token()}",
-        title=pub["title"],
-        summary=pub["summary"],
-        body_markdown=pub["body_markdown"],
-        visibility=ArticleVisibility.PUBLIC,
-        is_published=True,
-        published_at=now - timedelta(days=3),
-    )
-    session.add(pub_row)
+    # --- Published articles -------------------------------------------
+    pub_rows: list[Article] = []
+    for art in bp["published_articles"]:
+        row = Article(
+            tutor_id=tutor.id,
+            author_user_id=user.id,
+            slug=f"{_slugify(art['title'])}-{_slug_token()}",
+            title=art["title"],
+            summary=art["summary"],
+            body_markdown=art["body_markdown"],
+            visibility=ArticleVisibility.PUBLIC,
+            is_published=True,
+            published_at=now - timedelta(days=art["days_ago"]),
+        )
+        session.add(row)
+        pub_rows.append(row)
 
-    # Draft article (the one the tour step opens)
+    # --- Draft article (tour edits its title) -------------------------
     drf = bp["draft_article"]
     drf_row = Article(
         tutor_id=tutor.id,
@@ -199,54 +369,200 @@ def _seed_tutor(session: Session, user: User) -> None:
     )
     session.add(drf_row)
     session.commit()
-    session.refresh(pub_row)
+    for row in pub_rows:
+        session.refresh(row)
     session.refresh(drf_row)
-    seeded["articles"].extend([pub_row.id, drf_row.id])
+    seeded["articles"].extend([r.id for r in pub_rows] + [drf_row.id])
 
-    # Module linking them
-    mod = bp["module"]
-    items = [
-        {"kind": "article", "ref_id": pub_row.id, "preview": True},
-        {"kind": "article", "ref_id": drf_row.id, "preview": False},
-    ]
-    mod_row = LessonModule(
-        tutor_id=tutor.id,
-        slug=f"greek-boot-camp-{_slug_token()}",
-        title=mod["title"],
-        summary=mod["summary"],
-        description=mod["description"],
-        items_json=json.dumps(items),
-        price_cents=mod["price_cents"],
-        currency="eur",
-        is_published=True,
-        published_at=now - timedelta(days=2),
-    )
-    session.add(mod_row)
+    # --- Modules (link to published articles) -------------------------
+    mod_rows: list[LessonModule] = []
+    for mb in bp["modules"]:
+        # Each module includes 2 articles: first as preview, second gated.
+        picks = pub_rows[: 2] if len(pub_rows) >= 2 else pub_rows
+        items = [
+            {"kind": "article", "ref_id": picks[0].id, "preview": True},
+        ]
+        if len(picks) > 1:
+            items.append(
+                {"kind": "article", "ref_id": picks[1].id, "preview": False}
+            )
+        row = LessonModule(
+            tutor_id=tutor.id,
+            slug=f"{_slugify(mb['title'])}-{_slug_token()}",
+            title=mb["title"],
+            summary=mb["summary"],
+            description=mb["description"],
+            items_json=json.dumps(items),
+            price_cents=mb["price_cents"],
+            currency="eur",
+            is_published=True,
+            published_at=now - timedelta(days=mb["days_ago"]),
+        )
+        session.add(row)
+        mod_rows.append(row)
     session.commit()
-    session.refresh(mod_row)
-    seeded["modules"].append(mod_row.id)
+    for row in mod_rows:
+        session.refresh(row)
+    seeded["modules"].extend([r.id for r in mod_rows])
 
-    # Lesson pack
-    lp = bp["lesson_pack"]
-    pack = LessonPack(
+    # --- Lesson packs --------------------------------------------------
+    pack_rows: list[LessonPack] = []
+    for lp in bp["lesson_packs"]:
+        pack = LessonPack(
+            tutor_id=tutor.id,
+            name=lp["name"],
+            description=lp["description"],
+            num_lessons=lp["num_lessons"],
+            duration_minutes=lp["duration_minutes"],
+            price_cents=lp["price_cents"],
+            currency=lp["currency"],
+            is_active=True,
+        )
+        session.add(pack)
+        pack_rows.append(pack)
+    session.commit()
+    for pack in pack_rows:
+        session.refresh(pack)
+    seeded["lesson_packs"].extend([p.id for p in pack_rows])
+
+    # --- Mock demo students -------------------------------------------
+    # Mark is_demo_account=True so the demo-isolation filter on prod
+    # never surfaces them (prod hides demo content; staging shows it).
+    # Stamping demo_workspace_seeded_at to NOW means the janitor's
+    # retention check (created_at < cutoff) doesn't pull them until they
+    # age into the soft-deleted pool via the parent's wipe.
+    student_users: list[User] = []
+    for idx, st in enumerate(bp["students"]):
+        stu = User(
+            email=f"{st['email_local']}-{tutor.tutor_slug}@demo.kotobaseed.local",
+            full_name=st["name"],
+            bio=st["note"],
+            languages=bp["languages_taught"].split(",")[0].strip(),
+            timezone=bp["timezone"],
+            hashed_password="",
+            is_demo_account=True,
+            demo_role="student",
+            demo_workspace_seeded_at=now,
+            is_active=True,
+            email_verified_at=now,
+        )
+        session.add(stu)
+        student_users.append(stu)
+    session.commit()
+    for stu in student_users:
+        session.refresh(stu)
+    seeded["student_user_ids"].extend([s.id for s in student_users])
+
+    # --- Bookings (CONFIRMED, upcoming) -------------------------------
+    paid_pack = (
+        pack_rows[1] if len(pack_rows) > 1 else pack_rows[0]
+    )
+    booking_rows: list[Booking] = []
+    for bk in bp["bookings"]:
+        if bk["student_idx"] >= len(student_users):
+            continue
+        scheduled_at = (
+            now.replace(microsecond=0, second=0, minute=0)
+            + timedelta(days=bk["days_ahead"])
+        ).replace(hour=bk["hour"])
+        row = Booking(
+            tutor_id=tutor.id,
+            student_user_id=student_users[bk["student_idx"]].id,
+            lesson_pack_id=paid_pack.id,
+            scheduled_at=scheduled_at,
+            duration_minutes=paid_pack.duration_minutes,
+            price_cents=paid_pack.price_cents,
+            currency=paid_pack.currency,
+            status=BookingStatus.CONFIRMED,
+        )
+        session.add(row)
+        booking_rows.append(row)
+    session.commit()
+    for row in booking_rows:
+        session.refresh(row)
+    seeded["bookings"].extend([r.id for r in booking_rows])
+
+    # --- Module purchases (mock revenue) ------------------------------
+    # Spread purchases across students with a round-robin so the
+    # dashboard's per-student revenue chart is non-trivial.
+    purchase_rows: list[ModulePurchase] = []
+    for mb_blueprint, mod_row in zip(bp["modules"], mod_rows):
+        n = int(mb_blueprint.get("n_purchases", 0))
+        for buy_idx in range(n):
+            buyer = student_users[buy_idx % len(student_users)]
+            # Composite-unique on (module_id, student_user_id) — skip
+            # collisions silently rather than raise.
+            existing = session.exec(
+                select(ModulePurchase).where(
+                    ModulePurchase.module_id == mod_row.id,
+                    ModulePurchase.student_user_id == buyer.id,
+                )
+            ).first()
+            if existing is not None:
+                continue
+            row = ModulePurchase(
+                module_id=mod_row.id,
+                tutor_id=tutor.id,
+                student_user_id=buyer.id,
+                amount_cents=mod_row.price_cents,
+                currency=mod_row.currency,
+            )
+            session.add(row)
+            purchase_rows.append(row)
+    session.commit()
+    for row in purchase_rows:
+        session.refresh(row)
+    seeded["module_purchases"].extend([r.id for r in purchase_rows])
+
+    # --- Homework template --------------------------------------------
+    ht_bp = bp["homework_template"]
+    hw = HomeworkTemplate(
         tutor_id=tutor.id,
-        name=lp["name"],
-        description=lp["description"],
-        num_lessons=lp["num_lessons"],
-        duration_minutes=lp["duration_minutes"],
-        price_cents=lp["price_cents"],
-        currency=lp["currency"],
+        title=ht_bp["title"],
+        description=ht_bp["description"],
+        questions_json=json.dumps(ht_bp["questions"]),
+        auto_assign_on_lesson_complete=ht_bp[
+            "auto_assign_on_lesson_complete"
+        ],
         is_active=True,
     )
-    session.add(pack)
+    session.add(hw)
     session.commit()
-    session.refresh(pack)
-    seeded["lesson_packs"].append(pack.id)
+    session.refresh(hw)
+    seeded["homework_templates"].append(hw.id)
+
+    # --- Testimonials -------------------------------------------------
+    test_rows: list[Testimonial] = []
+    for ts in bp["testimonials"]:
+        row = Testimonial(
+            tutor_id=tutor.id,
+            student_name=ts["student_name"],
+            body=ts["body"],
+            stars=ts["stars"],
+            display_order=ts["display_order"],
+        )
+        session.add(row)
+        test_rows.append(row)
+    session.commit()
+    for row in test_rows:
+        session.refresh(row)
+    seeded["testimonials"].extend([r.id for r in test_rows])
 
     # Stamp the seed manifest on the user so wipe can find it.
     user.demo_seed_ids_json = json.dumps(seeded)
     session.add(user)
     session.commit()
+
+
+def _slugify(title: str) -> str:
+    """Compact, ASCII-only slug fragment for seed-content slugs.
+    Random `_slug_token()` is appended outside this helper to guarantee
+    uniqueness across concurrent demo seeds."""
+    import re
+    s = title.lower()
+    s = re.sub(r"[^a-z0-9\s-]+", "", s)
+    s = re.sub(r"[\s-]+", "-", s).strip("-")
+    return s[:40] or "untitled"
 
 
 CREATOR_SEED_BLUEPRINT = {
@@ -498,6 +814,46 @@ def wipe_workspace(session: Session, user: User) -> None:
         c = session.get(Cohort, cid)
         if c is not None:
             session.delete(c)
+
+    # Module purchases (mock revenue) — FK to module + student. Delete
+    # before the modules go (the recursive janitor cascade catches them
+    # via tutor anyway, but during a conversion wipe we don't drop the
+    # tutor, so explicit cleanup is needed).
+    from ..models import Booking, HomeworkTemplate, ModulePurchase, Testimonial
+    for pid in manifest.get("module_purchases", []) or []:
+        row = session.get(ModulePurchase, pid)
+        if row is not None:
+            session.delete(row)
+
+    # Bookings — mock upcoming lessons that referenced demo students.
+    for bid in manifest.get("bookings", []) or []:
+        row = session.get(Booking, bid)
+        if row is not None:
+            session.delete(row)
+
+    # Homework templates seeded for showcase.
+    for hid in manifest.get("homework_templates", []) or []:
+        row = session.get(HomeworkTemplate, hid)
+        if row is not None:
+            session.delete(row)
+
+    # Testimonials shown on the public site.
+    for tid in manifest.get("testimonials", []) or []:
+        row = session.get(Testimonial, tid)
+        if row is not None:
+            session.delete(row)
+
+    # Mock demo students — these are independent User rows we created so
+    # the dashboard had real names to show. Delete AFTER their bookings
+    # + purchases above so FK constraints don't block. The recursive
+    # janitor cascade on user.id sweeps anything we missed (lesson plans,
+    # comments, ratings) without us listing them here.
+    for uid in manifest.get("student_user_ids", []) or []:
+        stu = session.get(User, uid)
+        if stu is not None:
+            session.delete(stu)
+
+    session.commit()
 
     # Don't delete the Tutor row on conversion — the tutor's site is
     # what they're keeping. Just clear the manifest.
