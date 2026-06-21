@@ -51,14 +51,14 @@
    untouched; this only sweeps away the browser defaults that would
    otherwise pad lists, paragraphs, and the BR menus. */
 
-*, ::before, ::after {
+.br-app, .br-app *, .br-app ::before, .br-app ::after {
   margin: 0;
   padding: 0;
 }
 
 /* BR uses these for content layout; restore the widths now that BR's
    .container rules are stripped. */
-.container {
+.br-app .container {
   max-width: 720px;
   margin: 0 auto;
   padding: 0 1.5rem;
@@ -66,7 +66,7 @@
   color: var(--kb-text);
 }
 
-.container-wide {
+.br-app .container-wide {
   max-width: 1080px;
   margin: 0 auto;
   padding: 0 1.5rem;
@@ -259,7 +259,7 @@
 
 /* --- Explore grid (category tiles) ----------------------------------- */
 
-.block.block {
+.br-app .block.block {
   max-width: 1080px;
   margin: 2rem auto 3rem;
   padding: 0 1.5rem;
@@ -451,7 +451,7 @@
    are fine. */
 
 /* The breadcrumb nav above the article — center + soft typography. */
-.container > nav:first-of-type {
+.br-app .container > nav:first-of-type {
   justify-content: center !important;
   text-align: center !important;
   margin-bottom: 2.5rem !important;
@@ -460,17 +460,17 @@
   letter-spacing: 0.01em;
 }
 
-.container > nav:first-of-type a {
+.br-app .container > nav:first-of-type a {
   color: var(--kb-primary) !important;
   text-decoration: none;
   transition: opacity 0.15s;
 }
 
-.container > nav:first-of-type a:hover {
+.br-app .container > nav:first-of-type a:hover {
   opacity: 0.75;
 }
 
-.container > nav:first-of-type span {
+.br-app .container > nav:first-of-type span {
   color: var(--kb-text-mute) !important;
 }
 
@@ -529,14 +529,14 @@ article {
 }
 
 /* The "← Back to Blog" link below the article. */
-.container > div:last-child {
+.br-app .container > div:last-child {
   max-width: 38rem;
   margin-left: auto !important;
   margin-right: auto !important;
   text-align: center;
 }
 
-.container > div:last-child > a {
+.br-app .container > div:last-child > a {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
@@ -548,14 +548,14 @@ article {
   transition: opacity 0.15s;
 }
 
-.container > div:last-child > a:hover {
+.br-app .container > div:last-child > a:hover {
   opacity: 0.75;
 }
 
 /* --- Listing pages (blog index entries) ------------------------------ */
 
 /* BR's listing intro: <div><h1>Blog</h1><p>1 post</p></div>. Center it. */
-.container-wide > div:first-child {
+.br-app .container-wide > div:first-child {
   max-width: 100% !important;
   text-align: center;
   margin-left: auto;
@@ -563,7 +563,7 @@ article {
   margin-bottom: 3rem !important;
 }
 
-.container-wide > div:first-child > h1 {
+.br-app .container-wide > div:first-child > h1 {
   font-family: 'Fraunces', 'Lora', Georgia, serif !important;
   font-weight: 600 !important;
   letter-spacing: -0.02em !important;
@@ -572,7 +572,7 @@ article {
   margin-bottom: 0.5rem !important;
 }
 
-.container-wide > div:first-child > p {
+.br-app .container-wide > div:first-child > p {
   font-family: 'Quicksand', sans-serif !important;
   font-size: 1.0625rem !important;
   color: var(--kb-text-soft) !important;
@@ -660,20 +660,20 @@ article {
 
 /* Subtle entrance for major content blocks. */
 .spotlight.spotlight,
-.block.block,
+.br-app .block.block,
 .prose.prose {
   animation: kb-fade-up 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .spotlight.spotlight { animation-delay: 0.05s; }
-.block.block { animation-delay: 0.1s; }
+.br-app .block.block { animation-delay: 0.1s; }
 
 /* --- Accessibility ---------------------------------------------------- */
 
 @media (prefers-reduced-motion: reduce) {
   .hero.hero,
   .spotlight.spotlight,
-  .block.block,
+  .br-app .block.block,
   .prose.prose {
     animation: none;
   }
