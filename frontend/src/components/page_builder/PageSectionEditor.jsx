@@ -1,6 +1,7 @@
 import React from 'react';
 import { SECTION_VARIANTS } from '../tutor_sections';
 import SchemaForm from '../SchemaForm';
+import RichTextInput from './RichTextInput';
 
 // Inline editors per section_type. Each one renders form fields and
 // calls onChange with the next content object. Kept inline so the
@@ -160,12 +161,12 @@ const EDITORS = {
         onChange={(v) => onChange({ ...content, subhead: v })}
         placeholder="Defaults to your languages list"
       />
-      <TextArea
+      <RichTextInput
         label="Bio override"
         value={content.bio_override}
         onChange={(v) => onChange({ ...content, bio_override: v })}
-        rows={4}
         placeholder="Leave blank to use your profile bio"
+        minHeight="6rem"
       />
       <div className="grid grid-cols-2 gap-2">
         <TextField
@@ -191,12 +192,12 @@ const EDITORS = {
         onChange={(v) => onChange({ ...content, title: v })}
         placeholder="About"
       />
-      <TextArea
+      <RichTextInput
         label="Body"
         value={content.body}
         onChange={(v) => onChange({ ...content, body: v })}
-        rows={5}
         placeholder="Leave blank to use your profile bio"
+        minHeight="8rem"
       />
     </div>
   ),
@@ -228,11 +229,11 @@ const EDITORS = {
         onChange={(v) => onChange({ ...content, title: v })}
         placeholder="Levels"
       />
-      <TextArea
+      <RichTextInput
         label="Intro"
         value={content.body}
         onChange={(v) => onChange({ ...content, body: v })}
-        rows={3}
+        minHeight="6rem"
       />
       <ListEditor
         label="Levels"
@@ -359,11 +360,11 @@ const EDITORS = {
         onChange={(v) => onChange({ ...content, title: v })}
         placeholder="About the language"
       />
-      <TextArea
+      <RichTextInput
         label="Body"
         value={content.body}
         onChange={(v) => onChange({ ...content, body: v })}
-        rows={4}
+        minHeight="7rem"
       />
       <TextField
         label="Image URL"
