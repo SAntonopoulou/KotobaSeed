@@ -14,8 +14,21 @@ import Avatar from './Avatar';
 // maintaining two copies.
 import chromeHtml from './apex_chrome.signed_out.html?raw';
 
+// The chrome template hard-codes https://kotobaseed.net/* URLs because
+// the same markup is injected into the BeeRanked /news/* static pages,
+// where relative hrefs break (BR resolves "library" from /news/ to
+// /news/library). On the SPA we want the opposite: keep visitors on
+// their current host — apex stays on apex, demo.kotobaseed.net stays
+// on demo. Stripping the absolute prefix at inject time makes every
+// link relative, which is exactly what the SPA needs. mailto:dpo@…
+// is unaffected because we only match the URL form with a trailing /.
+const SPA_CHROME_HTML = chromeHtml.replace(
+  /https:\/\/kotobaseed\.net\//g,
+  '/',
+);
+
 const SIGNED_OUT_NAV_HTML =
-  chromeHtml.match(/<nav class="bg-white[\s\S]*?<\/nav>/)?.[0] || '';
+  SPA_CHROME_HTML.match(/<nav class="bg-white[\s\S]*?<\/nav>/)?.[0] || '';
 
 // Apex navbar. Identity is Kotobaseed-first — tutor SaaS is the headline,
 // the legacy CompInput-era pledges / projects / requests UI hides under a

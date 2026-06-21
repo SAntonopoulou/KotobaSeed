@@ -5,8 +5,18 @@ import React from 'react';
 // markup with no JSX touch needed.
 import chromeHtml from './apex_chrome.signed_out.html?raw';
 
+// See Navbar.jsx for the rationale on stripping the absolute
+// https://kotobaseed.net/ prefix at inject time — keeps the SPA's
+// chrome on whatever host it's served from (apex vs demo) without
+// breaking the BeeRanked /news/* contract, where the same template
+// is served as static HTML with absolute URLs intact.
+const SPA_CHROME_HTML = chromeHtml.replace(
+  /https:\/\/kotobaseed\.net\//g,
+  '/',
+);
+
 const FOOTER_HTML =
-  chromeHtml.match(/<footer class="bg-white[\s\S]*?<\/footer>/)?.[0] || '';
+  SPA_CHROME_HTML.match(/<footer class="bg-white[\s\S]*?<\/footer>/)?.[0] || '';
 
 const Footer = () => (
   // The template already contains the <footer> wrapper, so we render it
