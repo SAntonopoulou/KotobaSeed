@@ -310,6 +310,30 @@ def strip_br_styles_in_head(html: str) -> str:
     return RE_HEAD_BLOCK.sub(_scrub, html, count=1)
 
 
+RE_HERO_WORDMARK = re.compile(
+    r'(<div\s+class="hero-badge"[^>]*>(?:[^<]|<(?!/div>))*?)'
+    r'<span([^>]*)>Kotobaseed</span>',
+    re.DOTALL | re.IGNORECASE,
+)
+
+
+def split_hero_wordmark(html: str) -> str:
+    """Split the BR-emitted hero-badge `<span>Kotobaseed</span>` into two
+    inner spans (`Kotoba` + `Seed`) so each half can be colored
+    independently in CSS — sage for `Kotoba`, honey for `Seed`. Scoped
+    to inside `<div class="hero-badge">` so other occurrences of
+    `Kotobaseed` on the page are left alone."""
+    def _split(m: re.Match) -> str:
+        return (
+            m.group(1)
+            + '<span' + m.group(2) + ' class="kb-wordmark">'
+            + '<span class="kb-wordmark-kotoba">Kotoba</span>'
+            + '<span class="kb-wordmark-seed">Seed</span>'
+            + '</span>'
+        )
+    return RE_HERO_WORDMARK.sub(_split, html)
+
+
 def transform(html: str, nav_html: str, footer_html: str) -> str:
     # 1. Strip BR's default chrome from the body.
     html = RE_SITE_NAV.sub('', html)
@@ -318,6 +342,9 @@ def transform(html: str, nav_html: str, footer_html: str) -> str:
     #     (extracted by get_apex_head) brings the kotobaseed favicon.svg.
     #     Two competing icon links is just noise; we want the apex's.
     html = RE_BR_FAVICON.sub('', html)
+    # 1c. Split the hero "Kotobaseed" wordmark into two inner spans so
+    #     CSS can color the two halves cleanly.
+    html = split_hero_wordmark(html)
     # 2. Strip every `<div class="plugin-slot …">…</div>` (and contents).
     html = strip_plugin_slots(html)
     # 3. Strip the prior marker block (so our own <style> doesn't get

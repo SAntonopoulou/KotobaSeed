@@ -155,28 +155,29 @@ a {
   margin-bottom: 1.5rem !important;
 }
 
-/* The BR-emitted <span>Kotobaseed</span> inside .hero-badge. Render it
-   as a serif wordmark and split the colour at the "Kotoba" / "seed"
-   boundary using a linear-gradient with a hard stop, then mask the
-   gradient through the text via background-clip. */
-.hero-badge.hero-badge > span {
+/* The BR-emitted <span>Kotobaseed</span> inside .hero-badge is split
+   by the rewriter into <span class="kb-wordmark">
+       <span class="kb-wordmark-kotoba">Kotoba</span>
+       <span class="kb-wordmark-seed">Seed</span>
+     </span>
+   so each half gets a clean colour. Sage primary for "Kotoba",
+   honey gold for "Seed". */
+.hero-badge.hero-badge > span,
+.hero-badge.hero-badge > span.kb-wordmark {
   font-family: 'Fraunces', 'Lora', Georgia, serif !important;
   font-weight: 700 !important;
   font-size: clamp(1.75rem, 3.5vw, 2.5rem) !important;
   letter-spacing: -0.02em !important;
   line-height: 1 !important;
-  color: transparent !important;
-  background: linear-gradient(
-    to right,
-    rgb(var(--kotoba-primary-rgb, 22 86 29)) 0%,
-    rgb(var(--kotoba-primary-rgb, 22 86 29)) 60%,
-    var(--kb-honey) 60%,
-    var(--kb-honey) 100%
-  );
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
   display: inline-block;
+}
+
+.kb-wordmark-kotoba {
+  color: rgb(var(--kotoba-primary-rgb, 22 86 29));
+}
+
+.kb-wordmark-seed {
+  color: var(--kb-honey);
 }
 
 .hero-title.hero-title {
