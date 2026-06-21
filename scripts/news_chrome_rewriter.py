@@ -254,6 +254,36 @@ def load_chrome(chrome_path: Path) -> tuple[str, str]:
     return nav_m.group(0), foot_m.group(0)
 
 
+# Marketing CTA injected at the bottom of every /news page just before
+# the React Footer mounts. Styled by `branding/news-content.css` under
+# the .kb-cta selector. The two CTAs point at the apex marketplace
+# (find a tutor) and the tutor-onboarding intro (become a tutor) — the
+# two highest-value conversions for /news traffic.
+CTA_HTML = (
+    '<section class="kb-cta">'
+    '<div class="kb-cta-inner">'
+    '<span class="kb-cta-eyebrow">Kotobaseed</span>'
+    '<h2 class="kb-cta-title">'
+    'Independent tutors. Real teaching.<br>Languages learned the way you actually use them.'
+    '</h2>'
+    '<p class="kb-cta-sub">'
+    'Browse hundreds of independent tutors across every major language, '
+    'or build your own teaching practice on a platform designed by the '
+    'tutors who use it.'
+    '</p>'
+    '<div class="kb-cta-actions">'
+    '<a class="kb-cta-primary" href="https://kotobaseed.net/library">'
+    'Find a tutor <span aria-hidden="true">→</span>'
+    '</a>'
+    '<a class="kb-cta-secondary" '
+    'href="https://kotobaseed.net/help/tutor-getting-started">'
+    'Teach with us'
+    '</a>'
+    '</div>'
+    '</div>'
+    '</section>'
+)
+
 BODY_MARKER_NAV_START = '<!--kb-navbar-mount-start-->'
 BODY_MARKER_NAV_END = '<!--kb-navbar-mount-end-->'
 BODY_MARKER_FOOTER_START = '<!--kb-footer-mount-start-->'
@@ -406,6 +436,7 @@ def transform(html: str, nav_html: str, footer_html: str) -> str:
     )
     shell_close = (
         BODY_MARKER_FOOTER_START
+        + CTA_HTML  # marketing CTA at the bottom of every /news page
         + '</div>'  # close .flex-grow
         + '<div id="kb-footer-root"></div>'
         + '</div>'  # close .min-h-screen wrapper

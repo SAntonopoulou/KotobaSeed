@@ -78,18 +78,52 @@
 
 .hero.hero {
   position: relative;
-  padding: 4rem 1.5rem 3rem;
-  margin: 1rem auto 2.5rem;
+  padding: 6rem 2rem 5rem;
+  margin: 2rem auto 4rem;
   max-width: 1080px;
   border-radius: var(--kb-radius-xl);
-  /* White background because the Kotobaseed logo image has a baked-in
-     white background; on any non-white surface (gradient, cream, sage)
-     the logo reads as a hard white rectangle. */
   background: #fff;
-  box-shadow: var(--kb-shadow-soft);
+  box-shadow: var(--kb-shadow-soft-lg);
   overflow: hidden;
-  animation: kb-fade-up 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+  isolation: isolate;
+  animation: kb-fade-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
+
+/* Decorative aurora — two soft sage + honey washes that catch the
+   light without competing with the wordmark. They sit behind the
+   content (z-index 0) because the hero is `isolation:isolate`. */
+.hero.hero::before,
+.hero.hero::after {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.hero.hero::before {
+  inset: -30% -10% auto -10%;
+  height: 70%;
+  background: radial-gradient(
+    60% 80% at 30% 40%,
+    rgb(var(--kotoba-primary-rgb, 22 86 29) / 0.10),
+    transparent 70%
+  );
+  filter: blur(40px);
+}
+
+.hero.hero::after {
+  inset: auto -10% -25% auto;
+  width: 60%;
+  height: 60%;
+  background: radial-gradient(
+    60% 80% at 70% 60%,
+    rgb(214 164 47 / 0.16),
+    transparent 70%
+  );
+  filter: blur(50px);
+}
+
+.hero.hero > * { position: relative; z-index: 1; }
 
 /* The Kotobaseed logo emitted in the hero by BR. Pin its height so it
    reads as a visual mark, not an oversized banner image. */
@@ -151,110 +185,288 @@
 .hero-title.hero-title {
   font-family: 'Fraunces', 'Lora', Georgia, serif;
   font-weight: 600;
-  font-size: clamp(2.25rem, 4.5vw, 3.5rem);
-  line-height: 1.1;
-  letter-spacing: -0.02em;
+  font-size: clamp(2.75rem, 5.5vw, 4.25rem);
+  line-height: 1.05;
+  letter-spacing: -0.025em;
   color: var(--kb-text);
-  margin-bottom: 1rem;
+  margin-bottom: 1.25rem;
 }
 
 .hero-sub.hero-sub {
   font-family: 'Quicksand', sans-serif;
-  font-size: 1.125rem;
-  line-height: 1.55;
+  font-size: clamp(1.0625rem, 1.4vw, 1.25rem);
+  font-weight: 500;
+  line-height: 1.5;
   color: var(--kb-text-soft);
-  max-width: 36rem;
-  margin: 0 auto 1.75rem;
+  max-width: 38rem;
+  margin: 0 auto 2.25rem;
 }
 
 .hero-actions.hero-actions {
   display: flex;
   justify-content: center;
-  gap: 0.75rem;
+  gap: 0.85rem;
   flex-wrap: wrap;
+  margin-bottom: 2.5rem;
+}
+
+/* --- Primary CTA button (used in .hero-actions + elsewhere) --------- */
+
+.br-app .btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.85rem 1.5rem;
+  border-radius: 9999px;
+  background: rgb(var(--kotoba-primary-rgb, 22 86 29));
+  color: #fff !important;
+  font-family: 'Quicksand', sans-serif;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  text-decoration: none !important;
+  box-shadow:
+    0 1px 2px rgba(22, 86, 29, 0.08),
+    0 8px 24px rgba(22, 86, 29, 0.18);
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1),
+              box-shadow 0.2s cubic-bezier(0.22, 1, 0.36, 1),
+              background 0.18s ease;
+}
+
+.br-app .btn-primary:hover {
+  background: rgb(var(--kotoba-primary-rgb, 22 86 29) / 0.92);
+  transform: translateY(-1px);
+  box-shadow:
+    0 2px 4px rgba(22, 86, 29, 0.10),
+    0 14px 36px rgba(22, 86, 29, 0.22);
+}
+
+.br-app .btn-primary > span[aria-hidden] {
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.br-app .btn-primary:hover > span[aria-hidden] {
+  transform: translateX(3px);
+}
+
+/* --- Topic chips under the hero ------------------------------------- */
+
+.chips.chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.6rem;
+}
+
+.br-app .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.55rem 0.95rem;
+  border-radius: 9999px;
+  background: #fff;
+  border: 1px solid var(--kb-border);
+  font-family: 'Quicksand', sans-serif;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--kb-text) !important;
+  text-decoration: none !important;
+  box-shadow: 0 1px 2px rgba(64, 60, 50, 0.04);
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+              border-color 0.18s ease,
+              box-shadow 0.18s ease;
+  position: relative;
+}
+
+.br-app .chip::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--c, var(--kb-honey));
+  flex-shrink: 0;
+}
+
+.br-app .chip:hover {
+  transform: translateY(-1px);
+  border-color: var(--c, var(--kb-honey));
+  box-shadow: var(--kb-shadow-soft);
+}
+
+.br-app .chip > span[aria-hidden] {
+  font-size: 1rem;
+}
+
+.br-app .chip em {
+  font-style: normal;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--kb-text-mute);
+  background: var(--kb-bg);
+  padding: 0.1rem 0.45rem;
+  border-radius: 9999px;
+  margin-left: 0.15rem;
 }
 
 /* --- Spotlight (featured post on index) ------------------------------ */
 
 .spotlight.spotlight {
-  display: block;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 2rem;
   position: relative;
   max-width: 1080px;
-  margin: 0 auto 3rem;
-  padding: 2rem;
-  border-radius: var(--kb-radius-lg);
-  background: #fff;
+  margin: 0 auto 4rem;
+  padding: 2.5rem 2.75rem;
+  border-radius: var(--kb-radius-xl);
+  background:
+    linear-gradient(
+      135deg,
+      #ffffff 0%,
+      #fffefb 100%
+    );
   box-shadow: var(--kb-shadow-soft);
   text-decoration: none;
   color: inherit;
-  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1),
-              box-shadow 0.2s cubic-bezier(0.22, 1, 0.36, 1);
-  border-left: 3px solid var(--kb-honey);
+  overflow: hidden;
+  isolation: isolate;
+  transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+              box-shadow 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Soft accent rail on the left + a glow that follows hover. The `--c`
+   custom prop is set inline by BR per content type (--c:#f59e0b blog,
+   #14b8a6 docs, #8b5cf6 wiki) so each spotlight gets a different
+   accent without us managing colour rules. */
+.spotlight.spotlight::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--c, var(--kb-honey));
+  border-radius: var(--kb-radius-xl) 0 0 var(--kb-radius-xl);
+}
+
+.spotlight.spotlight::after {
+  content: '';
+  position: absolute;
+  inset: -50% auto auto -10%;
+  width: 70%;
+  height: 200%;
+  background: radial-gradient(
+    closest-side,
+    rgb(var(--kotoba-primary-rgb, 22 86 29) / 0.05),
+    transparent 70%
+  );
+  z-index: -1;
+  opacity: 0;
+  transition: opacity 0.35s ease;
 }
 
 .spotlight.spotlight:hover {
-  transform: translateY(-2px);
+  transform: translateY(-3px);
   box-shadow: var(--kb-shadow-soft-lg);
+}
+
+.spotlight.spotlight:hover::after {
+  opacity: 1;
+}
+
+.spotlight-body.spotlight-body {
+  flex: 1;
+  min-width: 0;
 }
 
 .spotlight-eyebrow.spotlight-eyebrow {
   display: inline-block;
   font-family: 'Quicksand', sans-serif;
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--kb-primary);
-  margin-bottom: 0.5rem;
+  color: var(--c, var(--kb-primary));
+  margin-bottom: 0.85rem;
 }
 
 .spotlight-title.spotlight-title {
   font-family: 'Fraunces', 'Lora', Georgia, serif;
   font-weight: 600;
-  font-size: 1.5rem;
-  line-height: 1.25;
-  letter-spacing: -0.015em;
+  font-size: clamp(1.5rem, 2.5vw, 2rem);
+  line-height: 1.2;
+  letter-spacing: -0.02em;
   color: var(--kb-text);
-  margin: 0 0 0.5rem;
+  margin: 0 0 1rem;
 }
 
 .spotlight-cta.spotlight-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   font-family: 'Quicksand', sans-serif;
   font-size: 0.9375rem;
   font-weight: 600;
   color: var(--kb-primary);
+  transition: gap 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.spotlight.spotlight:hover .spotlight-cta.spotlight-cta {
+  gap: 0.65rem;
 }
 
 .spotlight-date.spotlight-date {
-  display: block;
-  margin-top: 0.5rem;
+  flex-shrink: 0;
+  align-self: center;
   font-family: 'Quicksand', sans-serif;
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
   color: var(--kb-text-mute);
+  padding: 0.4rem 0.85rem;
+  border-radius: 9999px;
+  background: var(--kb-bg);
+}
+
+@media (max-width: 720px) {
+  .spotlight.spotlight {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1.25rem;
+    padding: 2rem 1.75rem;
+  }
+  .spotlight-date.spotlight-date {
+    align-self: flex-start;
+  }
 }
 
 /* --- Section heading ("Explore everything" etc.) --------------------- */
 
 .section-head.section-head {
   max-width: 1080px;
-  margin: 0 auto 1.5rem;
+  margin: 0 auto 2rem;
   padding: 0 0.5rem;
+  text-align: center;
 }
 
 .section-head.section-head h2 {
   font-family: 'Fraunces', 'Lora', Georgia, serif;
   font-weight: 600;
-  font-size: 1.875rem;
-  letter-spacing: -0.015em;
+  font-size: clamp(1.75rem, 3vw, 2.5rem);
+  letter-spacing: -0.02em;
   color: var(--kb-text);
-  margin: 0;
+  margin: 0 0 0.4rem;
 }
 
 .section-head.section-head p {
   font-family: 'Quicksand', sans-serif;
-  font-size: 0.9375rem;
+  font-size: 1rem;
+  font-weight: 500;
   color: var(--kb-text-mute);
-  margin: 0.25rem 0 0;
+  margin: 0;
 }
 
 /* --- Explore grid (category tiles) ----------------------------------- */
@@ -267,39 +479,71 @@
 
 .explore-grid.explore-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1.25rem;
 }
 
 .explore-card.explore-card {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  padding: 1.5rem 1.25rem;
-  border-radius: var(--kb-radius);
+  gap: 0.6rem;
+  padding: 2rem 1.75rem;
+  border-radius: var(--kb-radius-lg);
   background: #fff;
   box-shadow: var(--kb-shadow-soft);
-  border-top: 3px solid var(--c, var(--kb-honey));
   text-decoration: none;
   color: inherit;
-  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1),
-              box-shadow 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+  overflow: hidden;
+  isolation: isolate;
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1),
+              box-shadow 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.explore-card.explore-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 4px;
+  background: var(--c, var(--kb-honey));
+}
+
+/* Soft tint wash that fades in on hover, tinted with the per-type
+   custom prop. */
+.explore-card.explore-card::after {
+  content: '';
+  position: absolute;
+  inset: -50% -10% auto -10%;
+  height: 100%;
+  background: radial-gradient(
+    60% 80% at 50% 0%,
+    var(--c, var(--kb-honey)),
+    transparent 70%
+  );
+  opacity: 0;
+  z-index: -1;
+  transition: opacity 0.3s ease;
+  filter: blur(40px);
 }
 
 .explore-card.explore-card:hover {
-  transform: translateY(-2px);
+  transform: translateY(-3px);
   box-shadow: var(--kb-shadow-soft-lg);
 }
 
+.explore-card.explore-card:hover::after { opacity: 0.18; }
+
 .explore-icon.explore-icon {
-  font-size: 1.5rem;
+  font-size: 1.75rem;
   line-height: 1;
+  margin-bottom: 0.5rem;
 }
 
 .explore-name.explore-name {
   font-family: 'Fraunces', 'Lora', Georgia, serif;
   font-weight: 600;
-  font-size: 1.125rem;
+  font-size: 1.25rem;
+  letter-spacing: -0.015em;
   color: var(--kb-text);
 }
 
@@ -307,14 +551,30 @@
   font-family: 'Quicksand', sans-serif;
   font-size: 0.9375rem;
   color: var(--kb-text-soft);
-  line-height: 1.45;
+  line-height: 1.5;
 }
 
 .explore-count.explore-count {
-  margin-top: auto;
+  margin-top: 0.75rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--kb-border);
   font-family: 'Quicksand', sans-serif;
   font-size: 0.8125rem;
+  font-weight: 600;
   color: var(--kb-text-mute);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.explore-count.explore-count > span {
+  color: var(--c, var(--kb-primary));
+  font-size: 1.05rem;
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.explore-card.explore-card:hover .explore-count.explore-count > span {
+  transform: translateX(3px);
 }
 
 /* --- Article body (.prose) ------------------------------------------- */
@@ -1318,6 +1578,141 @@ article {
   color: var(--kb-text);
 }
 
+/* --- Marketing CTA (injected by rewriter on every /news page) ------ */
+
+.kb-cta {
+  position: relative;
+  margin: 5rem auto 4rem;
+  padding: 0 1.5rem;
+  max-width: 1080px;
+}
+
+.kb-cta-inner {
+  position: relative;
+  padding: 4.5rem 3rem;
+  border-radius: var(--kb-radius-xl);
+  background:
+    radial-gradient(
+      120% 80% at 20% 0%,
+      rgb(var(--kotoba-primary-rgb, 22 86 29) / 0.92),
+      rgb(var(--kotoba-primary-rgb, 22 86 29)) 70%
+    );
+  color: #fff;
+  text-align: center;
+  overflow: hidden;
+  isolation: isolate;
+  box-shadow:
+    0 1px 2px rgba(22, 86, 29, 0.10),
+    0 24px 64px rgba(22, 86, 29, 0.25);
+}
+
+/* Decorative honey wash in the corner. */
+.kb-cta-inner::before {
+  content: '';
+  position: absolute;
+  inset: -20% -20% auto auto;
+  width: 60%;
+  height: 80%;
+  background: radial-gradient(
+    closest-side,
+    rgb(214 164 47 / 0.35),
+    transparent 70%
+  );
+  filter: blur(40px);
+  z-index: -1;
+}
+
+.kb-cta-eyebrow {
+  display: inline-block;
+  font-family: 'Quicksand', sans-serif;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgb(214 164 47);
+  margin-bottom: 1.25rem;
+}
+
+.kb-cta-title {
+  font-family: 'Fraunces', 'Lora', Georgia, serif;
+  font-weight: 600;
+  font-size: clamp(1.875rem, 3.5vw, 2.75rem);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: #fff;
+  margin: 0 0 1.25rem;
+}
+
+.kb-cta-sub {
+  font-family: 'Quicksand', sans-serif;
+  font-size: 1.0625rem;
+  line-height: 1.55;
+  color: rgb(255 255 255 / 0.85);
+  max-width: 36rem;
+  margin: 0 auto 2.25rem;
+}
+
+.kb-cta-actions {
+  display: flex;
+  justify-content: center;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+}
+
+.kb-cta-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.95rem 1.75rem;
+  border-radius: 9999px;
+  background: #fff;
+  color: rgb(var(--kotoba-primary-rgb, 22 86 29)) !important;
+  font-family: 'Quicksand', sans-serif;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  text-decoration: none !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08), 0 8px 24px rgba(0, 0, 0, 0.12);
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1),
+              box-shadow 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.kb-cta-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.10), 0 14px 36px rgba(0, 0, 0, 0.18);
+}
+
+.kb-cta-primary > span[aria-hidden] {
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.kb-cta-primary:hover > span[aria-hidden] { transform: translateX(3px); }
+
+.kb-cta-secondary {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.95rem 1.5rem;
+  border-radius: 9999px;
+  background: transparent;
+  color: #fff !important;
+  font-family: 'Quicksand', sans-serif;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-decoration: none !important;
+  border: 1.5px solid rgb(255 255 255 / 0.35);
+  transition: background 0.18s ease, border-color 0.18s ease;
+}
+
+.kb-cta-secondary:hover {
+  background: rgb(255 255 255 / 0.08);
+  border-color: rgb(255 255 255 / 0.6);
+}
+
+@media (max-width: 720px) {
+  .kb-cta-inner { padding: 3rem 1.75rem; }
+}
+
 /* --- Animation -------------------------------------------------------- */
 
 @keyframes kb-fade-up {
@@ -1330,12 +1725,14 @@ article {
 .br-app .block.block,
 .prose.prose,
 .wiki-article.wiki-article,
-.docs-shell.docs-shell {
+.docs-shell.docs-shell,
+.kb-cta {
   animation: kb-fade-up 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .spotlight.spotlight { animation-delay: 0.05s; }
 .br-app .block.block { animation-delay: 0.1s; }
+.kb-cta { animation-delay: 0.15s; }
 
 /* --- Accessibility ---------------------------------------------------- */
 
@@ -1346,6 +1743,7 @@ article {
   .prose.prose,
   .wiki-article.wiki-article,
   .docs-shell.docs-shell,
+  .kb-cta,
   .wiki-body.wiki-body h2:target,
   .wiki-body.wiki-body h3:target,
   .prose.prose h2:target,
