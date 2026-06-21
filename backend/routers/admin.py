@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import selectinload
 from sqlmodel import Session, func, select
 
@@ -24,7 +24,7 @@ from ..models import (
     VerificationStatus,
 )
 from ..routers.projects import _cancel_project_logic, _create_project_read
-from ..schemas import ProjectRead
+from ..schemas import ProjectRead, _utc_aware
 from ..services.audit import record_audit
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -44,6 +44,11 @@ class AuditLogRead(BaseModel):
     summary: str
     details_json: str | None
     created_at: datetime
+
+    @field_validator("created_at", mode="before")
+    @classmethod
+    def _ensure_utc(cls, v):
+        return _utc_aware(v)
 
 
 class AuditLogPage(BaseModel):

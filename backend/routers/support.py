@@ -26,7 +26,7 @@ from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlmodel import Session, select
 
 from ..database import get_session
@@ -46,6 +46,7 @@ from ..models import (
     SupportTicketStatus,
     User,
 )
+from ..schemas import _utc_aware
 from ..services import support_emails
 from ..services.audit import record_audit
 
@@ -65,6 +66,11 @@ class TicketMessageRead(BaseModel):
     body: str
     is_internal: bool
     created_at: datetime
+
+    @field_validator("created_at", mode="before")
+    @classmethod
+    def _ensure_utc(cls, v):
+        return _utc_aware(v)
 
 
 class TicketRead(BaseModel):
@@ -88,6 +94,18 @@ class TicketRead(BaseModel):
     resolved_at: datetime | None
     closed_at: datetime | None
     messages: list[TicketMessageRead] = []
+
+    @field_validator(
+        "created_at",
+        "updated_at",
+        "last_activity_at",
+        "resolved_at",
+        "closed_at",
+        mode="before",
+    )
+    @classmethod
+    def _ensure_utc(cls, v):
+        return _utc_aware(v)
 
 
 class TicketCreate(BaseModel):

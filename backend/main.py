@@ -179,6 +179,21 @@ def _run_admin_grants_sweep() -> None:
             log.exception("Admin grants sweep failed")
 
 
+def _run_demo_trials_sweep() -> None:
+    """Daily — hard-delete demo trials past their 7-day expiry. The
+    function is already idempotent (see routers/demo_trials.py); this
+    is just the cron wrapper that opens a session + swallows errors."""
+    from .routers.demo_trials import sweep_expired_trials as _sweep
+
+    with Session(_database.engine) as session:
+        try:
+            n = _sweep(session)
+            if n:
+                log.info("Demo-trials sweep deleted %d expired trial(s).", n)
+        except Exception:
+            log.exception("Demo trials sweep failed")
+
+
 def _run_recurring_sweep() -> None:
     """Daily job — top up child Bookings for every active recurring plan,
     then cancel any PENDING_PAYMENT recurring bookings inside the 48h
@@ -282,12 +297,43 @@ def _build_scheduler():
         replace_existing=True,
         misfire_grace_time=3600,
     )
+    scheduler.add_job(
+        _run_demo_trials_sweep,
+        trigger=CronTrigger(hour=4, minute=15, timezone="UTC"),
+        id="demo_trials_sweep",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
     scheduler.start()
     log.info(
         "Scheduler started — dormant_pause at %02d:00 UTC daily, booking reminders hourly at :05",
         settings.dormant_check_hour_utc,
     )
     return scheduler
+
+
+def _guard_env_vs_stripe_key() -> None:
+    """Refuse to boot when ENVIRONMENT and the configured Stripe key
+    disagree. Belt-and-suspenders for the per-call check in
+    services/stripe_connect.py — if a prod deploy somehow inherits
+    ENVIRONMENT=test (operator typo, copy-pasted .env), the boot
+    halts here instead of silently minting fake `acct_test_*` ids
+    that the rest of the system treats as real."""
+    key = (settings.stripe_secret_key or "").strip()
+    if not key:
+        return  # No key configured (dev without Stripe wired up) — fine.
+    is_live_key = key.startswith("sk_live_")
+    is_test_env = settings.environment == "test"
+    if is_live_key and is_test_env:
+        raise RuntimeError(
+            "Refusing to boot: ENVIRONMENT=test but Stripe LIVE key configured. "
+            "Either fix ENVIRONMENT (production/development) or swap the key."
+        )
+    if not is_live_key and settings.environment == "production":
+        raise RuntimeError(
+            "Refusing to boot: ENVIRONMENT=production but Stripe key is not sk_live_. "
+            "Real money flows expect a live key; check the .env on this server."
+        )
 
 
 @asynccontextmanager
@@ -297,6 +343,7 @@ async def lifespan(_app: FastAPI):
     # base table; alembic then owns incremental changes from baseline on.
     # Skipping this in prod breaks fresh Postgres deploys because the
     # baseline migration is a no-op stamp marker.
+    _guard_env_vs_stripe_key()
     create_db_and_tables()
     with Session(_database.engine) as session:
         _seed_admin_user(session)

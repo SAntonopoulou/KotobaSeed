@@ -166,6 +166,18 @@ class ProjectRead(BaseModel):
     project_image_url: str | None = None
     series_intro_video_url: str | None = None
 
+    @field_validator(
+        "deadline",
+        "created_at",
+        "updated_at",
+        "funded_at",
+        "completed_at",
+        mode="before",
+    )
+    @classmethod
+    def _ensure_utc(cls, v):
+        return _utc_aware(v)
+
     model_config = ConfigDict(from_attributes=True)
 
 

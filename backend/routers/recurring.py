@@ -15,7 +15,7 @@ from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlmodel import Session, select
 
 from ..database import get_session
@@ -27,6 +27,7 @@ from ..models import (
     RecurringBookingPlan,
     Tutor,
 )
+from ..schemas import _utc_aware
 from ..tenancy import CurrentTutor
 
 log = logging.getLogger(__name__)
@@ -54,6 +55,11 @@ class RecurringPlanRead(BaseModel):
     cancelled_at: datetime | None
     upcoming_bookings: int = 0
     created_at: datetime
+
+    @field_validator("start_date", "cancelled_at", "created_at", mode="before")
+    @classmethod
+    def _ensure_utc(cls, v):
+        return _utc_aware(v)
 
 
 class RecurringPlanCreate(BaseModel):

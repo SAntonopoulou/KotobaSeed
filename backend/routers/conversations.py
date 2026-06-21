@@ -23,7 +23,20 @@ from sqlmodel import Session, func, select
 
 from ..database import get_session
 from ..deps import get_current_user
-from ..services.rate_limit import rate_limit
+from ..services.rate_limit import _inprocess_incr, _redis_incr, rate_limit
+
+
+def _ws_event_allowed(key: str, *, limit: int, window_seconds: int) -> bool:
+    """Per-key WS event throttle. Mirrors the HTTP rate_limit dependency's
+    counter logic but skips FastAPI's dep machinery — WS receive loops
+    don't go through DI, and a 429 inside a WS frame would be invisible
+    to the client. We silently drop excess events instead.
+
+    Same Redis-or-in-process fallback as the HTTP path."""
+    count = _redis_incr(key, window_seconds)
+    if count is None:
+        count = _inprocess_incr(key, window_seconds)
+    return count <= limit
 
 # Bound separately at module load so each endpoint stamps its own
 # bucket. send_message is the hot one; the rest of the limits are
@@ -1810,6 +1823,19 @@ async def websocket_endpoint(
                 payload = json.loads(data)
                 kind = payload.get("type")
                 if kind in ("TYPING_ON", "TYPING_OFF"):
+                    # Silently drop excess typing events. The web client
+                    # coalesces to ~1 TYPING_ON per 2s, so a well-behaved
+                    # session sits well under the limit; a malicious
+                    # client trying to fan out broadcast spam through
+                    # the room gets cut off here without disconnecting
+                    # the socket. Per (user, conversation) so two
+                    # concurrent threads each get their own budget.
+                    if not _ws_event_allowed(
+                        f"ws_typing:{user.id}:{conversation_id}",
+                        limit=40,
+                        window_seconds=60,
+                    ):
+                        continue
                     # Forward to the rest of the room, tagged with the
                     # sender id so the client knows whether the dot is
                     # theirs (suppress) or the peer's (show).
@@ -1817,6 +1843,16 @@ async def websocket_endpoint(
                     await manager.broadcast_to_conversation(out, conversation_id)
                     continue
                 if kind == "READ_RECEIPT":
+                    # Read-receipt bulk-updates messages + recalculates
+                    # total unread count across every conversation the
+                    # user is in. Cheap per call but expensive to spam;
+                    # gate at 60/min per user across conversations.
+                    if not _ws_event_allowed(
+                        f"ws_read:{user.id}",
+                        limit=60,
+                        window_seconds=60,
+                    ):
+                        continue
                     message_ids = payload.get("message_ids", [])
                     if message_ids:
                         # Update messages in bulk

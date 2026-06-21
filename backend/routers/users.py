@@ -37,7 +37,7 @@ from ..models import (
     VideoComment,
 )
 from ..routers.projects import _cancel_project_logic, _create_project_read
-from ..schemas import FilterOptionsRead, LanguageLevelsRead, PaginatedProjectRead
+from ..schemas import FilterOptionsRead, LanguageLevelsRead, PaginatedProjectRead, _utc_aware
 
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
@@ -159,6 +159,11 @@ class TeacherRatingRead(BaseModel):
     project: ProjectInfoForRating
     teacher_response: str | None = None
     response_created_at: datetime | None = None
+
+    @field_validator("created_at", "response_created_at", mode="before")
+    @classmethod
+    def _ensure_utc(cls, v):
+        return _utc_aware(v)
 
 
 class FollowerRead(BaseModel):
