@@ -43,8 +43,22 @@ if (import.meta.env.VITE_SENTRY_DSN) {
   );
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-)
+// /news pages don't render the full SPA — they're static HTML
+// (BR-generated, rewriter-processed) that includes #kb-navbar-root
+// and #kb-footer-root mount points. When those exist, mount only
+// the chrome (same Navbar/Footer components, same provider stack
+// as the apex App). Otherwise it's the regular apex SPA path.
+const navRoot = document.getElementById('kb-navbar-root');
+const footerRoot = document.getElementById('kb-footer-root');
+
+if (navRoot || footerRoot) {
+  import('./news_chrome_mount.jsx').then(({ mountChrome }) =>
+    mountChrome(navRoot, footerRoot),
+  );
+} else {
+  ReactDOM.createRoot(document.getElementById('root')).render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>,
+  );
+}

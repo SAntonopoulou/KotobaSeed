@@ -36,6 +36,7 @@ import re
 import shutil
 import sys
 import time
+import urllib.request
 from pathlib import Path
 
 
@@ -100,74 +101,118 @@ def strip_plugin_slots(html: str) -> str:
 RE_TEMPLATE_NAV = re.compile(r'<nav class="bg-white[\s\S]*?</nav>')
 RE_TEMPLATE_FOOTER = re.compile(r'<footer class="bg-white[\s\S]*?</footer>')
 
-HEAD_INJECT = (
-    '<link rel="preconnect" href="https://fonts.googleapis.com">'
-    '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
-    '<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">'
-    '<link rel="stylesheet" href="/branding/apex.css">'
+# --- Apex SPA head extraction --------------------------------------------
+#
+# /news pages load the apex SPA bundle. main.jsx detects the
+# #kb-navbar-root / #kb-footer-root placeholders and mounts ONLY the
+# Navbar + Footer React components via news_chrome_mount.jsx, so the
+# /news chrome is literally the same React tree as the apex SPA's
+# signed-in / signed-out chrome — same components, same providers,
+# same auth state. Editing Navbar.jsx OR Footer.jsx updates both
+# surfaces with no /news-specific code path.
+#
+# The build hashes the bundle filename each rebuild. Rather than copy
+# the latest hashed asset to a stable path, we fetch the apex index
+# from the internal `frontend` container, extract the asset link/script
+# tags, and inline them into every /news page. Each frontend rebuild
+# auto-propagates — no copy step, no stale window.
+
+APEX_FRONTEND_URL = 'http://frontend/'
+APEX_HEAD_TTL_S = 30.0
+_apex_head_cached: str = ''
+_apex_head_expires: float = 0.0
+# Wall-clock time when the apex head last changed. Files whose
+# output was written before this need to be re-processed so they
+# reference the latest hashed assets.
+_apex_head_changed_at: float = 0.0
+
+# Tags we lift verbatim from the apex SPA's <head>. We keep the
+# preconnects + Google Fonts link (font stack matches the apex), the
+# apex CSS link (Tailwind + index.css), the favicon, the modulepreload
+# hints, and the module entry script. We deliberately drop the apex
+# index's <title>, <meta>, and analytics so BR's per-page SEO metadata
+# wins.
+_HEAD_TAG_PATTERNS = [
+    re.compile(r'<link\b[^>]*\brel="preconnect"[^>]*>', re.IGNORECASE),
+    re.compile(r'<link\b[^>]*\brel="stylesheet"[^>]*>', re.IGNORECASE),
+    re.compile(r'<link\b[^>]*\brel="modulepreload"[^>]*>', re.IGNORECASE),
+    re.compile(r'<link\b[^>]*\brel="icon"[^>]*>', re.IGNORECASE),
+    re.compile(
+        r'<script\b[^>]*\btype="module"[^>]*>[^<]*</script>', re.IGNORECASE,
+    ),
+]
+
+
+def fetch_apex_head() -> str:
+    """Return concatenated link/script tags from the apex index.html head."""
+    try:
+        req = urllib.request.Request(
+            APEX_FRONTEND_URL,
+            headers={'User-Agent': 'news-chrome-rewriter/1.0'},
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            html = resp.read().decode('utf-8', errors='replace')
+    except Exception as exc:
+        print(f'[apex-head] fetch failed: {exc}', file=sys.stderr, flush=True)
+        return ''
+    m = re.search(r'<head\b[^>]*>(.*?)</head>', html, re.DOTALL | re.IGNORECASE)
+    head = m.group(1) if m else html
+    out: list[str] = []
+    for pat in _HEAD_TAG_PATTERNS:
+        for hit in pat.finditer(head):
+            out.append(hit.group(0))
+    return ''.join(out)
+
+
+def get_apex_head() -> str:
+    global _apex_head_cached, _apex_head_expires, _apex_head_changed_at
+    now = time.time()
+    if _apex_head_expires > now and _apex_head_cached:
+        return _apex_head_cached
+    fetched = fetch_apex_head()
+    if fetched:
+        if fetched != _apex_head_cached:
+            _apex_head_changed_at = now
+        _apex_head_cached = fetched
+        _apex_head_expires = now + APEX_HEAD_TTL_S
+    return _apex_head_cached
+
+
+def apex_head_changed_at() -> float:
+    return _apex_head_changed_at
+
+
+# Static-only injection: BR-base resets + mobile-drawer wiring. Anything
+# styling-related comes from the apex CSS bundle linked above.
+HEAD_INJECT_TAIL = (
     '<style>'
-    # Body baseline matches the apex (warm cream bg, deep teal text, Inter).
-    'body{font-family:"Inter",ui-sans-serif,system-ui,-apple-system,'
-    'BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;'
-    'background:rgb(244 241 233);color:rgb(43 70 60);'
-    'margin:0;padding:0;}'
-    # BR's base stylesheet has bare `footer { padding:2.5rem 0; margin-top:6rem;
-    # border-top:…; background:var(--bg-warm); }` which double-styles OUR
-    # injected footer. Neutralise it specifically for the body-level chrome we
-    # add — internal `<footer>` tags inside articles are unaffected.
-    'body>footer{padding:0;margin:0;background:transparent;border:0;}'
-    # Same defensive reset for the body-level nav we inject.
-    'body>nav{margin:0;background:transparent;border:0;}'
+    # BR's base stylesheet emits an unscoped `footer { padding:2.5rem 0;
+    # margin-top:6rem; border-top:…; background:var(--bg-warm); }` rule
+    # that matches our chrome <footer> and doubles its spacing.
+    # Neutralise it. Same defensive reset for the body-level nav and
+    # the mount-root <div> we put the chrome inside.
+    '#kb-navbar-root,#kb-footer-root{display:block;}'
+    'body>footer,#kb-footer-root>footer{padding:0;margin:0;background:transparent;border:0;}'
+    'body>nav,#kb-navbar-root>nav{margin:0;background:transparent;border:0;}'
+    # BR's `html { font-family: var(--font) }` (Inter) gets inherited by
+    # article content. Use the same `font-sans` stack the apex SPA does,
+    # so article text and chrome both pick up Quicksand once apex CSS loads.
+    'body{font-family:Quicksand,Inter,ui-sans-serif,system-ui,-apple-system,'
+    'BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;}'
+    # Mobile-drawer toggle wiring (the burger sets `kb-mob-open` on <html>),
+    # still used by the no-JS signed-out fallback before React hydrates.
     '.kb-mobile-drawer{display:none;}'
     '.kb-mob-open .kb-mobile-drawer{display:block;}'
     '@media(min-width:1024px){.kb-mob-open .kb-mobile-drawer{display:none;}}'
     '</style>'
-    # Auth-aware chrome. /news is static HTML, so the signed-out nav is
-    # baked in. After DOM is ready, ask /api/users/me with cookies; if it
-    # returns 200, swap the Log in / Get started buttons for a Dashboard
-    # link plus an initial-avatar pointing at the apex profile.
-    '<script>'
-    'document.addEventListener("DOMContentLoaded",function(){'
-      'fetch("/api/users/me",{credentials:"include"})'
-      '.then(function(r){return r.ok?r.json():null;})'
-      '.then(function(u){'
-        'if(!u)return;'
-        'var nav=document.querySelector("body>nav");if(!nav)return;'
-        'var initial=String(u.name||u.email||"?").charAt(0).toUpperCase();'
-        'var right=nav.querySelector(".lg\\\\:flex.lg\\\\:items-center.lg\\\\:gap-4");'
-        'if(right){'
-          'while(right.firstChild)right.removeChild(right.firstChild);'
-          'var dash=document.createElement("a");'
-          'dash.href="https://kotobaseed.net/dashboard";'
-          'dash.className="text-kotoba-text/70 hover:text-kotoba-text px-3 py-2 text-sm font-medium";'
-          'dash.textContent="Dashboard";'
-          'right.appendChild(dash);'
-          'var av=document.createElement("a");'
-          'av.href="https://kotobaseed.net/dashboard";'
-          'av.title=u.name||u.email||"";'
-          'av.className="flex items-center justify-center w-9 h-9 rounded-full bg-kotoba-primary text-white text-sm font-semibold";'
-          'av.textContent=initial;'
-          'right.appendChild(av);'
-        '}'
-        'var drawer=nav.querySelector(".kb-mobile-drawer");'
-        'if(drawer){'
-          'Array.prototype.slice.call(drawer.querySelectorAll("a")).forEach(function(a){'
-            'var h=a.getAttribute("href")||"";'
-            'if(h.indexOf("/login")>-1||h.indexOf("/register")>-1)a.remove();'
-          '});'
-          'var dm=document.createElement("a");'
-          'dm.href="https://kotobaseed.net/dashboard";'
-          'dm.className="block px-2 py-2 rounded text-base font-semibold text-kotoba-primary hover:bg-kotoba-primary/5";'
-          'dm.textContent="Dashboard";'
-          'drawer.appendChild(dm);'
-        '}'
-      '})'
-      '.catch(function(){});'
-    '});'
-    '</script>'
 )
 
-CHROME_MARKER = '<!--kb-chrome-->'
+CHROME_MARKER_START = '<!--kb-chrome-start-->'
+CHROME_MARKER_END = '<!--kb-chrome-end-->'
+RE_EXISTING_INJECT = re.compile(
+    re.escape(CHROME_MARKER_START) + r'.*?' + re.escape(CHROME_MARKER_END),
+    re.DOTALL,
+)
 
 
 def load_chrome(chrome_path: Path) -> tuple[str, str]:
@@ -183,34 +228,84 @@ def load_chrome(chrome_path: Path) -> tuple[str, str]:
     return nav_m.group(0), foot_m.group(0)
 
 
+BODY_MARKER_NAV_START = '<!--kb-navbar-mount-start-->'
+BODY_MARKER_NAV_END = '<!--kb-navbar-mount-end-->'
+BODY_MARKER_FOOTER_START = '<!--kb-footer-mount-start-->'
+BODY_MARKER_FOOTER_END = '<!--kb-footer-mount-end-->'
+RE_EXISTING_NAV_MOUNT = re.compile(
+    re.escape(BODY_MARKER_NAV_START) + r'.*?' + re.escape(BODY_MARKER_NAV_END),
+    re.DOTALL,
+)
+RE_EXISTING_FOOTER_MOUNT = re.compile(
+    re.escape(BODY_MARKER_FOOTER_START) + r'.*?' + re.escape(BODY_MARKER_FOOTER_END),
+    re.DOTALL,
+)
+
+
 def transform(html: str, nav_html: str, footer_html: str) -> str:
     # 1. Strip BR's default chrome from the body.
     html = RE_SITE_NAV.sub('', html)
     html = RE_SITE_FOOTER.sub('', html)
-    # 2. Strip every <div class="plugin-slot …">…</div> (and contents).
+    # 2. Strip every `<div class="plugin-slot …">…</div>` (and contents).
     html = strip_plugin_slots(html)
-    # 3. Inject head additions exactly once.
-    if CHROME_MARKER not in html:
-        html = html.replace(
-            '</head>', CHROME_MARKER + HEAD_INJECT + '</head>', 1
-        )
-    # 4. Inject our nav immediately after <body…>.
+    # 3. Replace any prior <head> injection (or add one). The injection
+    #    is: the apex SPA's <head> tags (CSS bundle, fonts, modulepreloads,
+    #    module entry) + a tiny tail with BR-base resets + drawer wiring.
+    head_block = (
+        CHROME_MARKER_START + get_apex_head() + HEAD_INJECT_TAIL + CHROME_MARKER_END
+    )
+    if RE_EXISTING_INJECT.search(html):
+        html = RE_EXISTING_INJECT.sub(head_block, html, count=1)
+    else:
+        html = html.replace('</head>', head_block + '</head>', 1)
+    # 4. Strip any prior chrome mount block (re-runs).
+    html = RE_EXISTING_NAV_MOUNT.sub('', html)
+    html = RE_EXISTING_FOOTER_MOUNT.sub('', html)
+    # Also strip any prior unwrapped apex chrome (from earlier rewriter
+    # versions that injected raw <nav>/<footer> at body level).
+    html = re.sub(
+        r'<nav class="bg-white shadow-md sticky[\s\S]*?</nav>', '', html
+    )
+    html = re.sub(
+        r'<footer class="bg-white border-t[\s\S]*?</footer>', '', html
+    )
+    # 5. Inject the navbar mount root immediately after <body…>. The
+    #    static signed-out chrome inside it is a no-JS / crawler
+    #    fallback — once main.jsx picks up #kb-navbar-root, ReactDOM
+    #    replaces it with the real Navbar (signed-in or out, with full
+    #    auth-aware widgets).
+    nav_block = (
+        BODY_MARKER_NAV_START
+        + '<div id="kb-navbar-root">' + nav_html + '</div>'
+        + BODY_MARKER_NAV_END
+    )
     html = re.sub(
         r'(<body[^>]*>)',
-        lambda m: m.group(1) + nav_html,
+        lambda m: m.group(1) + nav_block,
         html,
         count=1,
     )
-    # 5. Inject our footer immediately before </body>.
-    html = html.replace('</body>', footer_html + '</body>', 1)
+    # 6. Inject the footer mount root immediately before </body>.
+    footer_block = (
+        BODY_MARKER_FOOTER_START
+        + '<div id="kb-footer-root">' + footer_html + '</div>'
+        + BODY_MARKER_FOOTER_END
+    )
+    html = html.replace('</body>', footer_block + '</body>', 1)
     return html
 
 
-def needs_update(src: Path, dst: Path, chrome_mtime: float) -> bool:
+def needs_update(
+    src: Path, dst: Path, chrome_mtime: float, apex_changed_at: float
+) -> bool:
     if not dst.exists():
         return True
     dst_mtime = dst.stat().st_mtime
-    return src.stat().st_mtime > dst_mtime or chrome_mtime > dst_mtime
+    return (
+        src.stat().st_mtime > dst_mtime
+        or chrome_mtime > dst_mtime
+        or apex_changed_at > dst_mtime
+    )
 
 
 def sync_once(
@@ -219,6 +314,7 @@ def sync_once(
     nav_html: str,
     footer_html: str,
     chrome_mtime: float,
+    apex_changed_at: float,
 ) -> tuple[int, int]:
     written = 0
     removed = 0
@@ -230,7 +326,7 @@ def sync_once(
         rel = src.relative_to(in_root)
         seen.add(rel)
         dst = out_root / rel
-        if not needs_update(src, dst, chrome_mtime):
+        if not needs_update(src, dst, chrome_mtime, apex_changed_at):
             continue
         dst.parent.mkdir(parents=True, exist_ok=True)
         if src.suffix.lower() in {'.html', '.htm'}:
@@ -296,6 +392,11 @@ def main() -> int:
                     flush=True,
                 )
 
+            # Warm the apex-head cache before the file walk so the change
+            # detector and the transform get a consistent value.
+            get_apex_head()
+            apex_changed_at = apex_head_changed_at()
+
             if args.input.exists():
                 written, removed = sync_once(
                     args.input,
@@ -303,6 +404,7 @@ def main() -> int:
                     nav_html,
                     footer_html,
                     chrome_mtime,
+                    apex_changed_at,
                 )
                 if written or removed:
                     print(
