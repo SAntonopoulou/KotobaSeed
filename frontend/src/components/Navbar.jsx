@@ -13,19 +13,13 @@ import Avatar from './Avatar';
 // so the apex and the blog stay visually identical without me
 // maintaining two copies.
 import chromeHtml from './apex_chrome.signed_out.html?raw';
+import { rewriteSpaChrome } from '../hooks/useTenant';
 
-// The chrome template hard-codes https://kotobaseed.net/* URLs because
-// the same markup is injected into the BeeRanked /news/* static pages,
-// where relative hrefs break (BR resolves "library" from /news/ to
-// /news/library). On the SPA we want the opposite: keep visitors on
-// their current host — apex stays on apex, demo.kotobaseed.net stays
-// on demo. Stripping the absolute prefix at inject time makes every
-// link relative, which is exactly what the SPA needs. mailto:dpo@…
-// is unaffected because we only match the URL form with a trailing /.
-const SPA_CHROME_HTML = chromeHtml.replace(
-  /https:\/\/kotobaseed\.net\//g,
-  '/',
-);
+// See rewriteSpaChrome() for the full rationale. Short version: the
+// template ships absolute kotobaseed.net URLs for the /news rewriter;
+// the SPA wants relative paths so demo stays sealed; demo also wants
+// /login + /register repointed to /try.
+const SPA_CHROME_HTML = rewriteSpaChrome(chromeHtml);
 
 const SIGNED_OUT_NAV_HTML =
   SPA_CHROME_HTML.match(/<nav class="bg-white[\s\S]*?<\/nav>/)?.[0] || '';

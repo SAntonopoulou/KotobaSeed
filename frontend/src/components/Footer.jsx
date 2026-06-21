@@ -4,16 +4,13 @@ import React from 'react';
 // only `apex_chrome.signed_out.html` — both renderers pick up the new
 // markup with no JSX touch needed.
 import chromeHtml from './apex_chrome.signed_out.html?raw';
+import { rewriteSpaChrome } from '../hooks/useTenant';
 
-// See Navbar.jsx for the rationale on stripping the absolute
-// https://kotobaseed.net/ prefix at inject time — keeps the SPA's
-// chrome on whatever host it's served from (apex vs demo) without
-// breaking the BeeRanked /news/* contract, where the same template
-// is served as static HTML with absolute URLs intact.
-const SPA_CHROME_HTML = chromeHtml.replace(
-  /https:\/\/kotobaseed\.net\//g,
-  '/',
-);
+// See rewriteSpaChrome() for rationale. The footer has no /login or
+// /register CTAs of its own, so the demo retarget pass is a no-op
+// here — keeping the shared helper still gives us the apex-strip in
+// one place.
+const SPA_CHROME_HTML = rewriteSpaChrome(chromeHtml);
 
 const FOOTER_HTML =
   SPA_CHROME_HTML.match(/<footer class="bg-white[\s\S]*?<\/footer>/)?.[0] || '';

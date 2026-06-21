@@ -126,3 +126,40 @@ export function apexUrl(path = '/') {
   const { protocol } = window.location;
   return `${protocol}//${_apex()}${_portPart()}${path}`;
 }
+
+/**
+ * True when the current host is the demo environment (demo.kotobaseed.net
+ * or any tutor subdomain of it). Used to retarget chrome CTAs that don't
+ * make sense in a demo context — e.g. /login and /register, which on
+ * demo should funnel to /try (the role chooser) instead of the real
+ * auth pages, because demo accounts are passwordless seeded.
+ */
+export function isDemoEnv() {
+  if (typeof window === 'undefined') return false;
+  const host = window.location.hostname;
+  const demoApex = `demo.${PLATFORM_APEX}`;
+  return host === demoApex || host.endsWith(`.${demoApex}`);
+}
+
+/**
+ * Rewrite the shared signed-out chrome HTML for the current host.
+ *
+ * Two passes:
+ *  1. Strip `https://kotobaseed.net/` → `/` so every link is relative
+ *     and naturally stays on the current host (apex, demo, tenant).
+ *     The template can't ship relative URLs because the same markup
+ *     is also injected into BeeRanked /news/* static pages, where
+ *     relative paths resolve against /news/, not the apex.
+ *  2. On demo, retarget the static chrome's `/login` and `/register`
+ *     CTAs to `/try` — visitors clicking those in the top nav want
+ *     into the demo, not the real auth pages. TryLanding has an
+ *     escape hatch ("Already have a real account?") for the rare
+ *     case of a real user landing on demo.
+ */
+export function rewriteSpaChrome(html) {
+  let out = html.replace(/https:\/\/kotobaseed\.net\//g, '/');
+  if (isDemoEnv()) {
+    out = out.replace(/href="\/(login|register)"/g, 'href="/try"');
+  }
+  return out;
+}
