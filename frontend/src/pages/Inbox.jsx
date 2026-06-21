@@ -4,7 +4,7 @@ import client from '../api/client';
 import { useToast } from '../context/ToastContext';
 import { useInbox } from '../context/InboxContext';
 import { useAuth } from '../context/AuthContext';
-import { FaPaperPlane, FaVideo, FaReply, FaTimes, FaDollarSign, FaFileVideo, FaTag, FaPaperclip, FaSearch, FaFlag, FaBan, FaTrash } from 'react-icons/fa';
+import { FaPaperPlane, FaVideo, FaReply, FaTimes, FaDollarSign, FaFileVideo, FaTag, FaPaperclip, FaSearch, FaFlag, FaBan, FaTrash, FaArrowLeft } from 'react-icons/fa';
 import ConfirmationModal from '../components/ConfirmationModal';
 import { getVideoThumbnail } from '../utils/video'; // Assuming this might be useful later
 import { formatDateTime } from '../utils/dates';
@@ -612,7 +612,7 @@ const Inbox = () => {
             )}
           </div>
         )}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <p className="font-semibold text-kotoba-text/70">Language</p>
             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-kotoba-secondary/20 text-kotoba-text">{message.offer_language}</span>
@@ -648,10 +648,19 @@ const Inbox = () => {
     </div>
   );
 
+  // Mobile shows ONE pane at a time — list when no conversation is
+  // active, thread when one is. Desktop keeps the classic two-pane.
+  // The back button in the thread header pops back to /messages so
+  // the list-or-thread state stays URL-driven instead of stashed in
+  // component state (works with back/forward, deep-linking, refresh).
+  const inThread = Boolean(currentConversation);
   return (
-    <div className="font-sans max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
-      <div className="flex h-[calc(100vh-128px)] bg-white shadow-soft rounded-3xl overflow-hidden">
-        <div className="w-1/3 border-r border-kotoba-text/[0.06] overflow-y-auto">
+    <div className="font-sans md:max-w-7xl md:mx-auto md:py-8 md:px-4 lg:px-8">
+      {/* Dynamic viewport height (100dvh) is the keyboard-aware unit on
+          mobile — iOS/Android Safari shrink it when the soft keyboard
+          opens so the composer stays in frame. Desktop keeps 100vh. */}
+      <div className="flex h-[100dvh] md:h-[calc(100vh-128px)] bg-white md:shadow-soft md:rounded-3xl overflow-hidden">
+        <div className={`${inThread ? 'hidden md:flex' : 'flex'} md:w-1/3 w-full flex-col border-r border-kotoba-text/[0.06] overflow-y-auto`}>
           <div className="p-4 border-b border-kotoba-text/[0.06] space-y-3">
             <h2 className="font-display text-xl font-bold text-kotoba-primary tracking-[-0.015em]">Inbox</h2>
             <div className="relative">
@@ -684,13 +693,21 @@ const Inbox = () => {
             <Link to="/messages/archive" className="text-kotoba-primary hover:underline">View previous conversations</Link>
           </div>
         </div>
-        <div className="flex-1 flex flex-col">
+        <div className={`${inThread ? 'flex' : 'hidden md:flex'} flex-1 flex-col min-w-0`}>
           {currentConversation ? (
             <>
-              <div className="bg-white p-4 border-b border-kotoba-text/10 flex justify-between items-center">
-                <div>
-                  <h3 className="text-lg font-bold text-kotoba-text/90">{currentConversation.request_title}</h3>
-                  <p className="text-sm text-kotoba-text/70">{user.id === currentConversation.teacher_id ? `Student: ${currentConversation.student.full_name}` : `Teacher: ${currentConversation.teacher.full_name}`}</p>
+              <div className="bg-white p-4 border-b border-kotoba-text/10 flex justify-between items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => navigate('/messages')}
+                  className="md:hidden -ml-2 p-2 rounded-full hover:bg-kotoba-background/60 text-kotoba-text/70 flex-shrink-0"
+                  aria-label="Back to conversations"
+                >
+                  <FaArrowLeft />
+                </button>
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-lg font-bold text-kotoba-text/90 truncate">{currentConversation.request_title}</h3>
+                  <p className="text-sm text-kotoba-text/70 truncate">{user.id === currentConversation.teacher_id ? `Student: ${currentConversation.student.full_name}` : `Teacher: ${currentConversation.teacher.full_name}`}</p>
                   {user.id === currentConversation.teacher_id && currentConversation.student_demo_video_url && (
                     <div className="mt-2">
                       <a href={currentConversation.student_demo_video_url} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-kotoba-primary hover:text-kotoba-primary flex items-center">
@@ -740,7 +757,7 @@ const Inbox = () => {
                         renderOfferMessage(message)
                       ) : (
                         <div className={`flex mb-4 ${message.sender_id === user.id ? 'justify-end' : 'justify-start'}`}>
-                          <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg shadow relative ${message.deleted_at ? 'bg-kotoba-text/10 text-kotoba-text/60 italic' : message.sender_id === user.id ? 'bg-kotoba-primary text-white' : 'bg-kotoba-text/20 text-kotoba-text/90'}`}>
+                          <div className={`max-w-[80%] sm:max-w-md px-4 py-2 rounded-2xl shadow relative ${message.deleted_at ? 'bg-kotoba-text/10 text-kotoba-text/60 italic' : message.sender_id === user.id ? 'bg-kotoba-primary text-white' : 'bg-kotoba-text/20 text-kotoba-text/90'}`}>
                             {message.replied_to_message_id && !message.deleted_at && <div className={`mb-2 p-2 rounded-md border-l-4 ${message.sender_id === user.id ? 'border-kotoba-primary/30 bg-kotoba-primary' : 'border-kotoba-text/30 bg-kotoba-text/10'}`}><p className={`text-xs font-semibold ${message.sender_id === user.id ? 'text-kotoba-primary/70' : 'text-kotoba-text/80'}`}>{message.replied_to_sender_name || 'Deleted User'}</p><p className={`text-xs italic ${message.sender_id === user.id ? 'text-kotoba-primary/70' : 'text-kotoba-text/70'} truncate`}>{message.replied_to_message_content}</p></div>}
 
                             {message.deleted_at ? (
@@ -786,10 +803,10 @@ const Inbox = () => {
                               <button
                                 onClick={() => setReplyingToMessage(message)}
                                 aria-label="Reply to message"
-                                className={`absolute -bottom-2 ${message.sender_id === user.id ? '-left-8' : '-right-8'} p-1 rounded-full bg-kotoba-text/10 text-kotoba-text/70 hover:bg-kotoba-text/20`}
+                                className={`absolute -bottom-3 ${message.sender_id === user.id ? '-left-10' : '-right-10'} h-9 w-9 flex items-center justify-center rounded-full bg-white shadow-soft text-kotoba-text/70 hover:bg-kotoba-text/10`}
                                 title="Reply"
                               >
-                                <FaReply size={12} />
+                                <FaReply size={13} />
                               </button>
                             )}
                             {!message.deleted_at
@@ -799,10 +816,10 @@ const Inbox = () => {
                                 <button
                                   onClick={() => handleUndoMessage(message.id)}
                                   aria-label="Undo this message"
-                                  className="absolute -top-2 -left-8 p-1 rounded-full bg-kotoba-text/10 text-kotoba-text/70 hover:bg-red-600 hover:text-white"
+                                  className="absolute -top-3 -left-10 h-9 w-9 flex items-center justify-center rounded-full bg-white shadow-soft text-kotoba-text/70 hover:bg-red-600 hover:text-white"
                                   title="Undo (within 60s)"
                                 >
-                                  <FaTrash size={12} />
+                                  <FaTrash size={13} />
                                 </button>
                               )}
                           </div>
@@ -819,8 +836,11 @@ const Inbox = () => {
                   </div>
                 )}
               </div>
-              {currentConversation.status === 'open' ? <div className="bg-white p-4 border-t border-kotoba-text/10">
-                {replyingToMessage && <div className="mb-2 p-2 rounded-md bg-kotoba-background/60 border-l-4 border-kotoba-primary flex justify-between items-center"><div><p className="text-sm font-semibold text-kotoba-text/80">Replying to {replyingToMessage.sender_full_name}</p><p className="text-sm text-kotoba-text/70 truncate">{replyingToMessage.content}</p></div><button onClick={() => setReplyingToMessage(null)} aria-label="Cancel reply" className="text-kotoba-text/60 hover:text-kotoba-text/80"><FaTimes /></button></div>}
+              {currentConversation.status === 'open' ? <div
+                className="bg-white p-3 sm:p-4 border-t border-kotoba-text/10"
+                style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
+              >
+                {replyingToMessage && <div className="mb-2 p-2 rounded-md bg-kotoba-background/60 border-l-4 border-kotoba-primary flex justify-between items-center gap-2"><div className="min-w-0 flex-1"><p className="text-sm font-semibold text-kotoba-text/80 truncate">Replying to {replyingToMessage.sender_full_name}</p><p className="text-sm text-kotoba-text/70 truncate">{replyingToMessage.content}</p></div><button onClick={() => setReplyingToMessage(null)} aria-label="Cancel reply" className="h-10 w-10 flex items-center justify-center rounded-full text-kotoba-text/60 hover:bg-kotoba-text/10 flex-shrink-0"><FaTimes /></button></div>}
                 
                 {user.id === currentConversation.student_id && currentConversation.demo_video_requested && !currentConversation.student_demo_video_url && (
                   <div className="mb-4">
@@ -832,7 +852,11 @@ const Inbox = () => {
                   </div>
                 )}
 
-                <form onSubmit={handleSendMessage} className="flex items-center">
+                <form onSubmit={handleSendMessage} className="flex items-end gap-2">
+                  {/* Tutor-only quick actions. On mobile the Offer/Demo
+                      text labels would crowd the row, so we show icon-only
+                      below sm; on sm+ the labels return. Min 44px tap
+                      target on both axes per Apple HIG. */}
                   {user.id === currentConversation.teacher_id && (
                     <>
                       <button type="button" onClick={() => {
@@ -847,8 +871,8 @@ const Inbox = () => {
                           setOfferIsSeries(currentConversation.request.is_series || false);
                           setOfferNumVideos(currentConversation.request.num_videos || 1);
                         }
-                      }} className="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-3 rounded-l-md flex items-center justify-center mr-1" disabled={hasPendingOffer}><FaDollarSign className="mr-1" /> Offer</button>
-                      <button type="button" onClick={handleRequestDemoVideo} className="bg-kotoba-primary hover:bg-kotoba-primary/90 text-white font-medium py-2 px-3 flex items-center justify-center mr-1" disabled={currentConversation.demo_video_requested}><FaFileVideo className="mr-1" /> Demo</button>
+                      }} className="bg-green-600 hover:bg-green-700 text-white font-medium h-11 px-3 sm:px-4 rounded-full flex items-center justify-center disabled:opacity-50 flex-shrink-0" disabled={hasPendingOffer} aria-label="Make offer" title="Make offer"><FaDollarSign /> <span className="ml-1 hidden sm:inline">Offer</span></button>
+                      <button type="button" onClick={handleRequestDemoVideo} className="bg-kotoba-primary hover:bg-kotoba-primary/90 text-white font-medium h-11 px-3 sm:px-4 rounded-full flex items-center justify-center disabled:opacity-50 flex-shrink-0" disabled={currentConversation.demo_video_requested} aria-label="Request demo" title="Request demo"><FaFileVideo /> <span className="ml-1 hidden sm:inline">Demo</span></button>
                     </>
                   )}
                   <input
@@ -863,7 +887,7 @@ const Inbox = () => {
                     type="button"
                     onClick={handlePickAttachment}
                     disabled={isSending || uploadingAttachment || isPeerBlocked}
-                    className={`bg-kotoba-background/60 hover:bg-kotoba-background text-kotoba-text/70 font-medium py-2 px-3 flex items-center justify-center mr-1 ${user.id === currentConversation.teacher_id ? '' : 'rounded-l-md'}`}
+                    className="bg-kotoba-background/60 hover:bg-kotoba-background text-kotoba-text/70 font-medium h-11 w-11 rounded-full flex items-center justify-center flex-shrink-0 disabled:opacity-50"
                     aria-label="Attach an image"
                     title="Attach an image"
                   >
@@ -876,16 +900,17 @@ const Inbox = () => {
                       setNewMessage(e.target.value);
                       handleTypingActivity();
                     }}
-                    placeholder={isPeerBlocked ? 'You have blocked this user.' : 'Type your message...'}
-                    className="flex-1 border border-kotoba-text/20 py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary"
+                    placeholder={isPeerBlocked ? 'You have blocked this user.' : 'Type your message…'}
+                    className="flex-1 min-w-0 border border-kotoba-text/20 h-11 px-4 rounded-full text-base focus:outline-none focus:ring-2 focus:ring-kotoba-primary/30 focus:border-kotoba-primary"
                     disabled={isSending || isPeerBlocked}
                   />
                   <button
                     type="submit"
-                    className="bg-kotoba-primary hover:bg-kotoba-primary/90 text-white font-medium py-2 px-4 rounded-r-md flex items-center justify-center disabled:opacity-50"
+                    className="bg-kotoba-primary hover:bg-kotoba-primary/90 text-white font-medium h-11 w-11 sm:w-auto sm:px-5 rounded-full flex items-center justify-center disabled:opacity-50 flex-shrink-0"
                     disabled={isSending || isPeerBlocked || uploadingAttachment}
+                    aria-label="Send message"
                   >
-                    <FaPaperPlane className="mr-2" /> Send
+                    <FaPaperPlane /> <span className="ml-2 hidden sm:inline">Send</span>
                   </button>
                 </form>
                 {uploadingAttachment && (
@@ -896,7 +921,7 @@ const Inbox = () => {
           ) : <div className="flex-1 flex items-center justify-center text-kotoba-text/60">Select a conversation to start chatting.</div>}
         </div>
       </div>
-      {showOfferModal && <div className="fixed z-10 inset-0 overflow-y-auto"><div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0"><div className="fixed inset-0 transition-opacity" aria-hidden="true"><div className="absolute inset-0 bg-gray-500 opacity-75"></div></div><span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span><div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full"><div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4"><h3 className="text-lg leading-6 font-medium text-kotoba-text mb-4">Make Project Offer</h3><div className="space-y-4"><div><label htmlFor="offerTitle" className="block text-sm font-medium text-kotoba-text/80">Project Title</label><input type="text" id="offerTitle" className="mt-1 block w-full border border-kotoba-text/20 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={offerTitle} onChange={(e) => setOfferTitle(e.target.value)} /></div><div><label htmlFor="offerDescription" className="block text-sm font-medium text-kotoba-text/80">Project Description</label><textarea id="offerDescription" rows="3" className="mt-1 block w-full border border-kotoba-text/20 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={offerDescription} onChange={(e) => setOfferDescription(e.target.value)}></textarea></div><div className="grid grid-cols-2 gap-4"><div><label htmlFor="offerLanguage" className="block text-sm font-medium text-kotoba-text/80">Language</label><input type="text" id="offerLanguage" className="mt-1 block w-full border border-kotoba-text/20 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={offerLanguage} onChange={(e) => setOfferLanguage(e.target.value)} /></div><div><label htmlFor="offerLevel" className="block text-sm font-medium text-kotoba-text/80">Level</label><input type="text" id="offerLevel" className="mt-1 block w-full border border-kotoba-text/20 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={offerLevel} onChange={(e) => setOfferLevel(e.target.value)} /></div></div><div><label htmlFor="offerTags" className="block text-sm font-medium text-kotoba-text/80">Tags (comma-separated)</label><input type="text" id="offerTags" className="mt-1 block w-full border border-kotoba-text/20 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={offerTags} onChange={(e) => setOfferTags(e.target.value)} /></div><div className="flex items-center"><input id="offerIsSeries" type="checkbox" className="h-4 w-4 text-kotoba-primary border-kotoba-text/20 rounded" checked={offerIsSeries} onChange={(e) => setOfferIsSeries(e.target.checked)} /><label htmlFor="offerIsSeries" className="ml-2 block text-sm text-kotoba-text">Is this a series?</label></div>{offerIsSeries && (<div className="grid grid-cols-2 gap-4"><div><label htmlFor="offerNumVideos" className="block text-sm font-medium text-kotoba-text/80">Number of Videos</label><input type="number" id="offerNumVideos" min="1" className="mt-1 block w-full border border-kotoba-text/20 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={offerNumVideos} onChange={(e) => setOfferNumVideos(parseInt(e.target.value, 10))} /></div><div><label htmlFor="offerPricePerVideo" className="block text-sm font-medium text-kotoba-text/80">Price Per Video (EUR)</label><input type="number" id="offerPricePerVideo" min="0" step="0.01" className="mt-1 block w-full border border-kotoba-text/20 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={offerPricePerVideo} onChange={(e) => setOfferPricePerVideo(parseFloat(e.target.value))} /></div></div>)}<div><label htmlFor="offerPrice" className="block text-sm font-medium text-kotoba-text/80">Total Offer Price (EUR)</label><input type="number" id="offerPrice" min="0" className="mt-1 block w-full border border-kotoba-text/20 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={offerPrice} onChange={(e) => setOfferPrice(parseFloat(e.target.value))} disabled={offerIsSeries} /></div></div></div><div className="bg-kotoba-background/40 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse"><button type="button" onClick={handleMakeOffer} className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-kotoba-primary text-base font-medium text-white hover:bg-kotoba-primary/90 focus:outline-none sm:ml-3 sm:w-auto sm:text-sm">Send Offer</button><button type="button" onClick={() => setShowOfferModal(false)} className="mt-3 w-full inline-flex justify-center rounded-md border border-kotoba-text/20 shadow-sm px-4 py-2 bg-white text-base font-medium text-kotoba-text/80 hover:bg-kotoba-background/40 focus:outline-none sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">Cancel</button></div></div></div></div>}
+      {showOfferModal && <div className="fixed z-10 inset-0 overflow-y-auto"><div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0"><div className="fixed inset-0 transition-opacity" aria-hidden="true"><div className="absolute inset-0 bg-gray-500 opacity-75"></div></div><span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span><div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full"><div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4"><h3 className="text-lg leading-6 font-medium text-kotoba-text mb-4">Make Project Offer</h3><div className="space-y-4"><div><label htmlFor="offerTitle" className="block text-sm font-medium text-kotoba-text/80">Project Title</label><input type="text" id="offerTitle" className="mt-1 block w-full border border-kotoba-text/20 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={offerTitle} onChange={(e) => setOfferTitle(e.target.value)} /></div><div><label htmlFor="offerDescription" className="block text-sm font-medium text-kotoba-text/80">Project Description</label><textarea id="offerDescription" rows="3" className="mt-1 block w-full border border-kotoba-text/20 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={offerDescription} onChange={(e) => setOfferDescription(e.target.value)}></textarea></div><div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><div><label htmlFor="offerLanguage" className="block text-sm font-medium text-kotoba-text/80">Language</label><input type="text" id="offerLanguage" className="mt-1 block w-full border border-kotoba-text/20 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={offerLanguage} onChange={(e) => setOfferLanguage(e.target.value)} /></div><div><label htmlFor="offerLevel" className="block text-sm font-medium text-kotoba-text/80">Level</label><input type="text" id="offerLevel" className="mt-1 block w-full border border-kotoba-text/20 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={offerLevel} onChange={(e) => setOfferLevel(e.target.value)} /></div></div><div><label htmlFor="offerTags" className="block text-sm font-medium text-kotoba-text/80">Tags (comma-separated)</label><input type="text" id="offerTags" className="mt-1 block w-full border border-kotoba-text/20 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={offerTags} onChange={(e) => setOfferTags(e.target.value)} /></div><div className="flex items-center"><input id="offerIsSeries" type="checkbox" className="h-4 w-4 text-kotoba-primary border-kotoba-text/20 rounded" checked={offerIsSeries} onChange={(e) => setOfferIsSeries(e.target.checked)} /><label htmlFor="offerIsSeries" className="ml-2 block text-sm text-kotoba-text">Is this a series?</label></div>{offerIsSeries && (<div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><div><label htmlFor="offerNumVideos" className="block text-sm font-medium text-kotoba-text/80">Number of Videos</label><input type="number" id="offerNumVideos" min="1" className="mt-1 block w-full border border-kotoba-text/20 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={offerNumVideos} onChange={(e) => setOfferNumVideos(parseInt(e.target.value, 10))} /></div><div><label htmlFor="offerPricePerVideo" className="block text-sm font-medium text-kotoba-text/80">Price Per Video (EUR)</label><input type="number" id="offerPricePerVideo" min="0" step="0.01" className="mt-1 block w-full border border-kotoba-text/20 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={offerPricePerVideo} onChange={(e) => setOfferPricePerVideo(parseFloat(e.target.value))} /></div></div>)}<div><label htmlFor="offerPrice" className="block text-sm font-medium text-kotoba-text/80">Total Offer Price (EUR)</label><input type="number" id="offerPrice" min="0" className="mt-1 block w-full border border-kotoba-text/20 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={offerPrice} onChange={(e) => setOfferPrice(parseFloat(e.target.value))} disabled={offerIsSeries} /></div></div></div><div className="bg-kotoba-background/40 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse"><button type="button" onClick={handleMakeOffer} className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-kotoba-primary text-base font-medium text-white hover:bg-kotoba-primary/90 focus:outline-none sm:ml-3 sm:w-auto sm:text-sm">Send Offer</button><button type="button" onClick={() => setShowOfferModal(false)} className="mt-3 w-full inline-flex justify-center rounded-md border border-kotoba-text/20 shadow-sm px-4 py-2 bg-white text-base font-medium text-kotoba-text/80 hover:bg-kotoba-background/40 focus:outline-none sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">Cancel</button></div></div></div></div>}
       <ConfirmationModal isOpen={confirmModalOpen} onClose={() => setConfirmModalOpen(false)} onConfirm={modalConfig.onConfirm} title={modalConfig.title} message={modalConfig.message} confirmText={modalConfig.confirmText} isDanger={modalConfig.isDanger} />
       <ReportConversationModal
         open={showReportModal}
