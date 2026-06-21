@@ -22,6 +22,7 @@ import AdminRoute from './components/AdminRoute';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Landing from './pages/LandingV2';
+import TryLanding from './pages/TryLanding';
 const GroupsIndex = lazy(() => import('./pages/GroupsIndex'));
 const GroupDetail = lazy(() => import('./pages/GroupDetail'));
 const GroupThreads = lazy(() => import('./pages/GroupThreads'));
@@ -270,7 +271,24 @@ const ApexShell = () => {
       <div className="flex-grow">
         <Suspense fallback={<RouteFallback />}>
         <Routes>
-          <Route path="/" element={currentUser ? <ProjectList /> : <Landing />} />
+          {/* On the public demo host (demo.kotobaseed.net), the
+              signed-out home page is the /try chooser instead of the
+              marketing Landing — visiting demo.* IS the demo. The real
+              apex (kotobaseed.net) keeps the marketing Landing. */}
+          <Route
+            path="/"
+            element={
+              currentUser ? (
+                <ProjectList />
+              ) : window.location.host.endsWith('demo.kotobaseed.net') ||
+                window.location.host === 'demo.kotobaseed.net' ? (
+                <TryLanding />
+              ) : (
+                <Landing />
+              )
+            }
+          />
+          <Route path="/try" element={<TryLanding />} />
           <Route path="/try/tutor" element={<Try role="tutor" />} />
           <Route path="/try/student" element={<Try role="student" />} />
           <Route path="/login" element={<Login />} />
