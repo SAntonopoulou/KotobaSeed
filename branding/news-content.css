@@ -56,12 +56,14 @@
   padding: 0;
 }
 
-/* Magazine page background — pure off-white inside the BR content area
-   so the editorial layout reads as a printed publication, not a SaaS
-   landing. The apex shell's `bg-kotoba-background/60` cream stays
-   visible at the top/bottom edges and behind the chrome. */
+/* Magazine page background — keep the apex chrome's cream visible
+   under the editorial content. The masthead at the top sits in this
+   cream as a hero band; the cover story + topic list + colophon below
+   pick up the cream as their canvas, separated only by hairline rules.
+   No off-white page background — the warmth of the cream is the
+   character. */
 .br-app {
-  background: #fdfdfb;
+  background: transparent;
 }
 
 .min-h-screen {
@@ -87,21 +89,32 @@
 
 /* --- MASTHEAD (uses BR's .hero element) ----------------------------- */
 
-/* Editorial masthead. Wordmark up top, then a thin rule, then the deck
-   line + the issue meta. No card, no shadow, no rounded box — just
-   typography on white, the way a magazine cover treats it. */
+/* Editorial masthead. Flush with the apex chrome above, sits in the
+   cream apex background, generous vertical breathing room, then closes
+   with a hairline rule that hands off into the white editorial body
+   below. Wordmark left, italic descriptor right, deck + small-caps
+   meta beneath. */
 .hero.hero {
   position: relative;
-  max-width: 1100px;
-  margin: 4rem auto 0;
-  padding: 0 2rem;
+  max-width: none;
+  margin: 0;
+  padding: 4.5rem 2rem 3.5rem;
   text-align: left;
+  background: transparent;
+}
+
+.hero-inner.hero-inner {
+  max-width: 1100px;
+  margin: 0 auto;
 }
 
 .hero.hero::after {
   content: '';
-  display: block;
-  margin: 3rem 0 0;
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: min(1100px, calc(100% - 4rem));
+  transform: translateX(-50%);
   border-bottom: 1px solid var(--kb-text);
 }
 
@@ -114,11 +127,8 @@
   margin: 0 auto 1.5rem;
 }
 
-.hero-inner.hero-inner {
-  max-width: 100%;
-  margin: 0;
-  text-align: left;
-}
+/* (Centered hero-inner is set above near .hero — kept here for parity
+   with the BR structure but the constraint is already applied.) */
 
 /* Hero badge: text-only wordmark, no pill, no logo. The Kotobaseed
    image BR drops in carries a baked-in white background that reads as
@@ -462,6 +472,156 @@
   color: var(--kb-text-mute);
   margin: 0;
   flex-shrink: 0;
+}
+
+/* "All articles →" link inside .section-head. */
+.section-head.section-head .more {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  font-family: 'Quicksand', sans-serif;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--kb-text) !important;
+  text-decoration: none !important;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.section-head.section-head .more::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -3px;
+  height: 1px;
+  background: var(--kb-text);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.section-head.section-head .more:hover::after { transform: scaleX(1); }
+
+/* --- FRESH OFF THE PRESS (BR ships `.latest-grid` + `.post-card`) -- */
+
+/* Editorial article previews. Two-column at desktop, hairline rules
+   between rows, type kicker in small caps, Fraunces title, italic
+   excerpt, italic date. No per-type accent colour, no card boxes. */
+
+.latest-grid.latest-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 2rem;
+  border-top: 1px solid var(--kb-border);
+}
+
+@media (max-width: 720px) {
+  .latest-grid.latest-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.post-card.post-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 2.5rem 1.5rem 2.5rem 0;
+  border-bottom: 1px solid var(--kb-border);
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+  text-decoration: none !important;
+  color: var(--kb-text);
+  transition: none;
+}
+
+/* Vertical hairline between the two columns (desktop only). */
+@media (min-width: 720px) {
+  .post-card.post-card:nth-child(odd) {
+    border-right: 1px solid var(--kb-border);
+    padding-right: 2.5rem;
+  }
+  .post-card.post-card:nth-child(even) {
+    padding-left: 2.5rem;
+  }
+  /* Drop the bottom border on the last row of each column. */
+  .post-card.post-card:nth-last-child(-n + 2):nth-child(odd),
+  .post-card.post-card:nth-last-child(-n + 1):nth-child(even) {
+    border-bottom-color: transparent;
+  }
+}
+
+/* Small-caps type label (Blog / Wiki / Documentation). */
+.post-type.post-type {
+  display: inline-block;
+  font-family: 'Quicksand', sans-serif;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgb(var(--kotoba-primary-rgb, 22 86 29));
+  margin-bottom: 1rem;
+}
+
+/* Article title — Fraunces serif, no underline. Reveals an underline
+   from the title on hover (magazine treatment). */
+.post-title.post-title {
+  font-family: 'Fraunces', 'Lora', Georgia, serif;
+  font-weight: 600;
+  font-size: clamp(1.375rem, 2vw, 1.75rem);
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--kb-text);
+  margin: 0 0 0.85rem;
+  position: relative;
+  display: inline;
+  background-image: linear-gradient(var(--kb-text), var(--kb-text));
+  background-size: 0% 1px;
+  background-position: 0 100%;
+  background-repeat: no-repeat;
+  transition: background-size 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+  padding-bottom: 2px;
+}
+
+.post-card.post-card:hover .post-title.post-title {
+  background-size: 100% 1px;
+}
+
+/* Italic excerpt (optional — only some posts have one). */
+.post-excerpt.post-excerpt {
+  font-family: 'Fraunces', 'Lora', Georgia, serif;
+  font-style: italic;
+  font-size: 1.0625rem;
+  line-height: 1.5;
+  color: var(--kb-text-soft);
+  margin: 0.5rem 0 1rem;
+  max-width: 36rem;
+}
+
+/* Italic Fraunces date — sits at the bottom of the card like a print
+   byline. */
+.post-date.post-date {
+  display: block;
+  margin-top: auto;
+  padding-top: 1rem;
+  font-family: 'Fraunces', 'Lora', Georgia, serif;
+  font-style: italic;
+  font-size: 0.8125rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--kb-text-mute);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  text-transform: none;
+  padding-left: 0;
+  padding-right: 0;
 }
 
 /* --- Explore grid (category tiles) ----------------------------------- */
