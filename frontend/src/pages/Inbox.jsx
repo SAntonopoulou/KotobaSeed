@@ -12,6 +12,7 @@ import { getErrorMessage } from '../utils/errors';
 import Avatar from '../components/Avatar';
 import ConversationListItem from '../components/ConversationListItem';
 import ReportConversationModal from '../components/ReportConversationModal';
+import OfferModal from '../components/messaging/OfferModal';
 
 const UNDO_WINDOW_MS = 60_000;
 
@@ -921,7 +922,33 @@ const Inbox = () => {
           ) : <div className="flex-1 flex items-center justify-center text-kotoba-text/60">Select a conversation to start chatting.</div>}
         </div>
       </div>
-      {showOfferModal && <div className="fixed z-10 inset-0 overflow-y-auto"><div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0"><div className="fixed inset-0 transition-opacity" aria-hidden="true"><div className="absolute inset-0 bg-gray-500 opacity-75"></div></div><span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span><div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full"><div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4"><h3 className="text-lg leading-6 font-medium text-kotoba-text mb-4">Make Project Offer</h3><div className="space-y-4"><div><label htmlFor="offerTitle" className="block text-sm font-medium text-kotoba-text/80">Project Title</label><input type="text" id="offerTitle" className="mt-1 block w-full border border-kotoba-text/20 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={offerTitle} onChange={(e) => setOfferTitle(e.target.value)} /></div><div><label htmlFor="offerDescription" className="block text-sm font-medium text-kotoba-text/80">Project Description</label><textarea id="offerDescription" rows="3" className="mt-1 block w-full border border-kotoba-text/20 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={offerDescription} onChange={(e) => setOfferDescription(e.target.value)}></textarea></div><div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><div><label htmlFor="offerLanguage" className="block text-sm font-medium text-kotoba-text/80">Language</label><input type="text" id="offerLanguage" className="mt-1 block w-full border border-kotoba-text/20 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={offerLanguage} onChange={(e) => setOfferLanguage(e.target.value)} /></div><div><label htmlFor="offerLevel" className="block text-sm font-medium text-kotoba-text/80">Level</label><input type="text" id="offerLevel" className="mt-1 block w-full border border-kotoba-text/20 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={offerLevel} onChange={(e) => setOfferLevel(e.target.value)} /></div></div><div><label htmlFor="offerTags" className="block text-sm font-medium text-kotoba-text/80">Tags (comma-separated)</label><input type="text" id="offerTags" className="mt-1 block w-full border border-kotoba-text/20 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={offerTags} onChange={(e) => setOfferTags(e.target.value)} /></div><div className="flex items-center"><input id="offerIsSeries" type="checkbox" className="h-4 w-4 text-kotoba-primary border-kotoba-text/20 rounded" checked={offerIsSeries} onChange={(e) => setOfferIsSeries(e.target.checked)} /><label htmlFor="offerIsSeries" className="ml-2 block text-sm text-kotoba-text">Is this a series?</label></div>{offerIsSeries && (<div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><div><label htmlFor="offerNumVideos" className="block text-sm font-medium text-kotoba-text/80">Number of Videos</label><input type="number" id="offerNumVideos" min="1" className="mt-1 block w-full border border-kotoba-text/20 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={offerNumVideos} onChange={(e) => setOfferNumVideos(parseInt(e.target.value, 10))} /></div><div><label htmlFor="offerPricePerVideo" className="block text-sm font-medium text-kotoba-text/80">Price Per Video (EUR)</label><input type="number" id="offerPricePerVideo" min="0" step="0.01" className="mt-1 block w-full border border-kotoba-text/20 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={offerPricePerVideo} onChange={(e) => setOfferPricePerVideo(parseFloat(e.target.value))} /></div></div>)}<div><label htmlFor="offerPrice" className="block text-sm font-medium text-kotoba-text/80">Total Offer Price (EUR)</label><input type="number" id="offerPrice" min="0" className="mt-1 block w-full border border-kotoba-text/20 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-kotoba-primary focus:border-kotoba-primary sm:text-sm" value={offerPrice} onChange={(e) => setOfferPrice(parseFloat(e.target.value))} disabled={offerIsSeries} /></div></div></div><div className="bg-kotoba-background/40 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse"><button type="button" onClick={handleMakeOffer} className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-kotoba-primary text-base font-medium text-white hover:bg-kotoba-primary/90 focus:outline-none sm:ml-3 sm:w-auto sm:text-sm">Send Offer</button><button type="button" onClick={() => setShowOfferModal(false)} className="mt-3 w-full inline-flex justify-center rounded-md border border-kotoba-text/20 shadow-sm px-4 py-2 bg-white text-base font-medium text-kotoba-text/80 hover:bg-kotoba-background/40 focus:outline-none sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">Cancel</button></div></div></div></div>}
+      <OfferModal
+        open={showOfferModal}
+        onClose={() => setShowOfferModal(false)}
+        onSubmit={handleMakeOffer}
+        values={{
+          offerTitle,
+          offerDescription,
+          offerPrice,
+          offerLanguage,
+          offerLevel,
+          offerTags,
+          offerIsSeries,
+          offerNumVideos,
+          offerPricePerVideo,
+        }}
+        setters={{
+          setOfferTitle,
+          setOfferDescription,
+          setOfferPrice,
+          setOfferLanguage,
+          setOfferLevel,
+          setOfferTags,
+          setOfferIsSeries,
+          setOfferNumVideos,
+          setOfferPricePerVideo,
+        }}
+      />
       <ConfirmationModal isOpen={confirmModalOpen} onClose={() => setConfirmModalOpen(false)} onConfirm={modalConfig.onConfirm} title={modalConfig.title} message={modalConfig.message} confirmText={modalConfig.confirmText} isDanger={modalConfig.isDanger} />
       <ReportConversationModal
         open={showReportModal}
